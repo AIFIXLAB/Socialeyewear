@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#142e2a">
+  <title>Social Eyewear | Smart Optic</title>
+  <meta name="description" content="Smart Optic sales workspace for Social Eyewear">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="#" aria-label="Social Eyewear Smart Optic home">
+        <span class="brand-mark">se<span>+</span></span>
+        <span><b>SOCIAL EYEWEAR</b><small>SMART OPTIC STUDIO</small></span>
+      </a>
+      <div class="side-label">WORKSPACE</div>
+      <nav class="nav">
+        <button class="nav-item active" data-view="sales"><span class="nav-icon">✳</span> Sales Studio <span class="nav-count">01</span></button>
+        <button class="nav-item" data-view="customers"><span class="nav-icon">◉</span> Customers</button>
+        <button class="nav-item" data-view="catalog"><span class="nav-icon">◇</span> Product library</button>
+        <button class="nav-item" data-view="quotes"><span class="nav-icon">▤</span> Quotes <span id="quoteNavCount" class="nav-badge">0</span></button>
+        <button class="nav-item" data-view="insights"><span class="nav-icon">↗</span> Insights</button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="sync-card">
+          <div class="sync-icon">⌁</div>
+          <div><b id="connectionTitle">Offline-ready</b><small id="connectionText">Changes saved on this device</small></div>
+          <span id="connectionDot" class="status-dot"></span>
+        </div>
+        <button class="nav-item" data-view="settings"><span class="nav-icon">⚙</span> Workspace settings</button>
+        <div class="side-foot">DESIGNED FOR BETTER VISION<br><span>Social Eyewear · v1.0</span></div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="mobile-brand"><span class="brand-mark">se<span>+</span></span><b>SMART OPTIC</b></div>
+        <div class="breadcrumb"><span>Workspace</span><i>/</i><b id="crumbTitle">Sales Studio</b></div>
+        <div class="top-actions">
+          <span class="date-chip" id="todayChip">TODAY</span>
+          <button class="icon-button" id="syncButton" title="Sync with Supabase" aria-label="Sync">↻</button>
+          <button class="avatar" title="Workspace">SE</button>
+        </div>
+      </header>
+
+      <section class="view active" id="view-sales">
+        <div class="hero-row">
+          <div><div class="eyebrow">CUSTOMER EXPERIENCE / 01</div><h1>Make every choice<br><em>feel right.</em></h1><p class="lead">A thoughtful consultation, from lifestyle to the perfect pair.</p></div>
+          <div class="hero-art" aria-hidden="true"><div class="orb orb-a"></div><div class="orb orb-b"></div><div class="hero-glasses"><svg viewBox="0 0 260 100" fill="none"><path d="M20 24 Q22 15 36 15 H92 Q106 15 110 29 L118 57 Q121 70 105 73 H42 Q25 73 22 57 Z" stroke="currentColor" stroke-width="5"/><path d="M150 29 Q154 15 168 15 H224 Q238 15 240 24 L238 57 Q235 73 218 73 H155 Q139 70 142 57 Z" stroke="currentColor" stroke-width="5"/><path d="M110 34 Q130 24 150 34 M20 27 L3 19 M240 27 L257 19" stroke="currentColor" stroke-width="5" stroke-linecap="round"/></svg></div><div class="hero-caption">A clearer way to see your world.</div></div>
+        </div>
+
+        <div class="metric-row">
+          <div class="metric-card"><span class="metric-label">CUSTOMER PROFILES</span><div class="metric-value" id="metricCustomers">03 <small>profiles</small></div><div class="metric-foot"><span class="mini-dot"></span> Manage relationships</div></div>
+          <div class="metric-card"><span class="metric-label">QUOTES CREATED</span><div class="metric-value" id="metricQuotes">00 <small>quotes</small></div><div class="metric-foot">Your consultation pipeline</div></div>
+          <div class="metric-card metric-dark"><span class="metric-label">CURRENT SELECTION</span><div class="metric-value" id="metricCurrent">฿0</div><div class="metric-foot">Live estimate · THB</div></div>
+        </div>
+
+        <div class="section-heading"><div><div class="eyebrow">CONSULTATION FLOW</div><h2>Build a recommendation</h2></div><span class="step-indicator"><b>01</b> / 04</span></div>
+        <div class="workspace-grid">
+          <div class="primary-column">
+            <article class="panel">
+              <div class="panel-heading"><div class="step-number">01</div><div><h3>Know your customer</h3><p>Start with a profile or create a new one.</p></div><span class="panel-tag">PROFILE</span></div>
+              <div class="form-grid">
+                <label class="field"><span>Existing customer</span><select id="customerSelect"><option value="">New customer</option></select></label>
+                <label class="field"><span>Customer name</span><input id="customerName" placeholder="e.g. Pimmjai S." autocomplete="off"></label>
+                <label class="field"><span>Phone (optional)</span><input id="customerPhone" placeholder="Phone number" inputmode="tel"></label>
+                <label class="field"><span>Budget range</span><select id="customerBudget"><option value="5000">Under ฿5,000</option><option value="10000" selected>฿5,000 – 10,000</option><option value="15000">฿10,000 – 15,000</option><option value="25000">฿15,000+</option></select></label>
+                <label class="field field-wide"><span>Primary lifestyle</span><select id="customerNeed"><option>Digital work & screen time</option><option>Everyday near and distance</option><option>Driving & outdoor use</option><option>Reading & mobile devices</option><option>Progressive lens consultation</option><option>Lightweight frames & style</option></select></label>
+              </div>
+              <div class="panel-actions"><button class="button button-primary" id="saveCustomer">Save customer profile <span>↗</span></button><button class="button button-quiet" id="newCustomer">Clear</button></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-heading"><div class="step-number">02</div><div><h3>Find the right lens</h3><p>Compare product options using verified product details.</p></div><span class="panel-tag">LENS SELECT</span></div>
+              <div id="lensGrid" class="product-grid"></div>
+              <div class="fine-print">Illustrative packages only. Confirm exact lens design, coatings, index and compatibility from the manufacturer's current product information.</div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-heading"><div class="step-number">03</div><div><h3>Complete the look</h3><p>Pair the lens with a frame the customer loves.</p></div><span class="panel-tag">FRAME SELECT</span></div>
+              <div id="frameGrid" class="frame-grid"></div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-heading"><div class="step-number">04</div><div><h3>Consultation notes</h3><p>Keep useful details for the next visit.</p></div></div>
+              <label class="field"><span>Notes & follow-up</span><textarea id="customerNotes" rows="3" placeholder="Style preference, questions to revisit, follow-up date…"></textarea></label>
+              <div class="privacy-note"><span>✦</span><p><b>Thoughtful by design.</b> Only record information needed for service. Clinical findings and prescriptions should be handled by authorized staff with appropriate privacy safeguards.</p></div>
+            </article>
+          </div>
+
+          <aside class="summary-column">
+            <div class="quote-card">
+              <div class="quote-card-top"><span class="quote-label">YOUR CONSULTATION</span><span class="live-pill"><i></i> LIVE</span></div>
+              <h3>Personalized<br>selection</h3>
+              <p class="quote-desc">A clear summary to review together.</p>
+              <div class="summary-person"><div class="person-avatar">◎</div><div><small>PREPARED FOR</small><b id="summaryCustomer">New customer</b></div></div>
+              <div class="summary-line"><span>Lens package</span><b id="summaryLens">Not selected</b></div>
+              <div class="summary-line"><span>Frame</span><b id="summaryFrame">Not selected</b></div>
+              <div class="summary-line"><span>Discount</span><b id="summaryDiscount">฿0</b></div>
+              <div class="total-block"><span>ESTIMATED TOTAL</span><strong id="summaryTotal">฿0</strong><small>THB · final price subject to confirmation</small></div>
+              <button class="button button-light" id="saveQuote">Create quote <span>↗</span></button>
+              <button class="button button-outline-light" id="printQuote">Print / Save PDF</button>
+              <div class="quote-foot">SOCIAL EYEWEAR <span>SMART OPTIC STUDIO</span></div>
+            </div>
+            <div class="side-tip"><div class="tip-icon">✧</div><div><b>Consult, don't overwhelm.</b><p>Explain the differences that matter to this customer's lifestyle, then let them choose at their own pace.</p></div></div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="view" id="view-customers">
+        <div class="page-title"><div class="eyebrow">RELATIONSHIP MANAGEMENT</div><h1>Customer <em>directory.</em></h1><p>Profiles and preferences, thoughtfully organized.</p></div>
+        <article class="panel"><div class="toolbar"><div><h3>All customers</h3><p>Choose a profile to continue a consultation.</p></div><input id="customerSearch" class="search-input" placeholder="⌕  Search customers"></div><div id="customerList" class="customer-list"></div></article>
+      </section>
+
+      <section class="view" id="view-catalog">
+        <div class="page-title"><div class="eyebrow">PRODUCT MANAGEMENT</div><h1>Product <em>library.</em></h1><p>Manage demo packages, frame options and retail prices.</p></div>
+        <article class="panel"><div class="panel-heading"><div class="step-number">◇</div><div><h3>Lens packages</h3><p>Update names and sample prices.</p></div></div><div id="lensEditor" class="editor-list"></div></article>
+        <article class="panel"><div class="panel-heading"><div class="step-number">◈</div><div><h3>Frame collection</h3><p>Update names and sample prices.</p></div></div><div id="frameEditor" class="editor-list"></div><div class="panel-actions"><button class="button button-primary" id="applyCatalog">Save demo prices</button><button class="button button-quiet" id="resetCatalog">Reset demo catalog</button></div></article>
+      </section>
+
+      <section class="view" id="view-quotes">
+        <div class="page-title"><div class="eyebrow">SALES PIPELINE</div><h1>Saved <em>quotes.</em></h1><p>Review the options prepared during consultations.</p></div>
+        <article class="panel"><div class="toolbar"><div><h3>Quote history</h3><p>Demo quotes created in this session.</p></div><span class="panel-tag" id="quoteCountLabel">0 QUOTES</span></div><div class="table-wrap"><table><thead><tr><th>QUOTE ID</th><th>CUSTOMER</th><th>LENS</th><th>FRAME</th><th>TOTAL</th><th>DATE</th></tr></thead><tbody id="quoteRows"></tbody></table></div></article>
+      </section>
+
+      <section class="view" id="view-insights">
+        <div class="page-title"><div class="eyebrow">BUSINESS OVERVIEW</div><h1>Small details.<br><em>Better service.</em></h1><p>A lightweight snapshot of the current demo workspace.</p></div>
+        <div class="metric-row"><div class="metric-card"><span class="metric-label">CUSTOMERS</span><div class="metric-value" id="insightCustomers">03</div></div><div class="metric-card"><span class="metric-label">QUOTES</span><div class="metric-value" id="insightQuotes">00</div></div><div class="metric-card metric-dark"><span class="metric-label">QUOTE VALUE</span><div class="metric-value" id="insightValue">฿0</div></div></div>
+        <article class="panel"><h3>What to measure in production</h3><div class="insight-list"><div><span>01</span><b>Quote-to-sale conversion</b><small>Track which consultations become completed orders.</small></div><div><span>02</span><b>Popular lens and frame combinations</b><small>Use real order data to understand customer preferences.</small></div><div><span>03</span><b>Follow-up completion</b><small>Keep service reminders useful and consent-based.</small></div></div><div class="privacy-note"><span>i</span><p>Current metrics use demo/session data only. They are not actual Social Eyewear sales.</p></div></article>
+      </section>
+
+      <section class="view" id="view-settings">
+        <div class="page-title"><div class="eyebrow">CONFIGURATION</div><h1>Workspace <em>settings.</em></h1><p>Configure your store and optional cloud connection.</p></div>
+        <article class="panel"><h3>Store information</h3><p class="panel-desc">Used on printed quote summaries.</p><div class="form-grid"><label class="field"><span>Store name</span><input id="storeName" value="Social Eyewear"></label><label class="field"><span>Store phone</span><input id="storePhone" placeholder="Store phone number"></label><label class="field field-wide"><span>Quote footer</span><textarea id="quoteFooter" rows="2">Please confirm product specifications and prescription details before ordering.</textarea></label></div></article>
+        <article class="panel"><div class="panel-heading"><div class="step-number">⌁</div><div><h3>Supabase cloud connection</h3><p>Optional online mode with authenticated access and Row Level Security.</p></div></div><div class="form-grid"><label class="field field-wide"><span>Supabase project URL</span><input id="supabaseUrl" placeholder="https://your-project.supabase.co"></label><label class="field field-wide"><span>Supabase anon / publishable key</span><input id="supabaseKey" placeholder="Public client key — never use service_role here"></label></div><div class="panel-actions"><button class="button button-primary" id="connectCloud">Connect cloud</button><button class="button button-quiet" id="disconnectCloud">Disconnect</button></div><div id="cloudStatus" class="cloud-status">No cloud connection configured. The app can run locally with demo data.</div><div class="privacy-note"><span>!</span><p>Use only the Supabase publishable/anon key in this browser app. Never place a service_role key in frontend code. Configure authentication, RLS policies, backups and privacy notices before storing real customer data.</p></div></article>
+        <article class="panel"><h3>Data mode</h3><div class="mode-grid"><div><b>Offline</b><p>Uses browser local storage on this device. Data does not automatically travel to another device.</p></div><div><b>Online</b><p>Requires Supabase project configuration, sign-in and matching database schema. This starter does not sync records until authenticated cloud CRUD is configured.</p></div></div></article>
+      </section>
+
+      <footer class="app-footer"><span>© Social Eyewear · Smart Optic</span><span>Customer-first by design <b>✳</b></span></footer>
+    </main>
+  </div>
+  <div id="toast" class="toast hidden" role="status"></div>
+  <script src="/config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/app.js"></script>
+</body>
+</html>
