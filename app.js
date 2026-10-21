@@ -19,7 +19,7 @@ const COLS = {
 };
 const T = Object.keys(COLS);
 const db = {}; T.forEach(t => db[t] = ls.get('db_' + t, []));
-const persist = () => T.forEach(t => ls.set('db_' + t, db[t]));
+const persist = () => { try { T.forEach(t => ls.set('db_' + t, db[t])); } catch { toast('พื้นที่เก็บข้อมูลในเครื่องเต็ม ข้อมูลที่ซิงก์แล้วยังปลอดภัยบนระบบ'); } };
 const live = t => db[t].filter(r => !r.deleted_at);
 const find = (t, id) => db[t].find(r => r.id === id);
 let shop = ls.get('shop', null), sess = ls.get('sess', null), syncing = false, status = '';
@@ -95,9 +95,10 @@ async function sync() {
       const body = r => { const o = {}; COLS[t].forEach(k => o[k] = r[k] === undefined ? null : r[k]); o.shop_id = o.shop_id || shop.id; return o; };
       const post = rows => api(`/rest/v1/${t}?on_conflict=id`, { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(rows.map(body)) });
       const ok = r => { delete r._dirty; r.shop_id = r.shop_id || shop.id; };
-      if (dirty.length) {
-        try { await post(dirty); dirty.forEach(ok); }
-        catch { for (const r of dirty) { try { await post([r]); ok(r); } catch (e) { r._err = errText(e); } } }
+      for (let i = 0; i < dirty.length; i += 500) {
+        const part = dirty.slice(i, i + 500);
+        try { await post(part); part.forEach(ok); }
+        catch { for (const r of part) { try { await post([r]); ok(r); } catch (e) { r._err = errText(e); } } }
       }
     }
     ls.set('pull', pull); persist();
@@ -123,8 +124,107 @@ const cartSub = () => S.cart.reduce((n, i) => n + i.price * i.qty, 0);
 const latestRx = cid => db.prescriptions.filter(r => !r.deleted_at && r.customer_id === cid).sort((a, b) => (b.exam_date || b.created_at).localeCompare(a.exam_date || a.created_at))[0];
 const rxText = r => r ? `ขวา ${fmtP(r.od_sph)}${r.od_cyl != null ? '/' + fmtP(r.od_cyl) + '×' + (r.od_axis ?? '-') : ''} · ซ้าย ${fmtP(r.os_sph)}${r.os_cyl != null ? '/' + fmtP(r.os_cyl) + '×' + (r.os_axis ?? '-') : ''}` : 'ยังไม่มีค่าสายตา';
 const custName = id => find('customer_profiles', id)?.full_name || 'ลูกค้าทั่วไป';
-const csv = rows => '\ufeff' + rows.map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+const csv = rows => '﻿' + rows.map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
 const download = (name, text, type = 'text/csv') => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: type + ';charset=utf-8' })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); };
+
+/* ---------- นำเข้าลูกค้าจาก CSV ---------- */
+// IMPORT-HELPERS-START
+const IMP_FIELDS = {
+  customer_code: ['รหัสลูกค้า', 'รหัส', 'เลขที่ลูกค้า', 'เลขที่', 'customercode', 'code', 'hn', 'no'],
+  full_name: ['ชื่อนามสกุล', 'ชื่อลูกค้า', 'ชื่อ', 'name', 'fullname', 'customername', 'firstname'],
+  last_name: ['นามสกุล', 'lastname', 'surname'],
+  phone: ['โทรศัพท์', 'เบอร์โทรศัพท์', 'เบอร์โทร', 'เบอร์', 'มือถือ', 'โทร', 'phone', 'tel', 'mobile', 'telephone'],
+  budget_thb: ['งบประมาณ', 'งบ', 'budget', 'budgetthb'],
+  lifestyle: ['ไลฟ์สไตล์', 'การใช้งาน', 'อาชีพ', 'lifestyle'],
+  notes: ['หมายเหตุ', 'บันทึก', 'note', 'notes', 'remark', 'remarks'],
+  exam_date: ['วันที่ตรวจ', 'วันที่ตรวจสายตา', 'examdate', 'date'],
+  pd: ['pd'], add_power: ['add', 'addpower', 'addition']
+};
+const IMP_LABEL = { customer_code: 'รหัสลูกค้า', full_name: 'ชื่อ', last_name: 'นามสกุล', phone: 'โทรศัพท์', budget_thb: 'งบประมาณ', lifestyle: 'ไลฟ์สไตล์', notes: 'หมายเหตุ', exam_date: 'วันที่ตรวจ', pd: 'PD', add_power: 'ADD' };
+[['od', 'ขวา', ['ขวา', 'od', 'r', 'right']], ['os', 'ซ้าย', ['ซ้าย', 'os', 'l', 'left']]].forEach(([k, th, pre]) => ['sph', 'cyl', 'axis'].forEach(f => {
+  IMP_FIELDS[k + '_' + f] = pre.flatMap(x => [x + f, f + x]); IMP_LABEL[k + '_' + f] = `${th} ${f.toUpperCase()}`;
+}));
+const IMP_ALIAS = {}; Object.entries(IMP_FIELDS).forEach(([k, l]) => l.forEach(a => IMP_ALIAS[a] = IMP_ALIAS[a] || k));
+const impNorm = h => String(h || '').toLowerCase().replace(/[\s_\-\.\(\)\/\\:]/g, '');
+
+function parseCSV(text) {
+  text = text.replace(/^﻿/, '');
+  const first = text.split(/\r?\n/, 1)[0];
+  const delim = [',', ';', '\t'].map(d => [d, first.split(d).length]).sort((a, b) => b[1] - a[1])[0][0];
+  const rows = []; let row = [], f = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) { if (c === '"') { if (text[i + 1] === '"') { f += '"'; i++; } else q = false; } else f += c; }
+    else if (c === '"') q = true;
+    else if (c === delim) { row.push(f); f = ''; }
+    else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(f); f = ''; rows.push(row); row = []; }
+    else f += c;
+  }
+  if (f !== '' || row.length) { row.push(f); rows.push(row); }
+  return rows.filter(r => r.some(x => String(x).trim() !== ''));
+}
+const impNum = v => { const s = String(v ?? '').trim().replace(/,/g, ''); if (!s) return null; if (/^(pl|plano|bal|ds)$/i.test(s)) return 0; const n = parseFloat(s.replace(/^\+/, '')); return isNaN(n) ? null : n; };
+const impDate = v => {
+  const s = String(v ?? '').trim(); let y, m, d, a;
+  if ((a = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s))) [y, m, d] = [+a[1], +a[2], +a[3]];
+  else if ((a = /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/.exec(s))) [d, m, y] = [+a[1], +a[2], +a[3]];
+  else return null;
+  if (y > 2400) y -= 543; if (y < 100) y += 2000;
+  if (m < 1 || m > 12 || d < 1 || d > 31 || y < 1900 || y > 2100) return null;
+  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+};
+const digits = s => String(s || '').replace(/\D/g, '');
+function analyze(rows) {
+  const map = rows[0].map(h => IMP_ALIAS[impNorm(h)] || null), res = { total: rows.length - 1, ok: [], dup: 0, bad: 0, rx: 0, cols: [...new Set(map.filter(Boolean))], unknown: rows[0].filter((h, i) => !map[i] && String(h).trim()) };
+  const codes = new Set(), phones = new Set();
+  db.customer_profiles.filter(c => !c.deleted_at).forEach(c => { if (c.customer_code) codes.add(String(c.customer_code).toLowerCase()); if (digits(c.phone).length >= 9) phones.add(digits(c.phone)); });
+  for (const r of rows.slice(1)) {
+    const g = f => { const i = map.indexOf(f); return i < 0 ? '' : String(r[i] ?? '').trim(); };
+    const name = [g('full_name'), g('last_name')].filter(Boolean).join(' ');
+    if (!name) { res.bad++; continue; }
+    const code = g('customer_code'), ph = digits(g('phone'));
+    if (code ? codes.has(code.toLowerCase()) : (ph.length >= 9 && phones.has(ph))) { res.dup++; continue; }
+    if (code) codes.add(code.toLowerCase()); if (ph.length >= 9) phones.add(ph);
+    const ax = f => { const n = impNum(g(f)); return n == null || n < 0 || n > 180 ? null : Math.round(n); };
+    const rx = { exam_date: impDate(g('exam_date')), od_sph: impNum(g('od_sph')), od_cyl: impNum(g('od_cyl')), od_axis: ax('od_axis'), os_sph: impNum(g('os_sph')), os_cyl: impNum(g('os_cyl')), os_axis: ax('os_axis'), pd: impNum(g('pd')), add_power: impNum(g('add_power')) };
+    if (rx.pd != null) rx.pd = Math.round(rx.pd * 10) / 10; if (rx.add_power != null && Math.abs(rx.add_power) >= 10) rx.add_power = null;
+    ['od_sph', 'od_cyl', 'os_sph', 'os_cyl'].forEach(k => { if (rx[k] != null && Math.abs(rx[k]) >= 1000) rx[k] = null; });
+    const hasRx = ['od_sph', 'od_cyl', 'od_axis', 'os_sph', 'os_cyl', 'os_axis', 'pd', 'add_power'].some(k => rx[k] != null);
+    if (hasRx) res.rx++;
+    const b = impNum(g('budget_thb'));
+    res.ok.push({ code, name, phone: g('phone'), budget: b == null || b < 0 ? null : Math.round(b), lifestyle: g('lifestyle'), notes: g('notes'), rx: hasRx ? rx : null });
+  }
+  return res;
+}
+function nextCode() {
+  let best = null;
+  for (const c of db.customer_profiles) { const m = /^(.*?)(\d+)$/.exec(c.customer_code || ''); if (m && (!best || +m[2] > best.n)) best = { p: m[1], n: +m[2], len: m[2].length }; }
+  return best ? best.p + String(best.n + 1).padStart(best.len, '0') : '';
+}
+// IMPORT-HELPERS-END
+let IMP = null;
+const TEMPLATE = [['รหัสลูกค้า', 'ชื่อ-นามสกุล', 'โทรศัพท์', 'งบประมาณ', 'ไลฟ์สไตล์', 'หมายเหตุ', 'วันที่ตรวจ', 'ขวา SPH', 'ขวา CYL', 'ขวา AXIS', 'ซ้าย SPH', 'ซ้าย CYL', 'ซ้าย AXIS', 'PD', 'ADD'], ['C0001', 'สมชาย ใจดี', '0812345678', '8000', 'ทำงานหน้าจอ', '', '2026-10-01', '-1.25', '-0.50', '90', '-1.00', '', '', '62', '']];
+function importDialog() {
+  dialog(`<h2>นำเข้าลูกค้าจากไฟล์ CSV</h2><p class="tag">ใน Excel เลือก บันทึกเป็น → CSV (แนะนำ CSV UTF-8) แล้วเลือกไฟล์ด้านล่าง ระบบจะเก็บรหัสลูกค้าเดิมไว้ และข้ามคนที่รหัส (หรือเบอร์โทร ถ้าไม่มีรหัส) ซ้ำกับที่มีอยู่แล้ว ก่อนนำเข้าจริงจะมีหน้าให้ตรวจก่อน</p><label>เลือกไฟล์ .csv<input type="file" accept=".csv,.txt,text/csv" data-bind="impfile"></label><p class="tag">ใส่ค่าสายตาในไฟล์เดียวกันได้ (คอลัมน์ ขวา/ซ้าย SPH, CYL, AXIS, PD, ADD, วันที่ตรวจ) ถ้าลูกค้าหนึ่งคนมีหลายครั้ง ให้นำเข้าครั้งละหนึ่งชุดค่าสายตา หรือเพิ่มภายหลังในหน้าลูกค้า</p><div class="foot"><button type="button" class="btn line" data-act="close">ปิด</button><button type="button" class="btn line" data-act="tpl">ดาวน์โหลดไฟล์ตัวอย่าง</button></div>`);
+}
+function importPreview(res, name) {
+  IMP = res;
+  const n = res.ok.length, cols = res.cols.map(k => IMP_LABEL[k]).join(', ');
+  dialog(`<h2>ตรวจสอบก่อนนำเข้า</h2><p class="tag">ไฟล์ ${esc(name)} · คอลัมน์ที่ระบบเข้าใจ: ${esc(cols || 'ไม่พบ')}${res.unknown.length ? `<br>คอลัมน์ที่ไม่ได้ใช้: ${esc(res.unknown.join(', '))}` : ''}</p>
+  <div class="row"><span>แถวในไฟล์</span><b>${res.total}</b></div><div class="row"><span>นำเข้าได้</span><b>${n}</b></div><div class="row"><span>ในนั้นมีค่าสายตา</span><b>${res.rx}</b></div><div class="row"><span>ข้าม (รหัส/เบอร์ซ้ำ)</span><b>${res.dup}</b></div><div class="row"><span>ข้าม (ไม่มีชื่อ)</span><b>${res.bad}</b></div>
+  ${res.cols.includes('full_name') ? '' : '<p class="warn">ไม่พบคอลัมน์ชื่อ ลองตั้งหัวคอลัมน์เป็น "ชื่อ-นามสกุล"</p>'}
+  ${n ? `<div class="wrap"><table><tr><th>รหัส</th><th>ชื่อ</th><th>โทรศัพท์</th><th>ค่าสายตา</th></tr>${res.ok.slice(0, 5).map(o => `<tr><td>${esc(o.code || '-')}</td><td>${esc(o.name)}</td><td>${esc(o.phone)}</td><td>${o.rx ? 'มี' : '-'}</td></tr>`).join('')}</table></div>` : ''}
+  <div class="foot"><button type="button" class="btn line" data-act="close">ยกเลิก</button><button type="button" class="btn line" data-act="impcust">เลือกไฟล์ใหม่</button>${n ? `<button type="button" class="btn" data-act="doimport">นำเข้า ${n} ราย</button>` : ''}</div>`);
+}
+async function importFile(f) {
+  if (!f) return;
+  try {
+    const buf = await f.arrayBuffer(); let t;
+    try { t = new TextDecoder('utf-8', { fatal: true }).decode(buf); } catch { t = new TextDecoder('windows-874').decode(buf); }
+    const rows = parseCSV(t); if (rows.length < 2) throw new Error('ไฟล์ไม่มีข้อมูล');
+    importPreview(analyze(rows), f.name);
+  } catch (e) { toast(errText(e)); }
+}
 
 const views = {
   studio() {
@@ -150,8 +250,9 @@ const views = {
   },
   customers() {
     const q = S.q.toLowerCase(), rows = live('customer_profiles').filter(c => [c.full_name, c.phone, c.customer_code].join(' ').toLowerCase().includes(q));
-    return `<div class="bar"><div><h1>ลูกค้า</h1><p class="sub" style="margin:0">โปรไฟล์ ความยินยอม และประวัติค่าสายตา</p></div><div class="tools"><input placeholder="ค้นหาชื่อ เบอร์ หรือรหัส" value="${esc(S.q)}" data-bind="q" style="width:220px"><button class="btn line" data-act="csvcust">ส่งออก CSV</button><button class="btn" data-act="newcust">เพิ่มลูกค้า</button></div></div>
-    ${rows.length ? `<div class="panel wrap"><table><tr><th>รหัส</th><th>ชื่อ</th><th>โทรศัพท์</th><th>ค่าสายตาล่าสุด</th><th>ยินยอม</th><th></th></tr>${rows.map(c => `<tr><td>${esc(c.customer_code || '-')}</td><td>${esc(c.full_name)}</td><td>${esc(c.phone || '')}</td><td class="tag">${esc(rxText(latestRx(c.id)))}</td><td>${c.consent_recorded_at ? '<span class="st accepted">บันทึกแล้ว</span>' : '<span class="st">ยังไม่มี</span>'}</td><td class="act"><button class="btn line sm" data-act="viewcust" data-id="${c.id}">เปิด</button>${mgr() ? ` <button class="btn line sm bad" data-act="delcust" data-id="${c.id}">ลบ</button>` : ''}</td></tr>`).join('')}</table></div>` : empty('ยังไม่มีลูกค้าที่ตรงกับการค้นหา', '<button class="btn" data-act="newcust">เพิ่มลูกค้าคนแรก</button>')}`;
+    const shown = rows.slice(0, 200);
+    return `<div class="bar"><div><h1>ลูกค้า</h1><p class="sub" style="margin:0">โปรไฟล์ ความยินยอม และประวัติค่าสายตา · ทั้งหมด ${live('customer_profiles').length} ราย</p></div><div class="tools"><input placeholder="ค้นหาชื่อ เบอร์ หรือรหัส" value="${esc(S.q)}" data-bind="q" style="width:220px"><button class="btn line" data-act="impcust">นำเข้า CSV</button><button class="btn line" data-act="csvcust">ส่งออก CSV</button><button class="btn" data-act="newcust">เพิ่มลูกค้า</button></div></div>
+    ${rows.length ? `<div class="panel wrap"><table><tr><th>รหัส</th><th>ชื่อ</th><th>โทรศัพท์</th><th>ค่าสายตาล่าสุด</th><th>ยินยอม</th><th></th></tr>${shown.map(c => `<tr><td>${esc(c.customer_code || '-')}</td><td>${esc(c.full_name)}</td><td>${esc(c.phone || '')}</td><td class="tag">${esc(rxText(latestRx(c.id)))}</td><td>${c.consent_recorded_at ? '<span class="st accepted">บันทึกแล้ว</span>' : '<span class="st">ยังไม่มี</span>'}</td><td class="act"><button class="btn line sm" data-act="viewcust" data-id="${c.id}">เปิด</button>${mgr() ? ` <button class="btn line sm bad" data-act="delcust" data-id="${c.id}">ลบ</button>` : ''}</td></tr>`).join('')}</table></div>${rows.length > shown.length ? `<p class="tag">แสดง ${shown.length} จาก ${rows.length} ราย พิมพ์ค้นหาเพื่อกรอง</p>` : ''}` : empty('ยังไม่มีลูกค้าที่ตรงกับการค้นหา', '<button class="btn" data-act="newcust">เพิ่มลูกค้าคนแรก</button> <button class="btn line" data-act="impcust">นำเข้าจาก CSV</button>')}`;
   },
   products() {
     const q = S.pq.toLowerCase(), rows = live('products').filter(p => (S.ptype === 'all' || p.product_type === S.ptype) && [p.product_name, p.sku, p.brand].join(' ').toLowerCase().includes(q));
@@ -205,7 +306,7 @@ const fld = (n, l, v = '', t = 'text', extra = '') => `<label>${l}<input name="$
 const foot = ok => `<div class="foot"><button type="button" class="btn line" data-act="close">ยกเลิก</button><button class="btn" type="submit">${ok}</button></div>`;
 
 function custForm(c = {}, from = '') {
-  dialog(`<form data-form="cust" data-id="${c.id || ''}" data-from="${from}"><h2>${c.id ? 'แก้ไขลูกค้า' : 'เพิ่มลูกค้า'}</h2><div class="two">${fld('full_name', 'ชื่อ-นามสกุล', c.full_name, 'text', 'required')}${fld('customer_code', 'รหัสลูกค้า', c.customer_code)}${fld('phone', 'โทรศัพท์', c.phone, 'tel')}${fld('budget_thb', 'งบประมาณ (บาท)', c.budget_thb, 'number', 'min="0"')}</div>${fld('lifestyle', 'ไลฟ์สไตล์ / การใช้งาน', c.lifestyle)}<label>บันทึก<textarea name="notes" rows="2">${esc(c.notes)}</textarea></label><label class="chk"><input type="checkbox" name="consent" ${c.consent_recorded_at ? 'checked' : ''}> ลูกค้ายินยอมให้เก็บข้อมูลส่วนบุคคลและค่าสายตา${c.consent_recorded_at ? ` (บันทึกเมื่อ ${day(c.consent_recorded_at)})` : ''}</label>${foot('บันทึกลูกค้า')}</form>`);
+  dialog(`<form data-form="cust" data-id="${c.id || ''}" data-from="${from}"><h2>${c.id ? 'แก้ไขลูกค้า' : 'เพิ่มลูกค้า'}</h2><div class="two">${fld('full_name', 'ชื่อ-นามสกุล', c.full_name, 'text', 'required')}${fld('customer_code', 'รหัสลูกค้า (รันต่อจากเลขล่าสุด)', c.id ? c.customer_code : nextCode())}${fld('phone', 'โทรศัพท์', c.phone, 'tel')}${fld('budget_thb', 'งบประมาณ (บาท)', c.budget_thb, 'number', 'min="0"')}</div>${fld('lifestyle', 'ไลฟ์สไตล์ / การใช้งาน', c.lifestyle)}<label>บันทึก<textarea name="notes" rows="2">${esc(c.notes)}</textarea></label><label class="chk"><input type="checkbox" name="consent" ${c.consent_recorded_at ? 'checked' : ''}> ลูกค้ายินยอมให้เก็บข้อมูลส่วนบุคคลและค่าสายตา${c.consent_recorded_at ? ` (บันทึกเมื่อ ${day(c.consent_recorded_at)})` : ''}</label>${foot('บันทึกลูกค้า')}</form>`);
 }
 function rxForm(cid) {
   const g = (n, l, st = '0.25') => fld(n, l, '', 'number', `step="${st}"`);
@@ -248,6 +349,13 @@ document.addEventListener('click', e => {
     S.cart.forEach(i => save('quote_items', { id: uid(), quote_id: qid, product_id: i.id, item_name_snapshot: i.name, product_type: i.type, quantity: i.qty, unit_price_thb: i.price, line_total_thb: i.price * i.qty, deleted_at: null }));
     S.cart = []; S.disc = 0; S.notes = ''; S.v = 'quotes'; commit(); toast('สร้างใบเสนอราคาแล้ว');
   }
+  else if (a === 'impcust') importDialog();
+  else if (a === 'tpl') download('customers-template.csv', csv(TEMPLATE));
+  else if (a === 'doimport') {
+    if (!IMP?.ok.length) return;
+    IMP.ok.forEach(o => { const cid = uid(); save('customer_profiles', { id: cid, customer_code: o.code || null, full_name: o.name, phone: o.phone || null, budget_thb: o.budget, lifestyle: o.lifestyle || null, notes: o.notes || null, consent_recorded_at: null, deleted_at: null }); if (o.rx) save('prescriptions', { id: uid(), customer_id: cid, ...o.rx, notes: null, deleted_at: null }); });
+    const n = IMP.ok.length; IMP = null; closeDlg(); commit(); toast(`นำเข้าแล้ว ${n} ราย`);
+  }
   else if (a === 'newcust') custForm({}, b.dataset.from || '');
   else if (a === 'editcust') custForm(find('customer_profiles', id));
   else if (a === 'viewcust') custView(id);
@@ -270,7 +378,8 @@ document.addEventListener('click', e => {
 });
 document.addEventListener('change', e => {
   const k = e.target.dataset.bind; if (!k) return;
-  if (k === 'cust') { S.cust = e.target.value; render(); }
+  if (k === 'impfile') importFile(e.target.files[0]);
+  else if (k === 'cust') { S.cust = e.target.value; render(); }
   else if (k === 'disc') { S.disc = Math.max(0, Math.round(+e.target.value || 0)); render(); }
   else if (k === 'notes') S.notes = e.target.value;
   else if (k === 'qstatus') { save('quotes', { ...find('quotes', e.target.dataset.id), status: e.target.value }); commit(); }
