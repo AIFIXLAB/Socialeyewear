@@ -137,7 +137,7 @@ const NEEDS = { general: 'ใช้งานทั่วไป', screen: 'ทำ
 const TYPES = { lens: 'เลนส์', frame: 'กรอบ', service: 'บริการ', other: 'อื่น ๆ' };
 const QST = { draft: 'ร่าง', presented: 'เสนอแล้ว', accepted: 'ลูกค้าตกลง', declined: 'ลูกค้าปฏิเสธ', expired: 'หมดอายุ', converted: 'ออกขายแล้ว' };
 const NAV = [['studio', 'Sales Studio'], ['customers', 'ลูกค้า'], ['products', 'สินค้า'], ['quotes', 'ใบเสนอราคา'], ['insights', 'ภาพรวม'], ['settings', 'ตั้งค่า']];
-const S = { v: 'studio', need: 'general', cart: [], cust: '', disc: 0, notes: '', q: '', pq: '', ptype: 'all', staff: null, mode: 'splash' };
+const S = { v: 'studio', need: 'general', cart: [], cust: '', disc: 0, notes: '', q: '', pq: '', ptype: 'all', staff: null, mode: 'splash', custView: 'all', custFrom: '', custTo: '' };
 let K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '' };
 const kioskReset = () => { K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '' }; };
 const empty = (m, a = '') => `<div class="empty">${m}${a ? `<br><br>${a}` : ''}</div>`;
@@ -288,11 +288,20 @@ const views = {
       <button class="btn gold" style="display:block" data-act="mkquote">สร้างใบเสนอราคา</button></aside></div>`;
   },
   customers() {
-    const q = S.q.toLowerCase(), rows = live('customer_profiles').filter(c => [c.full_name, c.phone, c.customer_code].join(' ').toLowerCase().includes(q))
-      .sort((a, b) => (a.customer_code || '').localeCompare(b.customer_code || '', undefined, { numeric: true, sensitivity: 'base' }));
+    const q = S.q.toLowerCase(), mode = S.custView || 'all';
+    let rows = live('customer_profiles').filter(c => [c.full_name, c.phone, c.customer_code].join(' ').toLowerCase().includes(q));
+    if (mode === 'range' && (S.custFrom || S.custTo)) {
+      rows = rows.filter(c => (!S.custFrom || (c.created_at || '') >= S.custFrom) && (!S.custTo || (c.created_at || '') <= S.custTo + 'T23:59:59'));
+    }
+    rows = mode === 'all'
+      ? rows.sort((a, b) => (a.customer_code || '').localeCompare(b.customer_code || '', undefined, { numeric: true, sensitivity: 'base' }))
+      : rows.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
     const shown = rows.slice(0, 200);
+    const tab = (id, l) => `<button class="chip ${mode === id ? 'on' : ''}" data-act="custview" data-id="${id}">${l}</button>`;
     return `<div class="bar"><div><h1>ลูกค้า</h1><p class="sub" style="margin:0">โปรไฟล์ ความยินยอม และประวัติค่าสายตา · ทั้งหมด ${live('customer_profiles').length} ราย</p></div><div class="tools"><input placeholder="ค้นหาชื่อ เบอร์ หรือรหัส" value="${esc(S.q)}" data-bind="q" style="width:220px"><button class="btn line" data-act="impcust">นำเข้า CSV</button><button class="btn line" data-act="csvcust">ส่งออก CSV</button><button class="btn" data-act="newcust">เพิ่มลูกค้า</button></div></div>
-    ${rows.length ? `<div class="panel wrap"><table><tr><th>รหัส</th><th>ชื่อ</th><th>โทรศัพท์</th><th>ค่าสายตาล่าสุด</th><th>ยินยอม</th><th></th></tr>${shown.map(c => `<tr><td>${esc(c.customer_code || '-')}</td><td>${esc(c.full_name)}</td><td>${esc(c.phone || '')}</td><td class="tag">${esc(rxText(latestRx(c.id)))}</td><td>${c.consent_recorded_at ? '<span class="st accepted">บันทึกแล้ว</span>' : '<span class="st">ยังไม่มี</span>'}</td><td class="act"><button class="btn line sm" data-act="viewcust" data-id="${c.id}">เปิด</button>${mgr() ? ` <button class="btn line sm bad" data-act="delcust" data-id="${c.id}">ลบ</button>` : ''}</td></tr>`).join('')}</table></div>${rows.length > shown.length ? `<p class="tag">แสดง ${shown.length} จาก ${rows.length} ราย พิมพ์ค้นหาเพื่อกรอง</p>` : ''}` : empty('ยังไม่มีลูกค้าที่ตรงกับการค้นหา', '<button class="btn" data-act="newcust">เพิ่มลูกค้าคนแรก</button> <button class="btn line" data-act="impcust">นำเข้าจาก CSV</button>')}`;
+    <div class="chips" style="display:flex;align-items:center;flex-wrap:wrap;gap:8px">${tab('all', 'ทั้งหมด (เรียงตามรหัส)')}${tab('recent', 'ลูกค้าล่าสุด')}${tab('range', 'ระบุช่วงเวลา')}
+    ${mode === 'range' ? `<span style="display:inline-flex;gap:8px;align-items:center;margin-left:4px"><input type="date" data-bind="custfrom" value="${esc(S.custFrom || '')}" style="padding:7px 10px"><span class="tag">ถึง</span><input type="date" data-bind="custto" value="${esc(S.custTo || '')}" style="padding:7px 10px"></span>` : ''}</div>
+    ${rows.length ? `<div class="panel wrap"><table><tr><th>รหัส</th><th>ชื่อ</th><th>โทรศัพท์</th><th>วันที่เพิ่ม</th><th>ค่าสายตาล่าสุด</th><th>ยินยอม</th><th></th></tr>${shown.map(c => `<tr><td>${esc(c.customer_code || '-')}</td><td>${esc(c.full_name)}</td><td>${esc(c.phone || '')}</td><td class="tag">${day(c.created_at)}</td><td class="tag">${esc(rxText(latestRx(c.id)))}</td><td>${c.consent_recorded_at ? '<span class="st accepted">บันทึกแล้ว</span>' : '<span class="st">ยังไม่มี</span>'}</td><td class="act"><button class="btn line sm" data-act="viewcust" data-id="${c.id}">เปิด</button>${mgr() ? ` <button class="btn line sm bad" data-act="delcust" data-id="${c.id}">ลบ</button>` : ''}</td></tr>`).join('')}</table></div>${rows.length > shown.length ? `<p class="tag">แสดง ${shown.length} จาก ${rows.length} ราย พิมพ์ค้นหาเพื่อกรอง</p>` : ''}` : empty('ยังไม่มีลูกค้าที่ตรงกับการค้นหา', '<button class="btn" data-act="newcust">เพิ่มลูกค้าคนแรก</button> <button class="btn line" data-act="impcust">นำเข้าจาก CSV</button>')}`;
   },
   products() {
     const q = S.pq.toLowerCase(), rows = live('products').filter(p => (S.ptype === 'all' || p.product_type === S.ptype) && [p.product_name, p.sku, p.brand].join(' ').toLowerCase().includes(q));
@@ -652,6 +661,7 @@ document.addEventListener('click', e => {
   else if (a === 'syncnow') sync();
   else if (a === 'logout') { if (!pendingCount() || confirm('ยังมีข้อมูลที่ไม่ได้ซิงก์ ออกจากระบบต่อหรือไม่? (ข้อมูลยังอยู่ในเครื่อง)')) { sess = null; ls.set('sess', null); S.staff = null; render(); } }
   else if (a === 'rmstaff') { if (confirm('ถอดพนักงานคนนี้ออกจากร้าน?')) api(`/rest/v1/shop_members?shop_id=eq.${shop.id}&user_id=eq.${id}`, { method: 'DELETE' }).then(loadStaff).catch(err => toast(errText(err))); }
+  else if (a === 'custview') { S.custView = id; render(); }
   else if (a === 'splashgo') { S.mode = 'hub'; render(); }
   else if (a === 'gomode') { if (id === 'kiosk') kioskReset(); S.mode = id; render(); }
   else if (a === 'kioskstep') { K.step = id; if (id === 'lookup') { K.custId = null; K.photo = null; } render(); }
@@ -689,6 +699,8 @@ document.addEventListener('change', e => {
   else if (k === 'url' || k === 'key') { ls.set(k, e.target.value.trim()); toast('บันทึกการตั้งค่าแล้ว'); setStatus(); }
   else if (k === 'claimphoto') { const f = e.target.files[0]; if (f) fileToThumb(f).then(du => { K.photo = du; render(); }); }
   else if (k === 'ccother') K.ccOther = e.target.value;
+  else if (k === 'custfrom') { S.custFrom = e.target.value; render(); }
+  else if (k === 'custto') { S.custTo = e.target.value; render(); }
 });
 document.addEventListener('input', e => {
   const k = e.target.dataset.bind; if (!k) return;
