@@ -335,6 +335,12 @@ const views = {
   }
 };
 
+const ORIG_THEME_COLOR = (() => { const m = document.querySelector('meta[name="theme-color"]'); return m ? m.content : null; })();
+function setThemeColor(c) {
+  let m = document.querySelector('meta[name="theme-color"]');
+  if (!m) { m = document.createElement('meta'); m.name = 'theme-color'; document.head.appendChild(m); }
+  m.content = c;
+}
 function overlay(html) {
   let ov = document.getElementById('kioskOv');
   if (!ov) { ov = document.createElement('div'); ov.id = 'kioskOv'; document.body.appendChild(ov); }
@@ -346,6 +352,7 @@ function render() {
   if (S.mode === 'splash') return overlay(splashView());
   if (S.mode === 'hub') return overlay(hubView());
   if (S.mode === 'kiosk') return overlay(kioskView());
+  if (ORIG_THEME_COLOR != null) setThemeColor(ORIG_THEME_COLOR);
   closeOverlay();
   $('#nav').innerHTML = NAV.map(([k, l]) => `<button data-act="go" data-id="${k}" class="${S.v === k ? 'on' : ''}">${l}</button>`).join('');
   $('#view').innerHTML = views[S.v](); setStatus();
@@ -391,37 +398,40 @@ function prodForm(p = {}) {
   dialog(`<form data-form="prod" data-id="${p.id || ''}"><h2>${p.id ? 'แก้ไขสินค้า' : 'เพิ่มสินค้า'}</h2>${fld('product_name', 'ชื่อสินค้า', p.product_name, 'text', 'required')}<div class="two"><label>ประเภท<select name="product_type">${Object.entries(TYPES).map(([k, l]) => `<option value="${k}" ${p.product_type === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>${fld('retail_price_thb', 'ราคาขาย (บาท)', p.retail_price_thb ?? 0, 'number', 'min="0" required')}${fld('sku', 'SKU', p.sku)}<label>แบรนด์<input name="brand" value="${esc(p.brand)}" list="brandlist" placeholder="พิมพ์หรือเลือกจากรายการเดิม"></label>${mgr() ? fld('cost_thb', 'ต้นทุน (บาท)', p.cost_thb, 'number', 'min="0"') : ''}${fld('stock_qty', 'จำนวนคงเหลือ (เว้นว่าง = ไม่ติดตาม)', p.stock_qty, 'number', 'step="1"')}</div><label>รายละเอียดสั้น ๆ<input name="description" value="${esc(p.description)}" list="speclist" placeholder="เช่น ชนิดเลนส์, Index, ประเภทคอนแทคเลนส์"></label>${fld('features', 'แท็กการใช้งาน: general, screen, drive, outdoor, progressive (คั่นด้วยคอมมา)', (p.features || []).join(', '))}<label class="chk"><input type="checkbox" name="active" ${p.active === false ? '' : 'checked'}> เปิดขาย (แสดงใน Sales Studio)</label>${foot('บันทึกสินค้า')}</form><datalist id="brandlist">${opts(brandList)}</datalist><datalist id="speclist">${opts(specList)}</datalist>`);
 }
 /* ---------- หน้าอินโทร / หน้าเลือกหมวด / กิออสบริการลูกค้า ---------- */
+const SILVER_BG = 'linear-gradient(150deg,#f3f4f6 0%,#d6dadf 28%,#aab0b8 58%,#80858d 100%)';
 function splashView() {
-  return `<div data-act="splashgo" style="position:fixed;inset:0;background:radial-gradient(ellipse at 50% 40%,#1c160e 0%,#09070a 75%);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer">
+  setThemeColor('#aab0b8');
+  return `<div data-act="splashgo" style="position:fixed;inset:0;background:${SILVER_BG};display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer">
   <style>
     @keyframes seoSpin{to{transform:rotate(360deg)}}
     @keyframes seoPulse{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.03)}}
     @keyframes seoIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-    .seoRing{position:absolute;inset:-18px;border-radius:50%;background:conic-gradient(from 0deg,transparent 0%,#e9c98c 6%,transparent 18%,transparent 82%,#e9c98c 94%,transparent 100%);filter:blur(6px);animation:seoSpin 3.1s linear infinite}
-    .seoRing2{position:absolute;inset:-32px;border-radius:50%;border:1px solid rgba(233,201,140,.35);animation:seoPulse 2.6s ease-in-out infinite}
+    .seoRing{position:absolute;inset:-18px;border-radius:50%;background:conic-gradient(from 0deg,transparent 0%,#ffffff 6%,transparent 18%,transparent 82%,#ffffff 94%,transparent 100%);filter:blur(6px);animation:seoSpin 3.1s linear infinite}
+    .seoRing2{position:absolute;inset:-32px;border-radius:50%;border:1px solid rgba(255,255,255,.55);animation:seoPulse 2.6s ease-in-out infinite}
     .seoLogoWrap{animation:seoIn .9s ease both}
     .seoTxt{animation:seoIn .9s ease .25s both}
   </style>
   <div class="seoLogoWrap" style="position:relative;width:230px;height:230px;max-width:60vw;max-height:60vw">
     <div class="seoRing"></div><div class="seoRing2"></div>
-    <img src="${LOGO_DATA_URI}" style="position:relative;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 0 24px rgba(233,201,140,.28))">
+    <img src="${LOGO_DATA_URI}" style="position:relative;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 16px 26px rgba(20,22,26,.35)) drop-shadow(0 0 18px rgba(255,255,255,.55))">
   </div>
-  <div class="seoTxt" style="margin-top:28px;color:#e9c98c;font-size:13px;letter-spacing:.35em;text-transform:uppercase;text-align:center">Social Eyewear</div>
-  <div class="seoTxt" style="margin-top:6px;color:#8a7d6a;font-size:11.5px;letter-spacing:.15em">แตะหน้าจอเพื่อเข้าสู่ระบบ</div>
+  <div class="seoTxt" style="margin-top:28px;color:#2c2f33;font-size:13px;letter-spacing:.35em;text-transform:uppercase;text-align:center;text-shadow:0 1px 0 rgba(255,255,255,.4)">Social Eyewear</div>
+  <div class="seoTxt" style="margin-top:6px;color:#565b61;font-size:11.5px;letter-spacing:.15em">แตะหน้าจอเพื่อเข้าสู่ระบบ</div>
   </div>`;
 }
 function hubView() {
-  return `<div style="position:fixed;inset:0;background:linear-gradient(160deg,#141009,#07060a 70%);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px;gap:26px">
-  <img src="${LOGO_DATA_URI}" style="width:84px;height:84px;object-fit:contain;opacity:.95">
-  <div style="font-size:12px;letter-spacing:.3em;color:#e9c98c;text-transform:uppercase;text-align:center">Social Eyewear · Smart Optic</div>
+  setThemeColor('#aab0b8');
+  return `<div style="position:fixed;inset:0;background:${SILVER_BG};display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px;gap:26px">
+  <img src="${LOGO_DATA_URI}" style="width:84px;height:84px;object-fit:contain;filter:drop-shadow(0 10px 18px rgba(20,22,26,.3))">
+  <div style="font-size:12px;letter-spacing:.3em;color:#2c2f33;text-transform:uppercase;text-align:center">Social Eyewear · Smart Optic</div>
   <div style="display:flex;gap:18px;flex-wrap:wrap;justify-content:center;max-width:640px;width:100%">
-    <button data-act="gomode" data-id="kiosk" style="flex:1;min-width:240px;padding:30px 22px;border-radius:18px;border:1px solid rgba(233,201,140,.4);background:rgba(255,255,255,.05);color:#fff;cursor:pointer;text-align:left">
+    <button data-act="gomode" data-id="kiosk" style="flex:1;min-width:240px;padding:30px 22px;border-radius:18px;border:1px solid rgba(255,255,255,.7);background:rgba(255,255,255,.55);backdrop-filter:blur(6px);box-shadow:0 14px 34px rgba(20,22,26,.2);color:#23262a;cursor:pointer;text-align:left">
       <div style="font-size:18px;font-weight:700;margin-bottom:6px">บริการลูกค้า</div>
-      <div style="font-size:12.5px;color:#a79a8a;line-height:1.7">ตรวจสายตา · ซื้อเลนส์ · ตัดกรอบและเลนส์ใหม่ · ซ่อมและเคลม</div>
+      <div style="font-size:12.5px;color:#565b61;line-height:1.7">ตรวจสายตา · ซื้อเลนส์ · ตัดกรอบและเลนส์ใหม่ · ซ่อมและเคลม</div>
     </button>
-    <button data-act="gomode" data-id="admin" style="flex:1;min-width:240px;padding:30px 22px;border-radius:18px;border:1px solid rgba(233,201,140,.4);background:rgba(255,255,255,.05);color:#fff;cursor:pointer;text-align:left">
+    <button data-act="gomode" data-id="admin" style="flex:1;min-width:240px;padding:30px 22px;border-radius:18px;border:1px solid rgba(255,255,255,.7);background:rgba(255,255,255,.55);backdrop-filter:blur(6px);box-shadow:0 14px 34px rgba(20,22,26,.2);color:#23262a;cursor:pointer;text-align:left">
       <div style="font-size:18px;font-weight:700;margin-bottom:6px">ข้อมูลลูกค้า</div>
-      <div style="font-size:12.5px;color:#a79a8a;line-height:1.7">ประวัติลูกค้า สินค้า ใบเสนอราคา และภาพรวมร้าน</div>
+      <div style="font-size:12.5px;color:#565b61;line-height:1.7">ประวัติลูกค้า สินค้า ใบเสนอราคา และภาพรวมร้าน</div>
     </button>
   </div>
   </div>`;
@@ -502,13 +512,14 @@ function kioskDone() {
   </div>`;
 }
 function kioskView() {
+  setThemeColor('#aab0b8');
   const steps = { lookup: kioskLookup, newcust: kioskNewCust, menu: kioskMenu, examintake: kioskExamIntake, claimform: kioskClaimForm, done: kioskDone };
   const inner = (steps[K.step] || kioskLookup)();
-  return `<div style="position:fixed;inset:0;background:linear-gradient(160deg,#141009,#07060a 70%);overflow:auto;padding:36px 18px">
+  return `<div style="position:fixed;inset:0;background:${SILVER_BG};overflow:auto;padding:36px 18px">
     <div style="max-width:560px;margin:0 auto 22px;display:flex;align-items:center;gap:10px">
-      <img src="${LOGO_DATA_URI}" style="width:32px;height:32px;object-fit:contain">
-      <span style="font-size:11.5px;letter-spacing:.18em;color:#e9c98c">SOCIAL EYEWEAR · บริการลูกค้า</span>
-      <button data-act="gomode" data-id="hub" class="btn line sm" style="margin-left:auto">ออก</button>
+      <img src="${LOGO_DATA_URI}" style="width:32px;height:32px;object-fit:contain;filter:drop-shadow(0 4px 8px rgba(20,22,26,.3))">
+      <span style="font-size:11.5px;letter-spacing:.18em;color:#23262a;font-weight:600">SOCIAL EYEWEAR · บริการลูกค้า</span>
+      <button data-act="gomode" data-id="hub" style="margin-left:auto;padding:8px 18px;border-radius:999px;border:1px solid rgba(255,255,255,.8);background:rgba(255,255,255,.65);box-shadow:0 6px 16px rgba(20,22,26,.18);color:#23262a;font-size:12.5px;cursor:pointer">ออก</button>
     </div>
     <div style="max-width:560px;margin:0 auto">${inner}</div>
   </div>`;
