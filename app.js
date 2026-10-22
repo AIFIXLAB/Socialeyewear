@@ -129,6 +129,8 @@ const LOOKUPS = {
   contactTypes: ["oneday clear", "oneday color", "oneday toric", "1m clear", "onemonth color", "onemonth toric", "Big Eye กล่องฟ้า", "Big Eye กล่องส้ม", "Big Eye กล่องชมพู", "น้ำยาทำความสะอาดคอนแทคเลนส์", "คอนแทคเลนส์ใส", "น้ำตาเทียม", "multifocal clear", "multifocal color", "toric color"]
 };
 const OTHER_ITEMS = ["ค่าบริการเครื่องรูดบัตร", "ตรวจวัดสายตา", "ซ่อมแว่นตา", "ค่าส่งพัสดุ", "ค่าบริการประกอบ", "อะไหล่แว่นตา", "tint ย้อมสี", "vat7%"];
+const CC_SEED = ["ตาพร่ามัว", "มองไกลไม่ชัด", "มองใกล้ไม่ชัด", "ปวดตา/ปวดกระบอกตา", "ตาแห้ง", "คันตา/ระคายเคือง", "ตาแดง", "น้ำตาไหล", "เห็นภาพซ้อน", "แพ้แสง/สู้แสงไม่ได้", "ปวดศีรษะบ่อย", "สายตาล้า/เพลีย", "แว่นเก่าชำรุด/อยากเปลี่ยนใหม่", "ตรวจสายตาประจำปี"];
+const knownCC = () => [...new Set([...CC_SEED, ...ls.get('ccSeed', [])])];
 
 /* ---------- ตัวช่วยแสดงผล ---------- */
 const NEEDS = { general: 'ใช้งานทั่วไป', screen: 'ทำงานหน้าจอ', drive: 'ขับรถ/กลางคืน', outdoor: 'กลางแจ้ง', progressive: 'สายตายาว/โปรเกรสซีฟ' };
@@ -136,8 +138,8 @@ const TYPES = { lens: 'เลนส์', frame: 'กรอบ', service: 'บร
 const QST = { draft: 'ร่าง', presented: 'เสนอแล้ว', accepted: 'ลูกค้าตกลง', declined: 'ลูกค้าปฏิเสธ', expired: 'หมดอายุ', converted: 'ออกขายแล้ว' };
 const NAV = [['studio', 'Sales Studio'], ['customers', 'ลูกค้า'], ['products', 'สินค้า'], ['quotes', 'ใบเสนอราคา'], ['insights', 'ภาพรวม'], ['settings', 'ตั้งค่า']];
 const S = { v: 'studio', need: 'general', cart: [], cust: '', disc: 0, notes: '', q: '', pq: '', ptype: 'all', staff: null, mode: 'splash' };
-let K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '' };
-const kioskReset = () => { K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '' }; };
+let K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '' };
+const kioskReset = () => { K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '' }; };
 const empty = (m, a = '') => `<div class="empty">${m}${a ? `<br><br>${a}` : ''}</div>`;
 const fmtP = v => v == null || v === '' ? '-' : (+v > 0 ? '+' : '') + (+v).toFixed(2);
 const day = d => d ? new Date(d).toLocaleDateString('th-TH') : '-';
@@ -472,10 +474,23 @@ function kioskMenu() {
   </div>`;
 }
 function kioskExamIntake() {
+  const list = knownCC();
+  const chip = s => {
+    const on = K.cc.includes(s);
+    return `<button type="button" data-act="cctoggle" data-id="${esc(s)}" style="display:inline-flex;align-items:center;gap:7px;padding:9px 15px;border-radius:999px;border:1px solid ${on ? '#1f6f43' : 'rgba(0,0,0,.18)'};background:${on ? '#1f6f43' : '#fff'};color:${on ? '#fff' : '#23262a'};font-size:13.5px;cursor:pointer;transition:.12s">
+      <span style="display:inline-block;width:16px;height:16px;border-radius:4px;border:1.5px solid ${on ? '#fff' : 'rgba(0,0,0,.35)'};line-height:13px;font-size:11px;text-align:center">${on ? '✓' : ''}</span>${esc(s)}
+    </button>`;
+  };
   return `<div class="panel" style="padding:26px">
     <h2 style="margin-top:0">ซักประวัติก่อนตรวจสายตา</h2>
+    <p class="tag" style="margin-top:-6px">แตะติ๊กอาการที่ลูกค้าแจ้งได้เลย ถ้ายังไม่มีในรายการให้พิมพ์เพิ่มด้านล่าง — จะถูกบันทึกไว้ให้เลือกในครั้งถัดไปด้วย</p>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 12px">${list.map(chip).join('')}</div>
+    <div style="display:flex;gap:10px;margin-bottom:18px">
+      <input placeholder="พิมพ์อาการใหม่ที่ไม่มีในรายการ แล้วกด +" data-bind="ccnew" value="${esc(K.ccNew || '')}" style="flex:1">
+      <button type="button" class="btn line sm" data-act="ccaddnew" style="white-space:nowrap">+ เพิ่มอาการ</button>
+    </div>
     <form data-form="examintake">
-      <label>อาการ/เหตุผลที่มาวันนี้ (CC)<textarea name="cc" rows="2"></textarea></label>
+      <label>อาการอื่นๆ นอกเหนือรายการ (รายละเอียดเพิ่มเติม)<textarea data-bind="ccother" rows="2" placeholder="ระบุรายละเอียดอาการอื่นๆ ที่ไม่อยู่ในรายการด้านบน">${esc(K.ccOther || '')}</textarea></label>
       <div class="two"><label>โรคประจำตัว<input name="disease"></label><label>โรคตา / ประวัติรักษาตา<input name="eye_history"></label></div>
       <label>ประวัติการใช้ยา<input name="meds"></label>
       <div class="foot"><button type="button" class="btn line" data-act="kioskstep" data-id="menu">ย้อนกลับ</button><button class="btn" type="submit">ถัดไป: ตรวจสายตา</button></div>
@@ -643,7 +658,15 @@ document.addEventListener('click', e => {
   else if (a === 'kioskcat') { K.pcat = id; K.pq = ''; render(); }
   else if (a === 'svc') {
     if (id === 'lens' || id === 'frame') { S.cust = K.custId; K.pq = ''; K.pcat = id; K.step = 'pick'; render(); }
-    else { K.step = id === 'exam' ? 'examintake' : 'claimform'; render(); }
+    else { if (id === 'exam') { K.cc = []; K.ccOther = ''; K.ccNew = ''; } K.step = id === 'exam' ? 'examintake' : 'claimform'; render(); }
+  }
+  else if (a === 'cctoggle') { K.cc = K.cc.includes(id) ? K.cc.filter(x => x !== id) : [...K.cc, id]; render(); }
+  else if (a === 'ccaddnew') {
+    const v = (K.ccNew || '').trim();
+    if (!v) return;
+    if (!knownCC().includes(v)) ls.set('ccSeed', [...ls.get('ccSeed', []), v]);
+    if (!K.cc.includes(v)) K.cc = [...K.cc, v];
+    K.ccNew = ''; render();
   }
   else if (a === 'kioskaddprod') kioskQuickAddProd(id);
   else if (a === 'kioskdelprod') { if (confirm('ลบสินค้านี้?')) { S.cart = S.cart.filter(i => i.id !== id); softDelete('products', id); render(); } }
@@ -665,12 +688,14 @@ document.addEventListener('change', e => {
   else if (k === 'qstatus') { save('quotes', { ...find('quotes', e.target.dataset.id), status: e.target.value }); commit(); }
   else if (k === 'url' || k === 'key') { ls.set(k, e.target.value.trim()); toast('บันทึกการตั้งค่าแล้ว'); setStatus(); }
   else if (k === 'claimphoto') { const f = e.target.files[0]; if (f) fileToThumb(f).then(du => { K.photo = du; render(); }); }
+  else if (k === 'ccother') K.ccOther = e.target.value;
 });
 document.addEventListener('input', e => {
   const k = e.target.dataset.bind; if (!k) return;
   const refocus = () => { const p = e.target.selectionStart; render(); const i = $(`[data-bind=${k}]`); if (i) { i.focus(); i.setSelectionRange(p, p); } };
   if (k === 'q' || k === 'pq') { S[k] = e.target.value; refocus(); }
   else if (k === 'kpq') { K.pq = e.target.value; refocus(); }
+  else if (k === 'ccnew') K.ccNew = e.target.value;
 });
 document.addEventListener('submit', async e => {
   const f = e.target.closest('[data-form]'); if (!f) return; e.preventDefault();
@@ -704,7 +729,8 @@ document.addEventListener('submit', async e => {
       save('customer_profiles', { id: nid, customer_code: nextCode(), full_name: d.full_name.trim(), phone: d.phone.trim() || null, budget_thb: null, lifestyle: null, notes: d.age ? `อายุ ${d.age} ปี` : null, consent_recorded_at: null, deleted_at: null });
       commit(); K.custId = nid; K.step = 'menu'; render(); toast('เพิ่มลูกค้าใหม่แล้ว');
     } else if (k === 'examintake') {
-      const pre = [d.cc && `CC: ${d.cc}`, d.disease && `โรคประจำตัว: ${d.disease}`, d.eye_history && `โรคตา/ประวัติ: ${d.eye_history}`, d.meds && `ประวัติการใช้ยา: ${d.meds}`].filter(Boolean).join(' · ');
+      const ccText = [K.cc.join(', '), (K.ccOther || '').trim()].filter(Boolean).join(' / ');
+      const pre = [ccText && `CC: ${ccText}`, d.disease && `โรคประจำตัว: ${d.disease}`, d.eye_history && `โรคตา/ประวัติ: ${d.eye_history}`, d.meds && `ประวัติการใช้ยา: ${d.meds}`].filter(Boolean).join(' · ');
       rxForm(K.custId, pre);
     } else if (k === 'claimform') {
       save('claims', { id: uid(), customer_id: K.custId, kind: d.kind, frame_model: d.frame_model.trim() || null, frame_code: d.frame_code.trim() || null, issue: d.issue.trim() || null, repair_items: d.repair_items.trim() || null, cost_thb: num(d.cost_thb), pickup_date: d.pickup_date || null, photo: K.photo || null, status: 'pending', signed_at: d.signed ? now() : null, notes: null, deleted_at: null });
