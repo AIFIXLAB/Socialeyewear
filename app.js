@@ -505,6 +505,44 @@ function kioskClaimForm() {
     </form>
   </div>`;
 }
+function kioskProductBrowse(type) {
+  const q = (K.pq || '').toLowerCase();
+  const rows = live('products').filter(p => p.product_type === type && p.active !== false && [p.product_name, p.brand, p.description].join(' ').toLowerCase().includes(q));
+  const inCart = pid => S.cart.find(i => i.id === pid);
+  const card = p => { const x = inCart(p.id); return `<div class="panel" style="padding:14px;display:flex;justify-content:space-between;align-items:center;gap:12px">
+    <div><div style="font-weight:600">${esc(p.product_name)}</div><div class="tag">${esc([p.brand, p.description].filter(Boolean).join(' · '))}</div></div>
+    <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
+      <b>${baht(p.retail_price_thb)}</b>
+      ${x ? `<span class="qty"><button class="btn line sm" data-act="qty" data-id="${p.id}" data-d="-1">−</button><b>${x.qty}</b><button class="btn line sm" data-act="qty" data-id="${p.id}" data-d="1">+</button></span>` : `<button data-act="add" data-id="${p.id}" class="btn sm">เลือก</button>`}
+    </div>
+  </div>`; };
+  const label = type === 'frame' ? 'กรอบแว่น' : 'เลนส์';
+  const nextId = type === 'frame' ? 'lens' : 'cart';
+  return `<div>
+    <div class="tag" style="margin-bottom:4px">เลือก${label} · ตะกร้า ${S.cart.length} รายการ</div>
+    <div style="display:flex;gap:10px;margin-bottom:14px">
+      <input placeholder="ค้นหา${label} ชื่อ/ยี่ห้อ" value="${esc(K.pq || '')}" data-bind="kpq" style="flex:1">
+      <button data-act="kioskaddprod" data-id="${type}" class="btn line sm" style="white-space:nowrap">+ เพิ่มสินค้าใหม่</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px;max-height:48vh;overflow:auto;padding-right:2px">${rows.length ? rows.map(card).join('') : '<p class="tag">ยังไม่มีสินค้าในหมวดนี้ — กด "เพิ่มสินค้าใหม่" เพื่อเพิ่มเลย</p>'}</div>
+    <div class="foot" style="margin-top:18px">
+      <button class="btn line" data-act="kioskstep" data-id="menu">ย้อนกลับ</button>
+      <button class="btn" data-act="kioskstep" data-id="${nextId}">ถัดไป (${S.cart.length} รายการ)</button>
+    </div>
+  </div>`;
+}
+function kioskCart() {
+  const sub = cartSub();
+  return `<div class="panel" style="padding:24px">
+    <h2 style="margin-top:0">สรุปรายการ</h2>
+    ${S.cart.length ? S.cart.map(i => `<div class="row"><span>${esc(i.name)}<br><span class="tag">${baht(i.price)} × ${i.qty}</span></span><span class="qty"><button class="btn line sm" data-act="qty" data-id="${i.id}" data-d="-1">−</button><b>${i.qty}</b><button class="btn line sm" data-act="qty" data-id="${i.id}" data-d="1">+</button></span></div>`).join('') : '<p class="tag">ยังไม่ได้เลือกสินค้า</p>'}
+    <div class="row" style="border:0;margin-top:6px"><b>รวมทั้งสิ้น</b><b>${baht(sub)}</b></div>
+    <div class="foot" style="margin-top:18px">
+      <button class="btn line" data-act="kioskstep" data-id="lens">ย้อนกลับ</button>
+      <button class="btn" data-act="kioskcheckout">ยืนยันสั่งซื้อ</button>
+    </div>
+  </div>`;
+}
 function kioskDone() {
   return `<div class="panel" style="padding:40px 26px;text-align:center">
     <div style="font-size:18px;margin-bottom:16px">บันทึกข้อมูลเรียบร้อยแล้ว ขอบคุณค่ะ/ครับ</div>
@@ -513,15 +551,16 @@ function kioskDone() {
 }
 function kioskView() {
   setThemeColor('#aab0b8');
-  const steps = { lookup: kioskLookup, newcust: kioskNewCust, menu: kioskMenu, examintake: kioskExamIntake, claimform: kioskClaimForm, done: kioskDone };
+  const steps = { lookup: kioskLookup, newcust: kioskNewCust, menu: kioskMenu, examintake: kioskExamIntake, claimform: kioskClaimForm, frame: () => kioskProductBrowse('frame'), lens: () => kioskProductBrowse('lens'), cart: kioskCart, done: kioskDone };
   const inner = (steps[K.step] || kioskLookup)();
+  const wide = ['frame', 'lens', 'cart'].includes(K.step) ? '680px' : '560px';
   return `<div style="position:fixed;inset:0;background:${SILVER_BG};overflow:auto;padding:36px 18px">
-    <div style="max-width:560px;margin:0 auto 22px;display:flex;align-items:center;gap:10px">
+    <div style="max-width:${wide};margin:0 auto 22px;display:flex;align-items:center;gap:10px">
       <img src="${LOGO_DATA_URI}" style="width:32px;height:32px;object-fit:contain;filter:drop-shadow(0 4px 8px rgba(20,22,26,.3))">
       <span style="font-size:11.5px;letter-spacing:.18em;color:#23262a;font-weight:600">SOCIAL EYEWEAR · บริการลูกค้า</span>
       <button data-act="gomode" data-id="hub" style="margin-left:auto;padding:8px 18px;border-radius:999px;border:1px solid rgba(255,255,255,.8);background:rgba(255,255,255,.65);box-shadow:0 6px 16px rgba(20,22,26,.18);color:#23262a;font-size:12.5px;cursor:pointer">ออก</button>
     </div>
-    <div style="max-width:560px;margin:0 auto">${inner}</div>
+    <div style="max-width:${wide};margin:0 auto">${inner}</div>
   </div>`;
 }
 function quoteSheet(id) {
@@ -584,10 +623,19 @@ document.addEventListener('click', e => {
   else if (a === 'rmstaff') { if (confirm('ถอดพนักงานคนนี้ออกจากร้าน?')) api(`/rest/v1/shop_members?shop_id=eq.${shop.id}&user_id=eq.${id}`, { method: 'DELETE' }).then(loadStaff).catch(err => toast(errText(err))); }
   else if (a === 'splashgo') { S.mode = 'hub'; render(); }
   else if (a === 'gomode') { if (id === 'kiosk') kioskReset(); S.mode = id; render(); }
-  else if (a === 'kioskstep') { K.step = id; if (id === 'lookup') { K.custId = null; K.photo = null; } render(); }
+  else if (a === 'kioskstep') { K.step = id; if (id === 'lookup') { K.custId = null; K.photo = null; } if (id === 'frame' || id === 'lens') K.pq = ''; render(); }
   else if (a === 'svc') {
-    if (id === 'lens' || id === 'frame') { S.cust = K.custId; S.v = 'studio'; S.mode = 'admin'; render(); }
+    if (id === 'lens' || id === 'frame') { S.cust = K.custId; K.pq = ''; K.step = id; render(); }
     else { K.step = id === 'exam' ? 'examintake' : 'claimform'; render(); }
+  }
+  else if (a === 'kioskaddprod') prodForm({ product_type: id });
+  else if (a === 'kioskcheckout') {
+    if (!S.cart.length) return toast('เลือกสินค้าอย่างน้อย 1 รายการก่อน');
+    S.cust = K.custId;
+    const sub = cartSub(), qid = uid();
+    save('quotes', { id: qid, customer_id: S.cust || null, quote_number: null, status: 'converted', subtotal_thb: sub, discount_thb: 0, total_thb: sub, notes: null, valid_until: null, deleted_at: null });
+    S.cart.forEach(i => save('quote_items', { id: uid(), quote_id: qid, product_id: i.id, item_name_snapshot: i.name, product_type: i.type, quantity: i.qty, unit_price_thb: i.price, line_total_thb: i.price * i.qty, deleted_at: null }));
+    S.cart = []; K.step = 'done'; commit(); render(); toast('บันทึกการสั่งซื้อแล้ว');
   }
 });
 document.addEventListener('change', e => {
@@ -600,7 +648,12 @@ document.addEventListener('change', e => {
   else if (k === 'url' || k === 'key') { ls.set(k, e.target.value.trim()); toast('บันทึกการตั้งค่าแล้ว'); setStatus(); }
   else if (k === 'claimphoto') { const f = e.target.files[0]; if (f) fileToThumb(f).then(du => { K.photo = du; render(); }); }
 });
-document.addEventListener('input', e => { const k = e.target.dataset.bind; if (k === 'q' || k === 'pq') { S[k] = e.target.value; const p = e.target.selectionStart; render(); const i = $(`[data-bind=${k}]`); i.focus(); i.setSelectionRange(p, p); } });
+document.addEventListener('input', e => {
+  const k = e.target.dataset.bind; if (!k) return;
+  const refocus = () => { const p = e.target.selectionStart; render(); const i = $(`[data-bind=${k}]`); if (i) { i.focus(); i.setSelectionRange(p, p); } };
+  if (k === 'q' || k === 'pq') { S[k] = e.target.value; refocus(); }
+  else if (k === 'kpq') { K.pq = e.target.value; refocus(); }
+});
 document.addEventListener('submit', async e => {
   const f = e.target.closest('[data-form]'); if (!f) return; e.preventDefault();
   const d = Object.fromEntries(new FormData(f)), k = f.dataset.form, id = f.dataset.id;
