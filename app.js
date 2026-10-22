@@ -391,8 +391,9 @@ function custView(id) {
     </div>`).join('')}</div>` : ''}
   <div class="foot"><button class="btn line" data-act="close">ปิด</button><button class="btn line" data-act="editcust" data-id="${id}">แก้ไขข้อมูล</button><button class="btn" data-act="newrx" data-id="${id}">เพิ่มค่าสายตา</button></div>`);
 }
+const knownBrands = type => { const used = live('products').filter(p => !type || p.product_type === type).map(p => p.brand).filter(Boolean); const base = type === 'frame' ? LOOKUPS.frameBrands : type === 'lens' ? [...LOOKUPS.lensBrands, ...LOOKUPS.contactBrands] : [...LOOKUPS.frameBrands, ...LOOKUPS.lensBrands, ...LOOKUPS.contactBrands]; return [...new Set([...base, ...used])]; };
 function prodForm(p = {}) {
-  const brandList = [...LOOKUPS.frameBrands, ...LOOKUPS.lensBrands, ...LOOKUPS.contactBrands];
+  const brandList = knownBrands(p.product_type);
   const specList = [...LOOKUPS.lensTypes, ...LOOKUPS.lensIndex, ...LOOKUPS.contactTypes];
   const opts = l => l.map(v => `<option value="${esc(v)}">`).join('');
   dialog(`<form data-form="prod" data-id="${p.id || ''}"><h2>${p.id ? 'แก้ไขสินค้า' : 'เพิ่มสินค้า'}</h2>${fld('product_name', 'ชื่อสินค้า', p.product_name, 'text', 'required')}<div class="two"><label>ประเภท<select name="product_type">${Object.entries(TYPES).map(([k, l]) => `<option value="${k}" ${p.product_type === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>${fld('retail_price_thb', 'ราคาขาย (บาท)', p.retail_price_thb ?? 0, 'number', 'min="0" required')}${fld('sku', 'SKU', p.sku)}<label>แบรนด์<input name="brand" value="${esc(p.brand)}" list="brandlist" placeholder="พิมพ์หรือเลือกจากรายการเดิม"></label>${mgr() ? fld('cost_thb', 'ต้นทุน (บาท)', p.cost_thb, 'number', 'min="0"') : ''}${fld('stock_qty', 'จำนวนคงเหลือ (เว้นว่าง = ไม่ติดตาม)', p.stock_qty, 'number', 'step="1"')}</div><label>รายละเอียดสั้น ๆ<input name="description" value="${esc(p.description)}" list="speclist" placeholder="เช่น ชนิดเลนส์, Index, ประเภทคอนแทคเลนส์"></label>${fld('features', 'แท็กการใช้งาน: general, screen, drive, outdoor, progressive (คั่นด้วยคอมมา)', (p.features || []).join(', '))}<label class="chk"><input type="checkbox" name="active" ${p.active === false ? '' : 'checked'}> เปิดขาย (แสดงใน Sales Studio)</label>${foot('บันทึกสินค้า')}</form><datalist id="brandlist">${opts(brandList)}</datalist><datalist id="speclist">${opts(specList)}</datalist>`);
@@ -507,7 +508,7 @@ function kioskClaimForm() {
 }
 function kioskQuickAddProd(type) {
   const label = type === 'frame' ? 'กรอบแว่น' : 'เลนส์';
-  const brandList = type === 'frame' ? LOOKUPS.frameBrands : [...LOOKUPS.lensBrands, ...LOOKUPS.contactBrands];
+  const brandList = knownBrands(type);
   const opts = brandList.map(v => `<option value="${esc(v)}">`).join('');
   dialog(`<form data-form="kioskprod" data-type="${type}"><h2>เพิ่ม${label}ใหม่</h2>
     <p class="tag">หมวดหมู่: ${label} · ใส่ต้นทุนและสต็อกเพิ่มเติมได้ที่หลังบ้าน หน้า "สินค้า" (ข้อมูลเชื่อมกันอัตโนมัติ)</p>
