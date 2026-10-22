@@ -81,16 +81,22 @@ async function sync() {
     if (!(await loadShop())) { status = ''; syncing = false; setStatus(); if (!$('#dlg').open) render(); return; }
     const pull = ls.get('pull', {});
     for (const t of T) {
-      let since = pull[t] ? new Date(Date.parse(pull[t]) - 10000).toISOString() : '1970-01-01T00:00:00Z';
+      // cursor = {ts, id}: many bulk-imported rows share the exact same updated_at,
+      // so paging by timestamp alone (updated_at > since) can skip rows beyond page 1.
+      // Tie-break with id so every row with an equal timestamp still gets fetched.
+      let raw = pull[t], cur = (raw && typeof raw === 'object') ? raw
+        : { ts: raw ? new Date(Date.parse(raw) - 10000).toISOString() : '1970-01-01T00:00:00Z', id: '00000000-0000-0000-0000-000000000000' };
       for (;;) {
-        const rows = await api(`/rest/v1/${t}?updated_at=gt.${encodeURIComponent(since)}&order=updated_at.asc&limit=1000`) || [];
+        const filter = `or=(updated_at.gt.${encodeURIComponent(cur.ts)},and(updated_at.eq.${encodeURIComponent(cur.ts)},id.gt.${cur.id}))`;
+        const rows = await api(`/rest/v1/${t}?${filter}&order=updated_at.asc,id.asc&limit=1000`) || [];
         for (const row of rows) {
           const i = db[t].findIndex(r => r.id === row.id), l = db[t][i];
           if (!(l && l._dirty && !l._err && l.updated_at > row.updated_at)) i < 0 ? db[t].push(row) : db[t][i] = row;
-          if (row.updated_at > (pull[t] || '')) pull[t] = row.updated_at;
         }
-        if (rows.length < 1000) break; since = rows[rows.length - 1].updated_at;
+        if (rows.length) { const last = rows[rows.length - 1]; cur = { ts: last.updated_at, id: last.id }; }
+        if (rows.length < 1000) break;
       }
+      pull[t] = cur;
       const dirty = db[t].filter(r => r._dirty && !r._err);
       const body = r => { const o = {}; COLS[t].forEach(k => o[k] = r[k] === undefined ? null : r[k]); o.shop_id = o.shop_id || shop.id; return o; };
       const post = rows => api(`/rest/v1/${t}?on_conflict=id`, { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(rows.map(body)) });
@@ -249,7 +255,8 @@ const views = {
       <button class="btn gold" style="display:block" data-act="mkquote">สร้างใบเสนอราคา</button></aside></div>`;
   },
   customers() {
-    const q = S.q.toLowerCase(), rows = live('customer_profiles').filter(c => [c.full_name, c.phone, c.customer_code].join(' ').toLowerCase().includes(q));
+    const q = S.q.toLowerCase(), rows = live('customer_profiles').filter(c => [c.full_name, c.phone, c.customer_code].join(' ').toLowerCase().includes(q))
+      .sort((a, b) => (a.customer_code || '').localeCompare(b.customer_code || '', undefined, { numeric: true, sensitivity: 'base' }));
     const shown = rows.slice(0, 200);
     return `<div class="bar"><div><h1>ลูกค้า</h1><p class="sub" style="margin:0">โปรไฟล์ ความยินยอม และประวัติค่าสายตา · ทั้งหมด ${live('customer_profiles').length} ราย</p></div><div class="tools"><input placeholder="ค้นหาชื่อ เบอร์ หรือรหัส" value="${esc(S.q)}" data-bind="q" style="width:220px"><button class="btn line" data-act="impcust">นำเข้า CSV</button><button class="btn line" data-act="csvcust">ส่งออก CSV</button><button class="btn" data-act="newcust">เพิ่มลูกค้า</button></div></div>
     ${rows.length ? `<div class="panel wrap"><table><tr><th>รหัส</th><th>ชื่อ</th><th>โทรศัพท์</th><th>ค่าสายตาล่าสุด</th><th>ยินยอม</th><th></th></tr>${shown.map(c => `<tr><td>${esc(c.customer_code || '-')}</td><td>${esc(c.full_name)}</td><td>${esc(c.phone || '')}</td><td class="tag">${esc(rxText(latestRx(c.id)))}</td><td>${c.consent_recorded_at ? '<span class="st accepted">บันทึกแล้ว</span>' : '<span class="st">ยังไม่มี</span>'}</td><td class="act"><button class="btn line sm" data-act="viewcust" data-id="${c.id}">เปิด</button>${mgr() ? ` <button class="btn line sm bad" data-act="delcust" data-id="${c.id}">ลบ</button>` : ''}</td></tr>`).join('')}</table></div>${rows.length > shown.length ? `<p class="tag">แสดง ${shown.length} จาก ${rows.length} ราย พิมพ์ค้นหาเพื่อกรอง</p>` : ''}` : empty('ยังไม่มีลูกค้าที่ตรงกับการค้นหา', '<button class="btn" data-act="newcust">เพิ่มลูกค้าคนแรก</button> <button class="btn line" data-act="impcust">นำเข้าจาก CSV</button>')}`;
