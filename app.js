@@ -136,8 +136,8 @@ const TYPES = { lens: 'เลนส์', frame: 'กรอบ', service: 'บร
 const QST = { draft: 'ร่าง', presented: 'เสนอแล้ว', accepted: 'ลูกค้าตกลง', declined: 'ลูกค้าปฏิเสธ', expired: 'หมดอายุ', converted: 'ออกขายแล้ว' };
 const NAV = [['studio', 'Sales Studio'], ['customers', 'ลูกค้า'], ['products', 'สินค้า'], ['quotes', 'ใบเสนอราคา'], ['insights', 'ภาพรวม'], ['settings', 'ตั้งค่า']];
 const S = { v: 'studio', need: 'general', cart: [], cust: '', disc: 0, notes: '', q: '', pq: '', ptype: 'all', staff: null, mode: 'splash' };
-let K = { step: 'lookup', custId: null, phone: '', photo: null };
-const kioskReset = () => { K = { step: 'lookup', custId: null, phone: '', photo: null }; };
+let K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '' };
+const kioskReset = () => { K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '' }; };
 const empty = (m, a = '') => `<div class="empty">${m}${a ? `<br><br>${a}` : ''}</div>`;
 const fmtP = v => v == null || v === '' ? '-' : (+v > 0 ? '+' : '') + (+v).toFixed(2);
 const day = d => d ? new Date(d).toLocaleDateString('th-TH') : '-';
@@ -505,7 +505,21 @@ function kioskClaimForm() {
     </form>
   </div>`;
 }
-function kioskProductBrowse(type) {
+function kioskQuickAddProd(type) {
+  const label = type === 'frame' ? 'กรอบแว่น' : 'เลนส์';
+  const brandList = type === 'frame' ? LOOKUPS.frameBrands : [...LOOKUPS.lensBrands, ...LOOKUPS.contactBrands];
+  const opts = brandList.map(v => `<option value="${esc(v)}">`).join('');
+  dialog(`<form data-form="kioskprod" data-type="${type}"><h2>เพิ่ม${label}ใหม่</h2>
+    <p class="tag">หมวดหมู่: ${label} · ใส่ต้นทุนและสต็อกเพิ่มเติมได้ที่หลังบ้าน หน้า "สินค้า" (ข้อมูลเชื่อมกันอัตโนมัติ)</p>
+    ${fld('product_name', 'ชื่อสินค้า', '', 'text', 'required')}
+    ${fld('retail_price_thb', 'ราคาขาย (บาท)', 0, 'number', 'min="0" required')}
+    <label>แบรนด์<input name="brand" list="kioskbrandlist" placeholder="พิมพ์หรือเลือกจากรายการเดิม"></label>
+    <datalist id="kioskbrandlist">${opts}</datalist>
+    ${foot('เพิ่มสินค้า')}
+  </form>`);
+}
+function kioskProductBrowse() {
+  const type = K.pcat || 'frame';
   const q = (K.pq || '').toLowerCase();
   const rows = live('products').filter(p => p.product_type === type && p.active !== false && [p.product_name, p.brand, p.description].join(' ').toLowerCase().includes(q));
   const inCart = pid => S.cart.find(i => i.id === pid);
@@ -516,10 +530,10 @@ function kioskProductBrowse(type) {
       ${x ? `<span class="qty"><button class="btn line sm" data-act="qty" data-id="${p.id}" data-d="-1">−</button><b>${x.qty}</b><button class="btn line sm" data-act="qty" data-id="${p.id}" data-d="1">+</button></span>` : `<button data-act="add" data-id="${p.id}" class="btn sm">เลือก</button>`}
     </div>
   </div>`; };
+  const tab = (id, l) => `<button data-act="kioskcat" data-id="${id}" style="padding:9px 18px;border-radius:999px;border:1px solid ${K.pcat === id ? 'transparent' : 'rgba(0,0,0,.15)'};background:${K.pcat === id ? '#23262a' : 'rgba(255,255,255,.55)'};color:${K.pcat === id ? '#fff' : '#23262a'};font-size:13px;cursor:pointer">${l}</button>`;
   const label = type === 'frame' ? 'กรอบแว่น' : 'เลนส์';
-  const nextId = type === 'frame' ? 'lens' : 'cart';
   return `<div>
-    <div class="tag" style="margin-bottom:4px">เลือก${label} · ตะกร้า ${S.cart.length} รายการ</div>
+    <div style="display:flex;gap:10px;margin-bottom:14px">${tab('frame', 'กรอบแว่น')}${tab('lens', 'เลนส์')}<span class="tag" style="margin-left:auto;align-self:center">ตะกร้า ${S.cart.length} รายการ</span></div>
     <div style="display:flex;gap:10px;margin-bottom:14px">
       <input placeholder="ค้นหา${label} ชื่อ/ยี่ห้อ" value="${esc(K.pq || '')}" data-bind="kpq" style="flex:1">
       <button data-act="kioskaddprod" data-id="${type}" class="btn line sm" style="white-space:nowrap">+ เพิ่มสินค้าใหม่</button>
@@ -527,7 +541,7 @@ function kioskProductBrowse(type) {
     <div style="display:flex;flex-direction:column;gap:10px;max-height:48vh;overflow:auto;padding-right:2px">${rows.length ? rows.map(card).join('') : '<p class="tag">ยังไม่มีสินค้าในหมวดนี้ — กด "เพิ่มสินค้าใหม่" เพื่อเพิ่มเลย</p>'}</div>
     <div class="foot" style="margin-top:18px">
       <button class="btn line" data-act="kioskstep" data-id="menu">ย้อนกลับ</button>
-      <button class="btn" data-act="kioskstep" data-id="${nextId}">ถัดไป (${S.cart.length} รายการ)</button>
+      <button class="btn" data-act="kioskstep" data-id="cart">ถัดไป (${S.cart.length} รายการ)</button>
     </div>
   </div>`;
 }
@@ -538,7 +552,7 @@ function kioskCart() {
     ${S.cart.length ? S.cart.map(i => `<div class="row"><span>${esc(i.name)}<br><span class="tag">${baht(i.price)} × ${i.qty}</span></span><span class="qty"><button class="btn line sm" data-act="qty" data-id="${i.id}" data-d="-1">−</button><b>${i.qty}</b><button class="btn line sm" data-act="qty" data-id="${i.id}" data-d="1">+</button></span></div>`).join('') : '<p class="tag">ยังไม่ได้เลือกสินค้า</p>'}
     <div class="row" style="border:0;margin-top:6px"><b>รวมทั้งสิ้น</b><b>${baht(sub)}</b></div>
     <div class="foot" style="margin-top:18px">
-      <button class="btn line" data-act="kioskstep" data-id="lens">ย้อนกลับ</button>
+      <button class="btn line" data-act="kioskstep" data-id="pick">ย้อนกลับ</button>
       <button class="btn" data-act="kioskcheckout">ยืนยันสั่งซื้อ</button>
     </div>
   </div>`;
@@ -551,9 +565,9 @@ function kioskDone() {
 }
 function kioskView() {
   setThemeColor('#aab0b8');
-  const steps = { lookup: kioskLookup, newcust: kioskNewCust, menu: kioskMenu, examintake: kioskExamIntake, claimform: kioskClaimForm, frame: () => kioskProductBrowse('frame'), lens: () => kioskProductBrowse('lens'), cart: kioskCart, done: kioskDone };
+  const steps = { lookup: kioskLookup, newcust: kioskNewCust, menu: kioskMenu, examintake: kioskExamIntake, claimform: kioskClaimForm, pick: kioskProductBrowse, cart: kioskCart, done: kioskDone };
   const inner = (steps[K.step] || kioskLookup)();
-  const wide = ['frame', 'lens', 'cart'].includes(K.step) ? '680px' : '560px';
+  const wide = ['pick', 'cart'].includes(K.step) ? '680px' : '560px';
   return `<div style="position:fixed;inset:0;background:${SILVER_BG};overflow:auto;padding:36px 18px">
     <div style="max-width:${wide};margin:0 auto 22px;display:flex;align-items:center;gap:10px">
       <img src="${LOGO_DATA_URI}" style="width:32px;height:32px;object-fit:contain;filter:drop-shadow(0 4px 8px rgba(20,22,26,.3))">
@@ -623,12 +637,13 @@ document.addEventListener('click', e => {
   else if (a === 'rmstaff') { if (confirm('ถอดพนักงานคนนี้ออกจากร้าน?')) api(`/rest/v1/shop_members?shop_id=eq.${shop.id}&user_id=eq.${id}`, { method: 'DELETE' }).then(loadStaff).catch(err => toast(errText(err))); }
   else if (a === 'splashgo') { S.mode = 'hub'; render(); }
   else if (a === 'gomode') { if (id === 'kiosk') kioskReset(); S.mode = id; render(); }
-  else if (a === 'kioskstep') { K.step = id; if (id === 'lookup') { K.custId = null; K.photo = null; } if (id === 'frame' || id === 'lens') K.pq = ''; render(); }
+  else if (a === 'kioskstep') { K.step = id; if (id === 'lookup') { K.custId = null; K.photo = null; } render(); }
+  else if (a === 'kioskcat') { K.pcat = id; K.pq = ''; render(); }
   else if (a === 'svc') {
-    if (id === 'lens' || id === 'frame') { S.cust = K.custId; K.pq = ''; K.step = id; render(); }
+    if (id === 'lens' || id === 'frame') { S.cust = K.custId; K.pq = ''; K.pcat = id; K.step = 'pick'; render(); }
     else { K.step = id === 'exam' ? 'examintake' : 'claimform'; render(); }
   }
-  else if (a === 'kioskaddprod') prodForm({ product_type: id });
+  else if (a === 'kioskaddprod') kioskQuickAddProd(id);
   else if (a === 'kioskcheckout') {
     if (!S.cart.length) return toast('เลือกสินค้าอย่างน้อย 1 รายการก่อน');
     S.cust = K.custId;
@@ -691,6 +706,9 @@ document.addEventListener('submit', async e => {
     } else if (k === 'claimform') {
       save('claims', { id: uid(), customer_id: K.custId, kind: d.kind, frame_model: d.frame_model.trim() || null, frame_code: d.frame_code.trim() || null, issue: d.issue.trim() || null, repair_items: d.repair_items.trim() || null, cost_thb: num(d.cost_thb), pickup_date: d.pickup_date || null, photo: K.photo || null, status: 'pending', signed_at: d.signed ? now() : null, notes: null, deleted_at: null });
       commit(); K.photo = null; K.step = 'done'; render(); toast('บันทึกรายการซ่อม/เคลมแล้ว');
+    } else if (k === 'kioskprod') {
+      save('products', { id: uid(), product_type: f.dataset.type, product_name: d.product_name.trim(), retail_price_thb: Math.round(+d.retail_price_thb) || 0, brand: d.brand.trim() || null, sku: null, cost_thb: null, stock_qty: null, description: null, features: [], active: true, deleted_at: null });
+      closeDlg(); commit(); toast('เพิ่มสินค้าแล้ว ไปใส่ต้นทุน/สต็อกเพิ่มได้ที่หลังบ้าน');
     }
   } catch (err) { toast(errText(err)); }
 });
