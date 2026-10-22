@@ -154,6 +154,17 @@ function lastVisitMap() {
   live('claims').forEach(c => upd(c.customer_id, c.created_at));
   return map;
 }
+// ดึงวันที่จากข้อความหมายเหตุเดิมที่นำเข้ามา เช่น "วันที่ (เกิด/ซื้อล่าสุด) 10/01/2564" (พ.ศ.) ไว้ใช้สำรองตอนไม่มีประวัติการซื้อ/ตรวจ/ซ่อมในระบบ
+function notesLastDate(notes) {
+  if (!notes) return null;
+  const m = notes.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (!m) return null;
+  let [, d, mo, y] = m.map(Number);
+  if (y > 2400) y -= 543;
+  if (y < 1900 || y > 2100 || mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  return isNaN(dt) ? null : dt.toISOString().slice(0, 10);
+}
 const csv = rows => '﻿' + rows.map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
 const download = (name, text, type = 'text/csv') => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: type + ';charset=utf-8' })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); };
 
@@ -297,7 +308,7 @@ const views = {
   customers() {
     const q = S.q.toLowerCase(), mode = S.custView || 'all';
     const vmap = lastVisitMap();
-    const visit = c => vmap[c.id] || c.created_at || '';
+    const visit = c => vmap[c.id] || notesLastDate(c.notes) || '';
     let rows = live('customer_profiles').filter(c => [c.full_name, c.phone, c.customer_code].join(' ').toLowerCase().includes(q));
     if (mode === 'range' && (S.custFrom || S.custTo)) {
       rows = rows.filter(c => (!S.custFrom || visit(c) >= S.custFrom) && (!S.custTo || visit(c) <= S.custTo + 'T23:59:59'));
