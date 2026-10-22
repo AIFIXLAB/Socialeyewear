@@ -529,6 +529,7 @@ function kioskProductBrowse() {
     <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
       <b>${baht(p.retail_price_thb)}</b>
       ${x ? `<span class="qty"><button class="btn line sm" data-act="qty" data-id="${p.id}" data-d="-1">−</button><b>${x.qty}</b><button class="btn line sm" data-act="qty" data-id="${p.id}" data-d="1">+</button></span>` : `<button data-act="add" data-id="${p.id}" class="btn sm">เลือก</button>`}
+      <button data-act="kioskdelprod" data-id="${p.id}" class="btn line sm bad" title="ลบสินค้านี้">ลบ</button>
     </div>
   </div>`; };
   const tab = (id, l) => `<button data-act="kioskcat" data-id="${id}" style="padding:9px 18px;border-radius:999px;border:1px solid ${K.pcat === id ? 'transparent' : 'rgba(0,0,0,.15)'};background:${K.pcat === id ? '#23262a' : 'rgba(255,255,255,.55)'};color:${K.pcat === id ? '#fff' : '#23262a'};font-size:13px;cursor:pointer">${l}</button>`;
@@ -645,6 +646,7 @@ document.addEventListener('click', e => {
     else { K.step = id === 'exam' ? 'examintake' : 'claimform'; render(); }
   }
   else if (a === 'kioskaddprod') kioskQuickAddProd(id);
+  else if (a === 'kioskdelprod') { if (confirm('ลบสินค้านี้?')) { S.cart = S.cart.filter(i => i.id !== id); softDelete('products', id); render(); } }
   else if (a === 'kioskcheckout') {
     if (!S.cart.length) return toast('เลือกสินค้าอย่างน้อย 1 รายการก่อน');
     S.cust = K.custId;
