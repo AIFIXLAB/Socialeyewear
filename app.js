@@ -334,14 +334,20 @@ function rxForm(cid) {
 function custView(id) {
   const c = find('customer_profiles', id), rx = db.prescriptions.filter(r => !r.deleted_at && r.customer_id === id).sort((a, b) => (b.exam_date || b.created_at).localeCompare(a.exam_date || a.created_at));
   const qs = live('quotes').filter(q => q.customer_id === id);
-  dialog(`<h2>${esc(c.full_name)} <span class="tag">${esc(c.customer_code || '')}</span></h2><p class="tag">${esc([c.phone, c.budget_thb ? 'งบ ' + baht(c.budget_thb) : '', c.lifestyle].filter(Boolean).join(' · '))}${c.notes ? '<br>' + esc(c.notes) : ''}</p>
+  dialog(`<div style="width:min(720px,94vw)">
+  <h2>${esc(c.full_name)} <span class="tag">${esc(c.customer_code || '')}</span></h2><p class="tag">${esc([c.phone, c.budget_thb ? 'งบ ' + baht(c.budget_thb) : '', c.lifestyle].filter(Boolean).join(' · '))}${c.notes ? '<br>' + esc(c.notes) : ''}</p>
   <h3>ประวัติค่าสายตา</h3>${rx.length ? `<div class="wrap"><table><tr><th>วันที่</th><th>ขวา SPH/CYL/AXIS</th><th>ซ้าย SPH/CYL/AXIS</th><th>PD</th><th>ADD</th><th></th></tr>${rx.map(r => `<tr><td>${day(r.exam_date || r.created_at)}</td><td>${fmtP(r.od_sph)} / ${fmtP(r.od_cyl)} / ${r.od_axis ?? '-'}</td><td>${fmtP(r.os_sph)} / ${fmtP(r.os_cyl)} / ${r.os_axis ?? '-'}</td><td>${r.pd ?? '-'}</td><td>${fmtP(r.add_power)}</td><td>${mgr() ? `<button class="btn line sm bad" data-act="delrx" data-id="${r.id}" data-cid="${id}">ลบ</button>` : ''}</td></tr>`).join('')}</table></div>` : '<p class="tag">ยังไม่มีค่าสายตา</p>'}
-  <h3>ประวัติการซื้อ</h3>${qs.length ? qs.slice().sort((a, b) => b.created_at.localeCompare(a.created_at)).map(q => {
+  <h3 style="margin-top:18px">ประวัติการซื้อ</h3>
+  <div style="display:flex;flex-direction:column;gap:10px">${qs.length ? qs.slice().sort((a, b) => b.created_at.localeCompare(a.created_at)).map(q => {
     const items = live('quote_items').filter(i => i.quote_id === q.id);
-    const itemLine = items.length ? `<br><span class="tag">${items.map(i => `${esc(i.item_name_snapshot)} × ${i.quantity} (${baht(i.unit_price_thb)})`).join(' · ')}</span>` : '';
-    return `<div class="row"><span>${esc(q.quote_number || 'รอออกเลข')} · ${day(q.created_at)}${itemLine}</span><span>${baht(q.total_thb)} <span class="st ${q.status}">${QST[q.status]}</span></span></div>`;
-  }).join('') : '<p class="tag">ยังไม่มี</p>'}
-  <div class="foot"><button class="btn line" data-act="close">ปิด</button><button class="btn line" data-act="editcust" data-id="${id}">แก้ไขข้อมูล</button><button class="btn" data-act="newrx" data-id="${id}">เพิ่มค่าสายตา</button></div>`);
+    const itemRows = items.length ? `<div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--line,#e4ddd2);display:flex;flex-direction:column;gap:4px">${items.map(i => `<div class="row" style="border:0;padding:0"><span>${esc(i.item_name_snapshot)} <span class="tag">× ${i.quantity}</span></span><span class="tag">${baht(i.unit_price_thb)}</span></div>`).join('')}</div>` : '';
+    return `<div class="panel" style="padding:12px 14px">
+      <div class="row" style="border:0;padding:0"><span><b>${esc(q.quote_number || 'รอออกเลข')}</b> <span class="tag">· ${day(q.created_at)}</span></span><span><b>${baht(q.total_thb)}</b> <span class="st ${q.status}">${QST[q.status]}</span></span></div>
+      ${itemRows}
+    </div>`;
+  }).join('') : '<p class="tag">ยังไม่มี</p>'}</div>
+  <div class="foot"><button class="btn line" data-act="close">ปิด</button><button class="btn line" data-act="editcust" data-id="${id}">แก้ไขข้อมูล</button><button class="btn" data-act="newrx" data-id="${id}">เพิ่มค่าสายตา</button></div>
+  </div>`);
 }
 function prodForm(p = {}) {
   const brandList = [...LOOKUPS.frameBrands, ...LOOKUPS.lensBrands, ...LOOKUPS.contactBrands];
