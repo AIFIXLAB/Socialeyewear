@@ -147,6 +147,13 @@ const cartSub = () => S.cart.reduce((n, i) => n + i.price * i.qty, 0);
 const latestRx = cid => db.prescriptions.filter(r => !r.deleted_at && r.customer_id === cid).sort((a, b) => (b.exam_date || b.created_at).localeCompare(a.exam_date || a.created_at))[0];
 const rxText = r => r ? `ขวา ${fmtP(r.od_sph)}${r.od_cyl != null ? '/' + fmtP(r.od_cyl) + '×' + (r.od_axis ?? '-') : ''} · ซ้าย ${fmtP(r.os_sph)}${r.os_cyl != null ? '/' + fmtP(r.os_cyl) + '×' + (r.os_axis ?? '-') : ''}` : 'ยังไม่มีค่าสายตา';
 const custName = id => find('customer_profiles', id)?.full_name || 'ลูกค้าทั่วไป';
+function lastVisitMap() {
+  const map = {}; const upd = (cid, d) => { if (!cid || !d) return; if (!map[cid] || d > map[cid]) map[cid] = d; };
+  live('quotes').forEach(q => upd(q.customer_id, q.created_at));
+  live('prescriptions').forEach(r => upd(r.customer_id, r.exam_date || r.created_at));
+  live('claims').forEach(c => upd(c.customer_id, c.created_at));
+  return map;
+}
 const csv = rows => '﻿' + rows.map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
 const download = (name, text, type = 'text/csv') => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: type + ';charset=utf-8' })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); };
 
@@ -289,19 +296,22 @@ const views = {
   },
   customers() {
     const q = S.q.toLowerCase(), mode = S.custView || 'all';
+    const vmap = lastVisitMap();
+    const visit = c => vmap[c.id] || c.created_at || '';
     let rows = live('customer_profiles').filter(c => [c.full_name, c.phone, c.customer_code].join(' ').toLowerCase().includes(q));
     if (mode === 'range' && (S.custFrom || S.custTo)) {
-      rows = rows.filter(c => (!S.custFrom || (c.created_at || '') >= S.custFrom) && (!S.custTo || (c.created_at || '') <= S.custTo + 'T23:59:59'));
+      rows = rows.filter(c => (!S.custFrom || visit(c) >= S.custFrom) && (!S.custTo || visit(c) <= S.custTo + 'T23:59:59'));
     }
     rows = mode === 'all'
       ? rows.sort((a, b) => (a.customer_code || '').localeCompare(b.customer_code || '', undefined, { numeric: true, sensitivity: 'base' }))
-      : rows.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+      : rows.sort((a, b) => visit(b).localeCompare(visit(a)));
     const shown = rows.slice(0, 200);
     const tab = (id, l) => `<button class="chip ${mode === id ? 'on' : ''}" data-act="custview" data-id="${id}">${l}</button>`;
     return `<div class="bar"><div><h1>ลูกค้า</h1><p class="sub" style="margin:0">โปรไฟล์ ความยินยอม และประวัติค่าสายตา · ทั้งหมด ${live('customer_profiles').length} ราย</p></div><div class="tools"><input placeholder="ค้นหาชื่อ เบอร์ หรือรหัส" value="${esc(S.q)}" data-bind="q" style="width:220px"><button class="btn line" data-act="impcust">นำเข้า CSV</button><button class="btn line" data-act="csvcust">ส่งออก CSV</button><button class="btn" data-act="newcust">เพิ่มลูกค้า</button></div></div>
-    <div class="chips" style="display:flex;align-items:center;flex-wrap:wrap;gap:8px">${tab('all', 'ทั้งหมด (เรียงตามรหัส)')}${tab('recent', 'ลูกค้าล่าสุด')}${tab('range', 'ระบุช่วงเวลา')}
+    <div class="chips" style="display:flex;align-items:center;flex-wrap:wrap;gap:8px">${tab('all', 'ทั้งหมด (เรียงตามรหัส)')}${tab('recent', 'ใช้บริการล่าสุด')}${tab('range', 'ระบุช่วงเวลา')}
     ${mode === 'range' ? `<span style="display:inline-flex;gap:8px;align-items:center;margin-left:4px"><input type="date" data-bind="custfrom" value="${esc(S.custFrom || '')}" style="padding:7px 10px"><span class="tag">ถึง</span><input type="date" data-bind="custto" value="${esc(S.custTo || '')}" style="padding:7px 10px"></span>` : ''}</div>
-    ${rows.length ? `<div class="panel wrap"><table><tr><th>รหัส</th><th>ชื่อ</th><th>โทรศัพท์</th><th>วันที่เพิ่ม</th><th>ค่าสายตาล่าสุด</th><th>ยินยอม</th><th></th></tr>${shown.map(c => `<tr><td>${esc(c.customer_code || '-')}</td><td>${esc(c.full_name)}</td><td>${esc(c.phone || '')}</td><td class="tag">${day(c.created_at)}</td><td class="tag">${esc(rxText(latestRx(c.id)))}</td><td>${c.consent_recorded_at ? '<span class="st accepted">บันทึกแล้ว</span>' : '<span class="st">ยังไม่มี</span>'}</td><td class="act"><button class="btn line sm" data-act="viewcust" data-id="${c.id}">เปิด</button>${mgr() ? ` <button class="btn line sm bad" data-act="delcust" data-id="${c.id}">ลบ</button>` : ''}</td></tr>`).join('')}</table></div>${rows.length > shown.length ? `<p class="tag">แสดง ${shown.length} จาก ${rows.length} ราย พิมพ์ค้นหาเพื่อกรอง</p>` : ''}` : empty('ยังไม่มีลูกค้าที่ตรงกับการค้นหา', '<button class="btn" data-act="newcust">เพิ่มลูกค้าคนแรก</button> <button class="btn line" data-act="impcust">นำเข้าจาก CSV</button>')}`;
+    <p class="tag" style="margin:-4px 0 12px">"ใช้บริการล่าสุด"/"ระบุช่วงเวลา" อิงจากวันที่มีรายการขาย ตรวจสายตา หรือซ่อม/เคลมล่าสุดของลูกค้า (ไม่ใช่วันที่นำเข้าข้อมูลเดิมเข้าระบบ)</p>
+    ${rows.length ? `<div class="panel wrap"><table><tr><th>รหัส</th><th>ชื่อ</th><th>โทรศัพท์</th><th>ใช้บริการล่าสุด</th><th>ค่าสายตาล่าสุด</th><th>ยินยอม</th><th></th></tr>${shown.map(c => `<tr><td>${esc(c.customer_code || '-')}</td><td>${esc(c.full_name)}</td><td>${esc(c.phone || '')}</td><td class="tag">${visit(c) ? day(visit(c)) : '-'}</td><td class="tag">${esc(rxText(latestRx(c.id)))}</td><td>${c.consent_recorded_at ? '<span class="st accepted">บันทึกแล้ว</span>' : '<span class="st">ยังไม่มี</span>'}</td><td class="act"><button class="btn line sm" data-act="viewcust" data-id="${c.id}">เปิด</button>${mgr() ? ` <button class="btn line sm bad" data-act="delcust" data-id="${c.id}">ลบ</button>` : ''}</td></tr>`).join('')}</table></div>${rows.length > shown.length ? `<p class="tag">แสดง ${shown.length} จาก ${rows.length} ราย พิมพ์ค้นหาเพื่อกรอง</p>` : ''}` : empty('ยังไม่มีลูกค้าที่ตรงกับการค้นหา', '<button class="btn" data-act="newcust">เพิ่มลูกค้าคนแรก</button> <button class="btn line" data-act="impcust">นำเข้าจาก CSV</button>')}`;
   },
   products() {
     const q = S.pq.toLowerCase(), rows = live('products').filter(p => (S.ptype === 'all' || p.product_type === S.ptype) && [p.product_name, p.sku, p.brand].join(' ').toLowerCase().includes(q));
