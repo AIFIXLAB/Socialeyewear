@@ -154,16 +154,19 @@ function lastVisitMap() {
   live('claims').forEach(c => upd(c.customer_id, c.created_at));
   return map;
 }
-// ดึงวันที่จากข้อความหมายเหตุเดิมที่นำเข้ามา เช่น "วันที่ (เกิด/ซื้อล่าสุด) 10/01/2564" (พ.ศ.) ไว้ใช้สำรองตอนไม่มีประวัติการซื้อ/ตรวจ/ซ่อมในระบบ
+// ดึงวันที่จากข้อความหมายเหตุเดิมที่นำเข้ามา เช่น "วันที่ (เกิด/ซื้อล่าสุด) 10/01/2564" ไว้ใช้สำรองตอนไม่มีประวัติการซื้อ/ตรวจ/ซ่อมในระบบ
+// key ใช้แปลงเป็น ค.ศ. ภายในไว้เทียบ/เรียงลำดับกับวันที่อื่นในระบบเท่านั้น ส่วน text ที่โชว์ให้ผู้ใช้เห็นคงเป็น พ.ศ. ตามต้นฉบับเป๊ะๆ ไม่แปลงให้
 function notesLastDate(notes) {
   if (!notes) return null;
   const m = notes.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
   if (!m) return null;
-  let [, d, mo, y] = m.map(Number);
-  if (y > 2400) y -= 543;
-  if (y < 1900 || y > 2100 || mo < 1 || mo > 12 || d < 1 || d > 31) return null;
-  const dt = new Date(Date.UTC(y, mo - 1, d));
-  return isNaN(dt) ? null : dt.toISOString().slice(0, 10);
+  const d = +m[1], mo = +m[2], yBE = +m[3];
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  const yCE = yBE > 2400 ? yBE - 543 : yBE;
+  if (yCE < 1900 || yCE > 2100) return null;
+  const dt = new Date(Date.UTC(yCE, mo - 1, d));
+  if (isNaN(dt)) return null;
+  return { key: dt.toISOString().slice(0, 10), text: `${String(d).padStart(2, '0')}/${String(mo).padStart(2, '0')}/${yBE}` };
 }
 const csv = rows => '﻿' + rows.map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
 const download = (name, text, type = 'text/csv') => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: type + ';charset=utf-8' })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); };
@@ -308,21 +311,22 @@ const views = {
   customers() {
     const q = S.q.toLowerCase(), mode = S.custView || 'all';
     const vmap = lastVisitMap();
-    const visit = c => vmap[c.id] || notesLastDate(c.notes) || '';
+    // key: ไว้เรียง/กรองช่วงวันที่เทียบกับข้อมูลอื่นในระบบ (ภายในเท่านั้น) · text: ข้อความที่โชว์ให้ผู้ใช้เห็นจริง (พ.ศ. ตามต้นฉบับ ไม่แปลง)
+    const visit = c => vmap[c.id] ? { key: vmap[c.id], text: day(vmap[c.id]) } : (notesLastDate(c.notes) || { key: '', text: '' });
     let rows = live('customer_profiles').filter(c => [c.full_name, c.phone, c.customer_code].join(' ').toLowerCase().includes(q));
     if (mode === 'range' && (S.custFrom || S.custTo)) {
-      rows = rows.filter(c => (!S.custFrom || visit(c) >= S.custFrom) && (!S.custTo || visit(c) <= S.custTo + 'T23:59:59'));
+      rows = rows.filter(c => { const k = visit(c).key; return (!S.custFrom || k >= S.custFrom) && (!S.custTo || k <= S.custTo + 'T23:59:59'); });
     }
     rows = mode === 'all'
       ? rows.sort((a, b) => (a.customer_code || '').localeCompare(b.customer_code || '', undefined, { numeric: true, sensitivity: 'base' }))
-      : rows.sort((a, b) => visit(b).localeCompare(visit(a)));
+      : rows.sort((a, b) => visit(b).key.localeCompare(visit(a).key));
     const shown = rows.slice(0, 200);
     const tab = (id, l) => `<button class="chip ${mode === id ? 'on' : ''}" data-act="custview" data-id="${id}">${l}</button>`;
     return `<div class="bar"><div><h1>ลูกค้า</h1><p class="sub" style="margin:0">โปรไฟล์ ความยินยอม และประวัติค่าสายตา · ทั้งหมด ${live('customer_profiles').length} ราย</p></div><div class="tools"><input placeholder="ค้นหาชื่อ เบอร์ หรือรหัส" value="${esc(S.q)}" data-bind="q" style="width:220px"><button class="btn line" data-act="impcust">นำเข้า CSV</button><button class="btn line" data-act="csvcust">ส่งออก CSV</button><button class="btn" data-act="newcust">เพิ่มลูกค้า</button></div></div>
     <div class="chips" style="display:flex;align-items:center;flex-wrap:wrap;gap:8px">${tab('all', 'ทั้งหมด (เรียงตามรหัส)')}${tab('recent', 'ใช้บริการล่าสุด')}${tab('range', 'ระบุช่วงเวลา')}
     ${mode === 'range' ? `<span style="display:inline-flex;gap:8px;align-items:center;margin-left:4px"><input type="date" data-bind="custfrom" value="${esc(S.custFrom || '')}" style="padding:7px 10px"><span class="tag">ถึง</span><input type="date" data-bind="custto" value="${esc(S.custTo || '')}" style="padding:7px 10px"></span>` : ''}</div>
     <p class="tag" style="margin:-4px 0 12px">"ใช้บริการล่าสุด"/"ระบุช่วงเวลา" อิงจากวันที่มีรายการขาย ตรวจสายตา หรือซ่อม/เคลมล่าสุดของลูกค้า (ไม่ใช่วันที่นำเข้าข้อมูลเดิมเข้าระบบ)</p>
-    ${rows.length ? `<div class="panel wrap"><table><tr><th>รหัส</th><th>ชื่อ</th><th>โทรศัพท์</th><th>ใช้บริการล่าสุด</th><th>ค่าสายตาล่าสุด</th><th>ยินยอม</th><th></th></tr>${shown.map(c => `<tr><td>${esc(c.customer_code || '-')}</td><td>${esc(c.full_name)}</td><td>${esc(c.phone || '')}</td><td class="tag">${visit(c) ? day(visit(c)) : '-'}</td><td class="tag">${esc(rxText(latestRx(c.id)))}</td><td>${c.consent_recorded_at ? '<span class="st accepted">บันทึกแล้ว</span>' : '<span class="st">ยังไม่มี</span>'}</td><td class="act"><button class="btn line sm" data-act="viewcust" data-id="${c.id}">เปิด</button>${mgr() ? ` <button class="btn line sm bad" data-act="delcust" data-id="${c.id}">ลบ</button>` : ''}</td></tr>`).join('')}</table></div>${rows.length > shown.length ? `<p class="tag">แสดง ${shown.length} จาก ${rows.length} ราย พิมพ์ค้นหาเพื่อกรอง</p>` : ''}` : empty('ยังไม่มีลูกค้าที่ตรงกับการค้นหา', '<button class="btn" data-act="newcust">เพิ่มลูกค้าคนแรก</button> <button class="btn line" data-act="impcust">นำเข้าจาก CSV</button>')}`;
+    ${rows.length ? `<div class="panel wrap"><table><tr><th>รหัส</th><th>ชื่อ</th><th>โทรศัพท์</th><th>ใช้บริการล่าสุด</th><th>ค่าสายตาล่าสุด</th><th></th></tr>${shown.map(c => `<tr><td>${esc(c.customer_code || '-')}</td><td>${esc(c.full_name)}</td><td>${esc(c.phone || '')}</td><td class="tag">${visit(c).text || '-'}</td><td class="tag">${esc(rxText(latestRx(c.id)))}</td><td class="act"><button class="btn line sm" data-act="viewcust" data-id="${c.id}">เปิด</button>${mgr() ? ` <button class="btn line sm bad" data-act="delcust" data-id="${c.id}">ลบ</button>` : ''}</td></tr>`).join('')}</table></div>${rows.length > shown.length ? `<p class="tag">แสดง ${shown.length} จาก ${rows.length} ราย พิมพ์ค้นหาเพื่อกรอง</p>` : ''}` : empty('ยังไม่มีลูกค้าที่ตรงกับการค้นหา', '<button class="btn" data-act="newcust">เพิ่มลูกค้าคนแรก</button> <button class="btn line" data-act="impcust">นำเข้าจาก CSV</button>')}`;
   },
   products() {
     const q = S.pq.toLowerCase(), rows = live('products').filter(p => (S.ptype === 'all' || p.product_type === S.ptype) && [p.product_name, p.sku, p.brand].join(' ').toLowerCase().includes(q));
