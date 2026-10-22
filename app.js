@@ -117,6 +117,17 @@ async function loadStaff() {
   try { S.staff = await api('/rest/v1/rpc/shop_staff', { method: 'POST', body: JSON.stringify({ p_shop: shop.id }) }); if (S.v === 'settings' && !$('#dlg').open) render(); } catch (e) { console.error(e); }
 }
 
+/* ---------- รายการอ้างอิงจากระบบเดิม (ยี่ห้อ/ชนิด/Index) ใช้เป็นคำแนะนำอัตโนมัติตอนเพิ่มสินค้า ---------- */
+const LOOKUPS = {
+  frameBrands: ["sale", "agne's b.", "crome heart", "japan titanium", "jill stuart", "puma", "timberland", "kate spade", "polaroid", "tommy", "korea/japan", "baby", "rayban optical", "paul hueman", "polo sport", "henry polo", "clipon", "alan smith", "mark william", "vanpah by polo", "creatve exchange", "emporio armani", "rassberry", "k-tokyo", "vogue", "levi's", "rayban sun", "sunglasses", "evisu", "st.scott", "bathing ape", "lee cooper", "armand nicolet", "new balance", "BOLON", "titamic", "grey jack", "viciousvenom", "moandcoo", "thompson"],
+  lensBrands: ["Agate", "all", "apollo", "stock", "Crystal Lens", "Dura Lens", "Eco", "Essilor", "Excellite", "focus", "Hoya Lens", "Hitop", "Kodak", "Netline", "Nikon", "OSA", "Rodenstock", "RX Mall", "Sharmir", "TOGAI", "ZEISS"],
+  contactBrands: ["Alice", "BAUSH & LOMB", "Johnson", "MAXIM"],
+  lensTypes: ["curve top", "eyezen", "FT Bifocal Lens", "FT Photochromic Lens", "KT Bifocal Lens", "KT Photochromic Lens", "Myosmart", "near intermediate", "Progresive Lens", "Pro Photochromic Lens", "SV CR", "SV lens blue", "SV blue + photo", "SV lens coat", "sv honney comb", "SV Photochromic Lens"],
+  lensIndex: ["1.49", "1.5", "1.53 Trivex", "1.54", "1.55", "1.56", "1.59 Polycarbonate", "1.60", "1.61", "1.67", "1.70", "1.74", "1.76"],
+  contactTypes: ["oneday clear", "oneday color", "oneday toric", "1m clear", "onemonth color", "onemonth toric", "Big Eye กล่องฟ้า", "Big Eye กล่องส้ม", "Big Eye กล่องชมพู", "น้ำยาทำความสะอาดคอนแทคเลนส์", "คอนแทคเลนส์ใส", "น้ำตาเทียม", "multifocal clear", "multifocal color", "toric color"]
+};
+const OTHER_ITEMS = ["ค่าบริการเครื่องรูดบัตร", "ตรวจวัดสายตา", "ซ่อมแว่นตา", "ค่าส่งพัสดุ", "ค่าบริการประกอบ", "อะไหล่แว่นตา", "tint ย้อมสี", "vat7%"];
+
 /* ---------- ตัวช่วยแสดงผล ---------- */
 const NEEDS = { general: 'ใช้งานทั่วไป', screen: 'ทำงานหน้าจอ', drive: 'ขับรถ/กลางคืน', outdoor: 'กลางแจ้ง', progressive: 'สายตายาว/โปรเกรสซีฟ' };
 const TYPES = { lens: 'เลนส์', frame: 'กรอบ', service: 'บริการ', other: 'อื่น ๆ' };
@@ -264,7 +275,8 @@ const views = {
   products() {
     const q = S.pq.toLowerCase(), rows = live('products').filter(p => (S.ptype === 'all' || p.product_type === S.ptype) && [p.product_name, p.sku, p.brand].join(' ').toLowerCase().includes(q));
     const chips = [['all', 'ทั้งหมด'], ...Object.entries(TYPES)].map(([k, l]) => `<button class="chip ${S.ptype === k ? 'on' : ''}" data-act="ptype" data-id="${k}">${l}</button>`).join('');
-    return `<div class="bar"><div><h1>สินค้า</h1><p class="sub" style="margin:0">ราคา สต็อก และแท็กการใช้งานสำหรับ Sales Studio</p></div><div class="tools"><input placeholder="ค้นหาชื่อ SKU แบรนด์" value="${esc(S.pq)}" data-bind="pq" style="width:220px"><button class="btn" data-act="newprod">เพิ่มสินค้า</button></div></div>
+    const missingOther = OTHER_ITEMS.filter(n => !live('products').some(p => p.product_name === n));
+    return `<div class="bar"><div><h1>สินค้า</h1><p class="sub" style="margin:0">ราคา สต็อก และแท็กการใช้งานสำหรับ Sales Studio</p></div><div class="tools"><input placeholder="ค้นหาชื่อ SKU แบรนด์" value="${esc(S.pq)}" data-bind="pq" style="width:220px">${missingOther.length ? `<button class="btn line" data-act="impother">นำเข้ารายการบริการเดิม ${missingOther.length} รายการ</button>` : ''}<button class="btn" data-act="newprod">เพิ่มสินค้า</button></div></div>
     <div class="chips">${chips}</div>
     ${rows.length ? `<div class="panel wrap"><table><tr><th>สินค้า</th><th>ประเภท</th><th>ราคา</th>${mgr() ? '<th>ต้นทุน</th>' : ''}<th>สต็อก</th><th>สถานะ</th><th></th></tr>${rows.map(p => `<tr><td>${esc(p.product_name)}<br><span class="tag">${esc([p.sku, p.brand].filter(Boolean).join(' · '))}</span></td><td>${TYPES[p.product_type]}</td><td>${baht(p.retail_price_thb)}</td>${mgr() ? `<td>${p.cost_thb != null ? baht(p.cost_thb) : '-'}</td>` : ''}<td>${p.stock_qty == null ? '-' : `<span class="${p.stock_qty <= 2 ? 'warn' : ''}">${p.stock_qty}</span>`}</td><td>${p.active === false ? '<span class="st">ปิดขาย</span>' : '<span class="st accepted">ขายอยู่</span>'}</td><td class="act"><button class="btn line sm" data-act="editprod" data-id="${p.id}">แก้ไข</button>${mgr() ? ` <button class="btn line sm bad" data-act="delprod" data-id="${p.id}">ลบ</button>` : ''}</td></tr>`).join('')}</table></div>`
       : empty('ยังไม่มีสินค้า', `<button class="btn" data-act="newprod">เพิ่มสินค้า</button> ${live('products').length ? '' : '<button class="btn line" data-act="sample">เพิ่มสินค้าตัวอย่าง 8 รายการ</button>'}`)}`;
@@ -328,7 +340,10 @@ function custView(id) {
   <div class="foot"><button class="btn line" data-act="close">ปิด</button><button class="btn line" data-act="editcust" data-id="${id}">แก้ไขข้อมูล</button><button class="btn" data-act="newrx" data-id="${id}">เพิ่มค่าสายตา</button></div>`);
 }
 function prodForm(p = {}) {
-  dialog(`<form data-form="prod" data-id="${p.id || ''}"><h2>${p.id ? 'แก้ไขสินค้า' : 'เพิ่มสินค้า'}</h2>${fld('product_name', 'ชื่อสินค้า', p.product_name, 'text', 'required')}<div class="two"><label>ประเภท<select name="product_type">${Object.entries(TYPES).map(([k, l]) => `<option value="${k}" ${p.product_type === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>${fld('retail_price_thb', 'ราคาขาย (บาท)', p.retail_price_thb ?? 0, 'number', 'min="0" required')}${fld('sku', 'SKU', p.sku)}${fld('brand', 'แบรนด์', p.brand)}${mgr() ? fld('cost_thb', 'ต้นทุน (บาท)', p.cost_thb, 'number', 'min="0"') : ''}${fld('stock_qty', 'จำนวนคงเหลือ (เว้นว่าง = ไม่ติดตาม)', p.stock_qty, 'number', 'step="1"')}</div>${fld('description', 'รายละเอียดสั้น ๆ', p.description)}${fld('features', 'แท็กการใช้งาน: general, screen, drive, outdoor, progressive (คั่นด้วยคอมมา)', (p.features || []).join(', '))}<label class="chk"><input type="checkbox" name="active" ${p.active === false ? '' : 'checked'}> เปิดขาย (แสดงใน Sales Studio)</label>${foot('บันทึกสินค้า')}</form>`);
+  const brandList = [...LOOKUPS.frameBrands, ...LOOKUPS.lensBrands, ...LOOKUPS.contactBrands];
+  const specList = [...LOOKUPS.lensTypes, ...LOOKUPS.lensIndex, ...LOOKUPS.contactTypes];
+  const opts = l => l.map(v => `<option value="${esc(v)}">`).join('');
+  dialog(`<form data-form="prod" data-id="${p.id || ''}"><h2>${p.id ? 'แก้ไขสินค้า' : 'เพิ่มสินค้า'}</h2>${fld('product_name', 'ชื่อสินค้า', p.product_name, 'text', 'required')}<div class="two"><label>ประเภท<select name="product_type">${Object.entries(TYPES).map(([k, l]) => `<option value="${k}" ${p.product_type === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>${fld('retail_price_thb', 'ราคาขาย (บาท)', p.retail_price_thb ?? 0, 'number', 'min="0" required')}${fld('sku', 'SKU', p.sku)}<label>แบรนด์<input name="brand" value="${esc(p.brand)}" list="brandlist" placeholder="พิมพ์หรือเลือกจากรายการเดิม"></label>${mgr() ? fld('cost_thb', 'ต้นทุน (บาท)', p.cost_thb, 'number', 'min="0"') : ''}${fld('stock_qty', 'จำนวนคงเหลือ (เว้นว่าง = ไม่ติดตาม)', p.stock_qty, 'number', 'step="1"')}</div><label>รายละเอียดสั้น ๆ<input name="description" value="${esc(p.description)}" list="speclist" placeholder="เช่น ชนิดเลนส์, Index, ประเภทคอนแทคเลนส์"></label>${fld('features', 'แท็กการใช้งาน: general, screen, drive, outdoor, progressive (คั่นด้วยคอมมา)', (p.features || []).join(', '))}<label class="chk"><input type="checkbox" name="active" ${p.active === false ? '' : 'checked'}> เปิดขาย (แสดงใน Sales Studio)</label>${foot('บันทึกสินค้า')}</form><datalist id="brandlist">${opts(brandList)}</datalist><datalist id="speclist">${opts(specList)}</datalist>`);
 }
 function quoteSheet(id) {
   const q = find('quotes', id), items = live('quote_items').filter(i => i.quote_id === id);
@@ -372,6 +387,12 @@ document.addEventListener('click', e => {
   else if (a === 'newprod') prodForm(); else if (a === 'editprod') prodForm(find('products', id));
   else if (a === 'delprod') { if (confirm('ลบสินค้านี้?')) softDelete('products', id); }
   else if (a === 'sample') { SAMPLE.forEach(([product_type, product_name, retail_price_thb, f]) => save('products', { id: uid(), product_type, product_name, retail_price_thb, features: f ? f.split(',') : [], active: true, deleted_at: null })); commit(); }
+  else if (a === 'impother') {
+    const existing = new Set(live('products').map(p => p.product_name));
+    const toAdd = OTHER_ITEMS.filter(n => !existing.has(n));
+    toAdd.forEach(product_name => save('products', { id: uid(), product_type: 'other', product_name, retail_price_thb: 0, active: true, deleted_at: null }));
+    commit(); toast(`นำเข้าแล้ว ${toAdd.length} รายการ · อย่าลืมใส่ราคาขายให้ครบ`);
+  }
   else if (a === 'viewq') quoteSheet(id);
   else if (a === 'delq') { if (confirm('ลบใบเสนอราคานี้?')) softDelete('quotes', id); }
   else if (a === 'csvcust') download('customers.csv', csv([['รหัส', 'ชื่อ', 'โทรศัพท์', 'งบ', 'ไลฟ์สไตล์', 'ยินยอม'], ...live('customer_profiles').map(c => [c.customer_code, c.full_name, c.phone, c.budget_thb, c.lifestyle, c.consent_recorded_at ? 'ใช่' : 'ไม่'])]));
