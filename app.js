@@ -423,11 +423,10 @@ const views = {
     const acct = sess ? `<p>ล็อกอินเป็น <b>${esc(sess.email || sess.user?.email || '')}</b>${shop ? `<br>ร้าน: <b>${esc(shop.name)}</b> <span class="st">${{ owner: 'เจ้าของ', manager: 'ผู้จัดการ', staff: 'พนักงาน' }[shop.role]}</span>` : ''}</p><button class="btn" data-act="syncnow">ซิงก์ตอนนี้</button> <button class="btn line" data-act="logout">ออกจากระบบ</button>`
       : `<form data-form="auth"><label>อีเมล<input type="email" name="email" required autocomplete="username"></label><label>รหัสผ่าน (อย่างน้อย 6 ตัว)<input type="password" name="password" required minlength="6" autocomplete="current-password"></label><button class="btn" type="submit" value="login">เข้าสู่ระบบ</button> <button class="btn line" type="submit" value="signup">สมัครบัญชีใหม่</button></form>`;
     const mkShop = sess && !shop && navigator.onLine ? `<div class="panel"><h2>สร้างร้านของคุณ</h2><p class="tag">ยังไม่มีร้านผูกกับบัญชีนี้ ถ้าเป็นพนักงาน ให้เจ้าของร้านเพิ่มอีเมลของคุณในหน้านี้ก่อน</p><form data-form="shop"><label>ชื่อร้าน<input name="name" required></label><button class="btn" type="submit">สร้างร้าน</button></form></div>` : '';
-    const staff = shop?.role === 'owner' ? `<div class="panel"><h2>พนักงานในร้าน</h2>${(S.staff || []).map(m => `<div class="row"><span>${esc(m.email)} <span class="st">${m.role}</span></span>${m.role !== 'owner' ? `<button class="btn line sm bad" data-act="rmstaff" data-id="${m.user_id}">ถอด</button>` : ''}</div>`).join('') || '<p class="tag">กำลังโหลด…</p>'}<form data-form="staff" style="margin-top:14px"><div class="two"><label>อีเมลพนักงาน (ต้องสมัครบัญชีแล้ว)<input type="email" name="email" required></label><label>บทบาท<select name="role"><option value="staff">พนักงาน</option><option value="manager">ผู้จัดการ (ลบข้อมูลและดูต้นทุนได้)</option></select></label></div><button class="btn" type="submit">เพิ่ม/เปลี่ยนบทบาท</button></form></div>` : '';
-    const sellers = `<div class="panel"><h2>พนักงานขาย (เลือกตอนออกใบเสร็จ)</h2><p class="tag">แค่ใส่ชื่อไว้เลือกตอนออกใบเสร็จ ไม่ต้องสมัครเข้าระบบ ลบออกได้ตลอด</p>${live('sellers').map(s => `<div class="row"><span>${esc(s.name)} <span class="st">${esc(ROLE_LABEL[s.role] || s.role || '')}</span></span><button class="btn line sm bad" data-act="delseller" data-id="${s.id}">ลบ</button></div>`).join('') || '<p class="tag">ยังไม่มีรายชื่อพนักงานขาย</p>'}<form data-form="seller" style="margin-top:14px"><div class="two"><label>ชื่อพนักงาน<input name="name" required></label><label>ตำแหน่ง<select name="role"><option value="staff">พนักงาน</option><option value="manager">ผู้จัดการ</option><option value="owner">เจ้าของ</option></select></label></div><button class="btn" type="submit">เพิ่มพนักงานขาย</button></form></div>`;
+    const sellers = `<div class="panel"><h2>พนักงานขาย (เลือกตอนออกใบเสร็จ)</h2><p class="tag">แค่ใส่ชื่อไว้เลือกตอนออกใบเสร็จ ไม่ต้องสมัครเข้าระบบ ลบออกได้ตลอด</p><button type="button" class="btn line sm" data-act="sellerreport" style="margin-bottom:12px">ดูยอดขายแยกตามพนักงาน</button>${live('sellers').map(s => `<div class="row"><span>${esc(s.name)} <span class="st">${esc(ROLE_LABEL[s.role] || s.role || '')}</span></span><button class="btn line sm bad" data-act="delseller" data-id="${s.id}">ลบ</button></div>`).join('') || '<p class="tag">ยังไม่มีรายชื่อพนักงานขาย</p>'}<form data-form="seller" style="margin-top:14px"><div class="two"><label>ชื่อพนักงาน<input name="name" required></label><label>ตำแหน่ง<select name="role"><option value="staff">พนักงาน</option><option value="manager">ผู้จัดการ</option><option value="owner">เจ้าของ</option></select></label></div><button class="btn" type="submit">เพิ่มพนักงานขาย</button></form></div>`;
     return `<h1>ตั้งค่า</h1><p class="sub">เชื่อมต่อ Supabase เพื่อซิงก์ข้อมูลระหว่างเครื่อง</p>
     <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr))">
-    <div class="panel"><h2>บัญชี</h2>${acct}</div>${mkShop}${staff}${sellers}
+    <div class="panel"><h2>บัญชี</h2>${acct}</div>${mkShop}${sellers}
     <div class="panel"><h2>การเชื่อมต่อ</h2><label>Project URL<input data-bind="url" value="${esc(c.url)}"></label><label>Publishable key<input data-bind="key" value="${esc(c.key)}"></label><p class="tag">ใช้เฉพาะ publishable key ห้ามใส่ secret key</p></div>
     <div class="panel"><h2>ข้อมูลในเครื่อง</h2><p class="tag">รอซิงก์ ${pendingCount()} รายการ${errCount() ? ` · ผิดพลาด ${errCount()} รายการ (แก้ไขรายการนั้นแล้วบันทึกใหม่เพื่อลองอีกครั้ง)` : ''}</p><button class="btn line" data-act="backup">สำรองข้อมูลเป็นไฟล์ JSON</button></div></div>`;
   }
@@ -1168,6 +1167,26 @@ function quoteSheet(id) {
   <form data-form="quote" data-id="${id}" class="noprint"><div class="two"><label>สถานะ<select name="status">${Object.entries(QST).map(([k, l]) => `<option value="${k}" ${q.status === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>${fld('valid_until', 'ใช้ได้ถึง', q.valid_until || '', 'date')}</div><label>หมายเหตุ<textarea name="notes" rows="2">${esc(q.notes)}</textarea></label><div class="foot"><button type="button" class="btn line" data-act="close">ปิด</button><button type="button" class="btn line" data-act="print">พิมพ์ / PDF</button><button class="btn" type="submit">บันทึก</button></div></form></div>`);
 }
 let RCPT = null, RCPT_FOR = null, SIG_CANVAS = null;
+function sellerReportHTML() {
+  const sellerNames = [...new Set([...live('sellers').map(s => s.name), ...live('quotes').map(q => (q.meta || {}).seller).filter(Boolean)])];
+  const months = [...Array(6)].map((_, i) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 5 + i); return d.toISOString().slice(0, 7); });
+  const won = live('quotes').filter(x => ['accepted', 'converted'].includes(x.status));
+  const rows = sellerNames.map(name => {
+    const mine = won.filter(q => (q.meta || {}).seller === name);
+    const byMonth = months.map(m => mine.filter(q => (q.created_at || '').slice(0, 7) === m).reduce((n, q) => n + q.total_thb, 0));
+    return { name, byMonth, total: mine.reduce((n, q) => n + q.total_thb, 0), count: mine.length };
+  }).sort((a, b) => b.total - a.total);
+  const grand = rows.reduce((n, r) => n + r.total, 0);
+  return `<style>#dlg{width:min(820px,96vw)!important}</style>
+    <h2>ยอดขายแยกตามพนักงาน</h2>
+    <p class="tag">นับเฉพาะใบเสร็จ/ใบเสนอราคาที่สถานะ "ขายแล้ว" และมีการเลือกพนักงานขายไว้ตอนออกใบเสร็จ</p>
+    ${rows.length ? `<div class="wrap"><table>
+      <tr><th>พนักงาน</th>${months.map(m => `<th>${m.slice(5)}/${m.slice(2, 4)}</th>`).join('')}<th style="text-align:right">รวม</th><th style="text-align:right">จำนวนบิล</th></tr>
+      ${rows.map(r => `<tr><td>${esc(r.name)}</td>${r.byMonth.map(v => `<td>${v ? baht(v) : '-'}</td>`).join('')}<td style="text-align:right"><b>${baht(r.total)}</b></td><td style="text-align:right">${r.count}</td></tr>`).join('')}
+      <tr><td><b>รวมทั้งหมด</b></td>${months.map((m, i) => `<td><b>${baht(rows.reduce((n, r) => n + r.byMonth[i], 0))}</b></td>`).join('')}<td style="text-align:right"><b>${baht(grand)}</b></td><td></td></tr>
+    </table></div>` : '<p class="tag">ยังไม่มีข้อมูลยอดขายที่ระบุพนักงาน ลองออกใบเสร็จแล้วเลือกพนักงานขายดูก่อน</p>'}
+    <div class="foot"><button class="btn line" type="button" data-act="close">ปิด</button></div>`;
+}
 function receiptData(forQuoteId) {
   if (forQuoteId) {
     const q = find('quotes', forQuoteId);
@@ -1350,6 +1369,7 @@ document.addEventListener('click', e => {
   else if (a === 'logout') { if (!pendingCount() || confirm('ยังมีข้อมูลที่ไม่ได้ซิงก์ ออกจากระบบต่อหรือไม่? (ข้อมูลยังอยู่ในเครื่อง)')) { sess = null; ls.set('sess', null); S.staff = null; render(); } }
   else if (a === 'rmstaff') { if (confirm('ถอดพนักงานคนนี้ออกจากร้าน?')) api(`/rest/v1/shop_members?shop_id=eq.${shop.id}&user_id=eq.${id}`, { method: 'DELETE' }).then(loadStaff).catch(err => toast(errText(err))); }
   else if (a === 'delseller') { if (confirm('ลบชื่อพนักงานขายนี้?')) softDelete('sellers', id); }
+  else if (a === 'sellerreport') dialog(sellerReportHTML());
   else if (a === 'custview') { S.custView = id; render(); }
   else if (a === 'splashgo') { S.mode = 'hub'; render(); }
   else if (a === 'gomode') { if (id === 'kiosk') kioskReset(); S.mode = id; render(); }
