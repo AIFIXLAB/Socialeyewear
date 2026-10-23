@@ -587,7 +587,13 @@ function lensHighlights(ls) {
 function lensPhotoField(p) {
   const ls = p.lens_spec || {};
   const show = (p.product_type || 'lens') === 'lens';
-  return `<label id="lensPhoto" style="${show ? '' : 'display:none'}"><span class="lbl">รูปภาพสินค้า (ใส่ URL รูปภาพ)</span><input name="ls_photo" value="${esc(ls.photo_url)}" placeholder="https://..."><span style="display:block;font-size:11.5px;color:#69756d;margin-top:4px">ใส่ลิงก์รูปภาพที่เปิดดูได้โดยตรง หากยังไม่มีรูป ระบบจะแสดงภาพตัวอย่างแทน</span></label>`;
+  return `<label id="lensPhoto" style="${show ? '' : 'display:none'}">
+    <span class="lbl">รูปภาพสินค้า</span>
+    <input type="hidden" name="ls_photo" value="${esc(ls.photo_url)}">
+    ${ls.photo_url ? `<img id="lsPhotoPreview" src="${esc(ls.photo_url)}" style="display:block;width:100%;max-width:220px;height:140px;object-fit:cover;border-radius:10px;margin-bottom:8px;border:1px solid #d7dde6">` : `<img id="lsPhotoPreview" style="display:none;width:100%;max-width:220px;height:140px;object-fit:cover;border-radius:10px;margin-bottom:8px;border:1px solid #d7dde6">`}
+    <input type="file" accept="image/*" data-bind="lsphoto">
+    <span style="display:block;font-size:11.5px;color:#69756d;margin-top:4px">ถ่ายรูปหรือเลือกรูปจากอุปกรณ์ หากยังไม่มีรูป ระบบจะแสดงภาพตัวอย่างแทน</span>
+  </label>`;
 }
 function lensFields(p) {
   const ls = p.lens_spec || {};
@@ -1089,6 +1095,16 @@ document.addEventListener('change', e => {
   else if (k === 'url' || k === 'key') { ls.set(k, e.target.value.trim()); toast('บันทึกการตั้งค่าแล้ว'); setStatus(); }
   else if (k === 'newprodtype') { const draft = readProdDraft(e.target.closest('form')); draft.product_type = e.target.value; prodForm(draft); }
   else if (k === 'claimphoto') { const f = e.target.files[0]; if (f) fileToThumb(f).then(du => { K.photo = du; render(); }); }
+  else if (k === 'lsphoto') {
+    const f = e.target.files[0]; if (!f) return;
+    fileToThumb(f).then(du => {
+      if (!du) return toast('อ่านไฟล์รูปไม่สำเร็จ ลองใหม่อีกครั้ง');
+      const form = e.target.closest('form');
+      form.querySelector('[name="ls_photo"]').value = du;
+      const prev = form.querySelector('#lsPhotoPreview');
+      if (prev) { prev.src = du; prev.style.display = 'block'; }
+    });
+  }
   else if (k === 'ccother') K.ccOther = e.target.value;
   else if (k === 'lrother') K.lr.other = e.target.value;
   else if (k === 'custfrom') { S.custFrom = e.target.value; render(); }
