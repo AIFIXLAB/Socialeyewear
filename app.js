@@ -18,7 +18,8 @@ const COLS = {
   products: ['id', 'shop_id', 'product_type', 'sku', 'brand', 'color', 'product_name', 'description', 'features', 'retail_price_thb', 'cost_thb', 'stock_qty', 'active', 'lens_spec', 'deleted_at', 'created_at'],
   quotes: ['id', 'shop_id', 'customer_id', 'quote_number', 'status', 'subtotal_thb', 'discount_thb', 'total_thb', 'notes', 'valid_until', 'receipt_date', 'meta', 'deleted_at', 'created_at'],
   quote_items: ['id', 'shop_id', 'quote_id', 'product_id', 'item_name_snapshot', 'product_type', 'quantity', 'unit_price_thb', 'line_total_thb', 'deleted_at', 'created_at'],
-  claims: ['id', 'shop_id', 'customer_id', 'kind', 'frame_model', 'frame_code', 'issue', 'repair_items', 'cost_thb', 'pickup_date', 'photo', 'status', 'signed_at', 'notes', 'deleted_at', 'created_at']
+  claims: ['id', 'shop_id', 'customer_id', 'kind', 'frame_model', 'frame_code', 'issue', 'repair_items', 'cost_thb', 'pickup_date', 'photo', 'status', 'signed_at', 'notes', 'deleted_at', 'created_at'],
+  sellers: ['id', 'shop_id', 'name', 'role', 'deleted_at', 'created_at']
 };
 const T = Object.keys(COLS);
 const db = {}; T.forEach(t => db[t] = ls.get('db_' + t, []));
@@ -160,6 +161,7 @@ const NEEDS = { general: 'ใช้งานทั่วไป', screen: 'ทำ
 const TYPES = { lens: 'เลนส์', frame: 'กรอบ', service: 'บริการ', other: 'อื่น ๆ' };
 const QST = { draft: 'ร่าง', presented: 'เสนอแล้ว', accepted: 'ลูกค้าตกลง', declined: 'ลูกค้าปฏิเสธ', expired: 'หมดอายุ', converted: 'ออกขายแล้ว' };
 const PAY_LABELS = { cash: 'เงินสด', card: 'บัตร', transfer: 'โอน/พร้อมเพย์ QR' };
+const ROLE_LABEL = { owner: 'เจ้าของ', manager: 'ผู้จัดการ', staff: 'พนักงาน' };
 const SHOP_ADDR = 'วิคตอเรียการ์เด้น ห้องที่ N102-104 อาคารN เลขที่ 1869 ถ.เพชรเกษม แขวงหลักสอง เขตบางแค กรุงเทพฯ 10600';
 const SHOP_PHONE = '086-9885360 / 097-2382217';
 const SHOP_TAXID = '4101600006509';
@@ -309,6 +311,16 @@ function nextCode() {
   }
   return yy + String(maxN + 1).padStart(4, '0');
 }
+function nextReceiptNo() {
+  const yy = String(new Date().getFullYear()).slice(-2);
+  let maxN = 0;
+  for (const q of db.quotes) {
+    const no = q.quote_number || '';
+    const m = /^RC-?(\d{2})(\d{4})$/.exec(no);
+    if (m && m[1] === yy && +m[2] > maxN) maxN = +m[2];
+  }
+  return `RC-${yy}${String(maxN + 1).padStart(4, '0')}`;
+}
 // IMPORT-HELPERS-END
 let IMP = null;
 const TEMPLATE = [['รหัสลูกค้า', 'ชื่อ-นามสกุล', 'โทรศัพท์', 'งบประมาณ', 'ไลฟ์สไตล์', 'หมายเหตุ', 'วันที่ตรวจ', 'ขวา SPH', 'ขวา CYL', 'ขวา AXIS', 'ซ้าย SPH', 'ซ้าย CYL', 'ซ้าย AXIS', 'PD', 'ADD'], ['C0001', 'สมชาย ใจดี', '0812345678', '8000', 'ทำงานหน้าจอ', '', '2026-10-01', '-1.25', '-0.50', '90', '-1.00', '', '', '62', '']];
@@ -412,9 +424,10 @@ const views = {
       : `<form data-form="auth"><label>อีเมล<input type="email" name="email" required autocomplete="username"></label><label>รหัสผ่าน (อย่างน้อย 6 ตัว)<input type="password" name="password" required minlength="6" autocomplete="current-password"></label><button class="btn" type="submit" value="login">เข้าสู่ระบบ</button> <button class="btn line" type="submit" value="signup">สมัครบัญชีใหม่</button></form>`;
     const mkShop = sess && !shop && navigator.onLine ? `<div class="panel"><h2>สร้างร้านของคุณ</h2><p class="tag">ยังไม่มีร้านผูกกับบัญชีนี้ ถ้าเป็นพนักงาน ให้เจ้าของร้านเพิ่มอีเมลของคุณในหน้านี้ก่อน</p><form data-form="shop"><label>ชื่อร้าน<input name="name" required></label><button class="btn" type="submit">สร้างร้าน</button></form></div>` : '';
     const staff = shop?.role === 'owner' ? `<div class="panel"><h2>พนักงานในร้าน</h2>${(S.staff || []).map(m => `<div class="row"><span>${esc(m.email)} <span class="st">${m.role}</span></span>${m.role !== 'owner' ? `<button class="btn line sm bad" data-act="rmstaff" data-id="${m.user_id}">ถอด</button>` : ''}</div>`).join('') || '<p class="tag">กำลังโหลด…</p>'}<form data-form="staff" style="margin-top:14px"><div class="two"><label>อีเมลพนักงาน (ต้องสมัครบัญชีแล้ว)<input type="email" name="email" required></label><label>บทบาท<select name="role"><option value="staff">พนักงาน</option><option value="manager">ผู้จัดการ (ลบข้อมูลและดูต้นทุนได้)</option></select></label></div><button class="btn" type="submit">เพิ่ม/เปลี่ยนบทบาท</button></form></div>` : '';
+    const sellers = `<div class="panel"><h2>พนักงานขาย (เลือกตอนออกใบเสร็จ)</h2><p class="tag">แค่ใส่ชื่อไว้เลือกตอนออกใบเสร็จ ไม่ต้องสมัครเข้าระบบ ลบออกได้ตลอด</p>${live('sellers').map(s => `<div class="row"><span>${esc(s.name)} <span class="st">${esc(ROLE_LABEL[s.role] || s.role || '')}</span></span><button class="btn line sm bad" data-act="delseller" data-id="${s.id}">ลบ</button></div>`).join('') || '<p class="tag">ยังไม่มีรายชื่อพนักงานขาย</p>'}<form data-form="seller" style="margin-top:14px"><div class="two"><label>ชื่อพนักงาน<input name="name" required></label><label>ตำแหน่ง<select name="role"><option value="staff">พนักงาน</option><option value="manager">ผู้จัดการ</option><option value="owner">เจ้าของ</option></select></label></div><button class="btn" type="submit">เพิ่มพนักงานขาย</button></form></div>`;
     return `<h1>ตั้งค่า</h1><p class="sub">เชื่อมต่อ Supabase เพื่อซิงก์ข้อมูลระหว่างเครื่อง</p>
     <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr))">
-    <div class="panel"><h2>บัญชี</h2>${acct}</div>${mkShop}${staff}
+    <div class="panel"><h2>บัญชี</h2>${acct}</div>${mkShop}${staff}${sellers}
     <div class="panel"><h2>การเชื่อมต่อ</h2><label>Project URL<input data-bind="url" value="${esc(c.url)}"></label><label>Publishable key<input data-bind="key" value="${esc(c.key)}"></label><p class="tag">ใช้เฉพาะ publishable key ห้ามใส่ secret key</p></div>
     <div class="panel"><h2>ข้อมูลในเครื่อง</h2><p class="tag">รอซิงก์ ${pendingCount()} รายการ${errCount() ? ` · ผิดพลาด ${errCount()} รายการ (แก้ไขรายการนั้นแล้วบันทึกใหม่เพื่อลองอีกครั้ง)` : ''}</p><button class="btn line" data-act="backup">สำรองข้อมูลเป็นไฟล์ JSON</button></div></div>`;
   }
@@ -688,11 +701,12 @@ function custForm(c = {}, from = '') {
 }
 function rxForm(cid, pre = '') {
   const g = (n, l, st = '0.25') => fld(n, l, '', 'number', `step="${st}"`);
-  dialog(`<form data-form="rx" data-cid="${cid}"><h2>เพิ่มค่าสายตา · ${esc(custName(cid))}</h2>
+  const eyeGrid = (prefix, label) => `<div style="margin-top:10px"><div class="tag" style="font-weight:600;margin-bottom:6px">${label}</div>
+    <div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0 12px">${g(prefix + '_sph', 'SPH')}${g(prefix + '_cyl', 'CYL')}${fld(prefix + '_axis', 'AXIS (0-180)', '', 'number', 'min="0" max="180"')}${g(prefix + '_add', 'ADD')}${g(prefix + '_pd', 'PD', '0.5')}</div></div>`;
+  dialog(`<style>#dlg{width:min(640px,95vw)!important}</style><form data-form="rx" data-cid="${cid}"><h2>เพิ่มค่าสายตา · ${esc(custName(cid))}</h2>
     <div class="two">${fld('exam_date', 'วันที่ตรวจ', now().slice(0, 10), 'date')}${fld('examiner', 'ผู้ตรวจ', '', 'text')}</div>
-    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:0 10px">${g('od_sph', 'ขวา SPH')}${g('od_cyl', 'ขวา CYL')}${fld('od_axis', 'ขวา AXIS (0-180)', '', 'number', 'min="0" max="180"')}${g('od_add', 'ขวา ADD')}${g('od_pd', 'ขวา PD', '0.5')}</div>
-    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:0 10px;margin-top:4px">${g('os_sph', 'ซ้าย SPH')}${g('os_cyl', 'ซ้าย CYL')}${fld('os_axis', 'ซ้าย AXIS (0-180)', '', 'number', 'min="0" max="180"')}${g('os_add', 'ซ้าย ADD')}${g('os_pd', 'ซ้าย PD', '0.5')}</div>
-    <label>บันทึก<textarea name="notes" rows="2">${esc(pre)}</textarea></label>${foot('บันทึกค่าสายตา')}</form>`);
+    ${eyeGrid('od', 'ขวา (OD)')}${eyeGrid('os', 'ซ้าย (OS)')}
+    <label style="margin-top:12px">บันทึก<textarea name="notes" rows="2">${esc(pre)}</textarea></label>${foot('บันทึกค่าสายตา')}</form>`);
 }
 function custView(id) {
   const c = find('customer_profiles', id), rx = db.prescriptions.filter(r => !r.deleted_at && r.customer_id === id).sort((a, b) => (b.exam_date || b.created_at).localeCompare(a.exam_date || a.created_at));
@@ -1155,7 +1169,6 @@ function quoteSheet(id) {
 }
 let RCPT = null, RCPT_FOR = null, SIG_CANVAS = null;
 function receiptData(forQuoteId) {
-  const curSeller = sess?.email || sess?.user?.email || '';
   if (forQuoteId) {
     const q = find('quotes', forQuoteId);
     const items = live('quote_items').filter(i => i.quote_id === forQuoteId);
@@ -1165,7 +1178,7 @@ function receiptData(forQuoteId) {
       items: items.map(i => ({ name: i.item_name_snapshot, type: i.product_type, qty: i.quantity, price: i.unit_price_thb, lineTotal: i.line_total_thb, productId: i.product_id })),
       sub: q.subtotal_thb, discTotal: q.discount_thb, total: q.total_thb,
       defNo: q.quote_number || '', defDate: q.receipt_date || (q.created_at || '').slice(0, 10) || now().slice(0, 10),
-      defPay: meta.payment || [], defSig: meta.signature || '', defSeller: meta.seller || curSeller
+      defPay: meta.payment || [], defSig: meta.signature || '', defSeller: meta.seller || ''
     };
   }
   const c = cartCalc();
@@ -1174,7 +1187,7 @@ function receiptData(forQuoteId) {
     items: S.cart.map(i => ({ name: i.name, type: i.type, qty: i.qty, price: i.price, lineTotal: i.price * i.qty, productId: i.id })),
     sub: c.sub, discTotal: c.discTotal, total: c.total,
     defNo: '', defDate: now().slice(0, 10),
-    defPay: [], defSig: '', defSeller: curSeller
+    defPay: [], defSig: '', defSeller: ''
   };
 }
 function itemExtraLine(productId, type) {
@@ -1190,7 +1203,8 @@ function receiptHTML() {
   const rx = d.customerId ? latestRx(d.customerId) : null;
   const lensDetail = d.items.filter(i => i.type === 'lens').map(i => { const ex = itemExtraLine(i.productId, 'lens'); return ex ? `${i.name} (${ex})` : i.name; }).join(', ') || '-';
   const frameDetail = d.items.filter(i => i.type === 'frame').map(i => { const ex = itemExtraLine(i.productId, 'frame'); return ex ? `${i.name} (${ex})` : i.name; }).join(', ') || '-';
-  const rxLine = rx ? `ขวา ${fmtP(rx.od_sph)}${rx.od_cyl != null ? '/' + fmtP(rx.od_cyl) + '×' + (rx.od_axis ?? '-') : ''} ADD ${fmtP(rx.od_add ?? rx.add_power)} PD ${rx.od_pd ?? rx.pd ?? '-'} · ซ้าย ${fmtP(rx.os_sph)}${rx.os_cyl != null ? '/' + fmtP(rx.os_cyl) + '×' + (rx.os_axis ?? '-') : ''} ADD ${fmtP(rx.os_add ?? rx.add_power)} PD ${rx.os_pd ?? rx.pd ?? '-'}${rx.examiner ? ` · ผู้ตรวจ: ${esc(rx.examiner)}` : ''}` : 'ไม่มีข้อมูลค่าสายตาในระบบ';
+  const rxRow = (label, sph, cyl, axis, add, pd) => `<tr><td style="padding:2px 12px 2px 0;font-weight:600;white-space:nowrap">${label}</td><td style="padding:2px 10px">SPH ${fmtP(sph)}</td><td style="padding:2px 10px">CYL ${fmtP(cyl)}</td><td style="padding:2px 10px">AXIS ${axis ?? '-'}</td><td style="padding:2px 10px">ADD ${fmtP(add)}</td><td style="padding:2px 0">PD ${pd ?? '-'}</td></tr>`;
+  const rxLine = rx ? `<table style="margin:2px 0 0;font-size:12.5px">${rxRow('ขวา', rx.od_sph, rx.od_cyl, rx.od_axis, rx.od_add ?? rx.add_power, rx.od_pd ?? rx.pd)}${rxRow('ซ้าย', rx.os_sph, rx.os_cyl, rx.os_axis, rx.os_add ?? rx.add_power, rx.os_pd ?? rx.pd)}</table>${rx.examiner ? `<span class="tag">ผู้ตรวจ: ${esc(rx.examiner)}</span>` : ''}` : '<span class="tag">ไม่มีข้อมูลค่าสายตาในระบบ</span>';
   return `<div class="sheet">
     <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px">
       <img src="${RECEIPT_LOGO_DATA_URI}" style="height:46px;object-fit:contain;flex-shrink:0">
@@ -1201,7 +1215,7 @@ function receiptHTML() {
     <h2 style="margin:0 0 2px">ใบเสร็จรับเงิน</h2>
     <div class="meta">เลขที่ ${esc(RCPT.no || '(ยังไม่ระบุ)')} · วันที่ ${day(RCPT.date)}${RCPT.seller ? ` · ผู้ขาย: ${esc(RCPT.seller)}` : ''}</div>
     <p style="margin:4px 0"><b>ชื่อ-นามสกุล:</b> ${esc(cust?.full_name || 'ลูกค้าทั่วไป')}${cust?.customer_code ? ` <span class="tag">(${esc(cust.customer_code)})</span>` : ''}</p>
-    <p style="margin:4px 0"><b>ค่าสายตาที่ตัด:</b> ${rxLine}</p>
+    <div style="margin:4px 0"><b>ค่าสายตาที่ตัด:</b>${rxLine}</div>
     <p style="margin:4px 0"><b>ชนิดเลนส์:</b> ${esc(lensDetail)}</p>
     <p style="margin:4px 0 12px"><b>กรอบแว่น:</b> ${esc(frameDetail)}</p>
     <table><tr><th>รายการ</th><th>จำนวน</th><th>ราคา/หน่วย</th><th style="text-align:right">รวม</th></tr>${d.items.map(i => { const ex = itemExtraLine(i.productId, i.type); return `<tr><td>${esc(i.name)}${ex ? `<br><span class="tag">${esc(ex)}</span>` : ''}</td><td>${i.qty}</td><td>${baht(i.price)}</td><td style="text-align:right">${baht(i.lineTotal)}</td></tr>`; }).join('')}</table>
@@ -1214,10 +1228,11 @@ function receiptHTML() {
       ${RCPT.sig ? `<img src="${esc(RCPT.sig)}" style="height:64px;border-bottom:1px solid #999;margin-top:2px">` : `<div class="noprint tag" style="margin-top:2px">(ยังไม่ได้เซ็น)</div>`}
     </div>
     <div style="margin-top:16px;padding-top:10px;border-top:1px dashed var(--line,#e4ddd2);font-size:11px;color:var(--mute,#69756d);line-height:1.6">
-      <b>หมายเหตุ:</b> สินค้าเมื่อสั่งซื้อแล้ว <b>ไม่สามารถยกเลิกหรือคืนเงินได้</b> · รับประกันค่าสายตา 1 เดือน (เฉพาะลูกค้าที่ให้ทางร้านวัดค่าสายตาให้เท่านั้น) · กรณีเลนส์เป็นรอย หรือกรอบแว่นลอก/หัก/ชำรุดจากการใช้งาน ไม่อยู่ในเงื่อนไขการรับประกัน
+      <b>หมายเหตุ:</b> สินค้าเมื่อสั่งซื้อแล้ว <b>ไม่สามารถยกเลิกหรือคืนเงินได้</b> · รับประกันค่าสายตา 1 เดือน (เฉพาะลูกค้าที่ให้ทางร้านวัดค่าสายตาให้เท่านั้น) · กรณีเลนส์เป็นรอย หรือกรอบแว่นลอก/หัก/ชำรุดจากการใช้งาน ไม่อยู่ในเงื่อนไขการรับประกัน · มีบริการหลังการขายเฉพาะกรอบแว่นของทางร้าน ดัดทรงแว่น/ขันน็อต/เปลี่ยนแป้นจมูก/ทำความสะอาดแว่นตา ฟรีตลอดอายุการใช้งาน
     </div>
     <form data-form="receiptmeta" class="noprint" style="margin-top:14px">
-      <div class="two"><label>เลขที่ใบเสร็จ<input name="receipt_no" value="${esc(RCPT.no)}" placeholder="เช่น RC-270001"></label><label>วันที่ออกใบเสร็จ<input type="date" name="receipt_date" value="${esc(RCPT.date)}"></label></div>
+      <div class="two"><label>เลขที่ใบเสร็จ<input name="receipt_no" value="${esc(RCPT.no)}" placeholder="เว้นว่าง = รันให้อัตโนมัติตอนพิมพ์"></label><label>วันที่ออกใบเสร็จ<input type="date" name="receipt_date" value="${esc(RCPT.date)}"></label></div>
+      <label>พนักงานขาย<select name="seller"><option value="">— เลือกพนักงาน —</option>${live('sellers').map(s => `<option value="${esc(s.name)}" ${RCPT.seller === s.name ? 'selected' : ''}>${esc(s.name)}${s.role ? ` (${esc(ROLE_LABEL[s.role] || s.role)})` : ''}</option>`).join('')}</select>${!live('sellers').length ? '<span class="tag">ยังไม่มีรายชื่อ ไปเพิ่มที่ ตั้งค่า &gt; พนักงานขาย</span>' : ''}</label>
       <label><span class="lbl" style="display:block;font-size:13px;color:var(--mute,#69756d);margin-bottom:6px">ช่องทางชำระเงิน (เลือกได้มากกว่า 1)</span></label>
       <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px">${Object.entries(PAY_LABELS).map(([k, l]) => `<label class="chk" style="margin:0"><input type="checkbox" name="pay" value="${k}" ${RCPT.pay.includes(k) ? 'checked' : ''}> ${l}</label>`).join('')}</div>
       <div class="foot" style="justify-content:flex-start;margin-bottom:4px">
@@ -1228,7 +1243,7 @@ function receiptHTML() {
       <div class="foot">
         <button type="button" class="btn line" data-act="close">ปิด</button>
         <button type="submit" class="btn line">อัปเดตตัวอย่าง</button>
-        <button type="button" class="btn" data-act="print">พิมพ์ใบเสร็จ</button>
+        <button type="button" class="btn" data-act="printrcpt">พิมพ์ใบเสร็จ</button>
       </div>
     </form>
   </div>`;
@@ -1322,10 +1337,19 @@ document.addEventListener('click', e => {
   else if (a === 'csvq') download('quotes.csv', csv([['เลขที่', 'วันที่', 'ลูกค้า', 'รวม', 'ส่วนลด', 'สุทธิ', 'สถานะ'], ...live('quotes').map(q => [q.quote_number, q.created_at.slice(0, 10), custName(q.customer_id), q.subtotal_thb, q.discount_thb, q.total_thb, QST[q.status]])]));
   else if (a === 'backup') download('smart-optic-backup-' + now().slice(0, 10) + '.json', JSON.stringify(db, null, 1), 'application/json');
   else if (a === 'print') window.print();
+  else if (a === 'printrcpt') {
+    if (!RCPT.no) {
+      RCPT.no = nextReceiptNo();
+      if (RCPT_FOR) { const q = find('quotes', RCPT_FOR); save('quotes', { ...q, quote_number: RCPT.no }); commit(); }
+      dialog(receiptHTML());
+    }
+    setTimeout(() => window.print(), 30);
+  }
   else if (a === 'close') closeDlg();
   else if (a === 'syncnow') sync();
   else if (a === 'logout') { if (!pendingCount() || confirm('ยังมีข้อมูลที่ไม่ได้ซิงก์ ออกจากระบบต่อหรือไม่? (ข้อมูลยังอยู่ในเครื่อง)')) { sess = null; ls.set('sess', null); S.staff = null; render(); } }
   else if (a === 'rmstaff') { if (confirm('ถอดพนักงานคนนี้ออกจากร้าน?')) api(`/rest/v1/shop_members?shop_id=eq.${shop.id}&user_id=eq.${id}`, { method: 'DELETE' }).then(loadStaff).catch(err => toast(errText(err))); }
+  else if (a === 'delseller') { if (confirm('ลบชื่อพนักงานขายนี้?')) softDelete('sellers', id); }
   else if (a === 'custview') { S.custView = id; render(); }
   else if (a === 'splashgo') { S.mode = 'hub'; render(); }
   else if (a === 'gomode') { if (id === 'kiosk') kioskReset(); S.mode = id; render(); }
@@ -1370,7 +1394,7 @@ document.addEventListener('click', e => {
     const c = cartCalc(), qid = uid();
     const lrNote = lrSummary();
     const discNote = c.discTotal ? `ส่วนลด — กรอบ: ${c.discFrameAmt ? baht(c.discFrameAmt) : '-'} / เลนส์: ${c.discLensAmt ? baht(c.discLensAmt) : '-'}` : '';
-    save('quotes', { id: qid, customer_id: S.cust || null, quote_number: null, status: 'converted', subtotal_thb: c.sub, discount_thb: c.discTotal, total_thb: c.total, notes: [lrNote ? `ความต้องการลูกค้า: ${lrNote}` : '', discNote].filter(Boolean).join(' · ') || null, valid_until: null, receipt_date: now().slice(0, 10), meta: { payment: [], signature: '', seller: sess?.email || sess?.user?.email || '' }, deleted_at: null });
+    save('quotes', { id: qid, customer_id: S.cust || null, quote_number: null, status: 'converted', subtotal_thb: c.sub, discount_thb: c.discTotal, total_thb: c.total, notes: [lrNote ? `ความต้องการลูกค้า: ${lrNote}` : '', discNote].filter(Boolean).join(' · ') || null, valid_until: null, receipt_date: now().slice(0, 10), meta: { payment: [], signature: '', seller: '' }, deleted_at: null });
     S.cart.forEach(i => save('quote_items', { id: uid(), quote_id: qid, product_id: i.id, item_name_snapshot: i.name, product_type: i.type, quantity: i.qty, unit_price_thb: i.price, line_total_thb: i.price * i.qty, deleted_at: null }));
     S.cart = []; K.step = 'done'; K.hist = []; K.lr = freshLR(); K.lastQuoteId = qid; K.discFrame = freshDisc(); K.discLens = freshDisc(); commit(); render(); toast('บันทึกการสั่งซื้อแล้ว');
   }
@@ -1505,8 +1529,8 @@ document.addEventListener('submit', async e => {
       save('quotes', { ...find('quotes', id), status: d.status, valid_until: d.valid_until || null, notes: d.notes.trim() || null }); closeDlg(); commit(); toast('บันทึกใบเสนอราคาแล้ว');
     } else if (k === 'receiptmeta') {
       const payVals = [...f.querySelectorAll('[name="pay"]:checked')].map(x => x.value);
-      RCPT = { no: (d.receipt_no || '').trim(), date: d.receipt_date || now().slice(0, 10), pay: payVals, sig: RCPT.sig, seller: RCPT.seller };
-      if (RCPT_FOR) { const q = find('quotes', RCPT_FOR); save('quotes', { ...q, quote_number: RCPT.no || null, receipt_date: RCPT.date, meta: { ...(q.meta || {}), payment: payVals, seller: RCPT.seller || (q.meta || {}).seller || '' } }); commit(); }
+      RCPT = { no: (d.receipt_no || '').trim(), date: d.receipt_date || now().slice(0, 10), pay: payVals, sig: RCPT.sig, seller: (d.seller || '').trim() };
+      if (RCPT_FOR) { const q = find('quotes', RCPT_FOR); save('quotes', { ...q, quote_number: RCPT.no || null, receipt_date: RCPT.date, meta: { ...(q.meta || {}), payment: payVals, seller: RCPT.seller } }); commit(); }
       dialog(receiptHTML());
     } else if (k === 'auth') {
       await auth(e.submitter?.value === 'signup' ? 'signup' : 'login', d.email.trim(), d.password); toast('เข้าสู่ระบบแล้ว'); render(); await sync(); if (!shop) S.v = 'settings'; render(); loadStaff();
@@ -1514,6 +1538,8 @@ document.addEventListener('submit', async e => {
       await api('/rest/v1/rpc/create_shop', { method: 'POST', body: JSON.stringify({ p_name: d.name }) }); toast('สร้างร้านแล้ว'); await sync(); loadStaff();
     } else if (k === 'staff') {
       await api('/rest/v1/rpc/add_staff', { method: 'POST', body: JSON.stringify({ p_shop: shop.id, p_email: d.email.trim(), p_role: d.role }) }); f.reset(); toast('เพิ่มพนักงานแล้ว'); loadStaff();
+    } else if (k === 'seller') {
+      save('sellers', { id: uid(), name: d.name.trim(), role: d.role, deleted_at: null }); commit(); f.reset(); toast('เพิ่มพนักงานขายแล้ว');
     } else if (k === 'kiosklookup') {
       const qstr = d.phone.trim(), ph = digits(qstr);
       let matches = ph.length >= 8 ? live('customer_profiles').filter(c => digits(c.phone) === ph) : [];
