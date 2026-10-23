@@ -1070,14 +1070,17 @@ function kioskProductBrowse() {
   const q = (K.pq || '').toLowerCase();
   const rows = live('products').filter(p => p.product_type === type && p.active !== false && [p.product_name, p.brand, p.description].join(' ').toLowerCase().includes(q));
   const inCart = pid => S.cart.find(i => i.id === pid);
-  const card = p => { const x = inCart(p.id); return `<div class="panel" style="padding:14px;display:flex;justify-content:space-between;align-items:center;gap:12px">
-    <div style="cursor:pointer" data-act="kioskproddetail" data-id="${p.id}"><div style="font-weight:600">${esc(p.product_name)}</div><div class="tag">${esc([p.brand, p.description].filter(Boolean).join(' · '))}</div></div>
-    <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
-      <b>${baht(p.retail_price_thb)}</b>
-      <button data-act="kioskproddetail" data-id="${p.id}" class="btn line sm">ดีเทล</button>
-      ${x ? `<span class="qty"><button class="btn line sm" data-act="qty" data-id="${p.id}" data-d="-1">−</button><b>${x.qty}</b><button class="btn line sm" data-act="qty" data-id="${p.id}" data-d="1">+</button></span>` : `<button data-act="add" data-id="${p.id}" class="btn sm">เลือก</button>`}
-      <button data-act="kioskdelprod" data-id="${p.id}" class="btn line sm bad" title="ลบสินค้านี้">ลบ</button>
+  const card = p => { const x = inCart(p.id); return `<div class="panel" style="padding:14px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+      <div style="cursor:pointer" data-act="kioskproddetail" data-id="${p.id}"><div style="font-weight:600">${esc(p.product_name)}</div><div class="tag">${esc([p.brand, p.description].filter(Boolean).join(' · '))}</div></div>
+      <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
+        <b>${baht(p.retail_price_thb)}</b>
+        <button data-act="kioskproddetail" data-id="${p.id}" class="btn line sm">ดีเทล</button>
+        ${x ? `<span class="qty"><button class="btn line sm" data-act="qty" data-id="${p.id}" data-d="-1">−</button><b>${x.qty}</b><button class="btn line sm" data-act="qty" data-id="${p.id}" data-d="1">+</button></span>` : `<button data-act="add" data-id="${p.id}" class="btn sm">เลือก</button>`}
+        <button data-act="kioskdelprod" data-id="${p.id}" class="btn line sm bad" title="ลบสินค้านี้">ลบ</button>
+      </div>
     </div>
+    ${x && type === 'frame' ? `<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><input placeholder="รหัสกรอบ" value="${esc(x.code || '')}" data-bind="cartcode:${x.id}" style="width:140px;font-size:12.5px;padding:6px 8px"><input placeholder="สีกรอบ" value="${esc(x.color || '')}" data-bind="cartcolor:${x.id}" style="width:140px;font-size:12.5px;padding:6px 8px"></div>` : ''}
   </div>`; };
   const tab = (id, l) => `<button data-act="kioskcat" data-id="${id}" style="padding:9px 18px;border-radius:999px;border:1px solid ${K.pcat === id ? 'transparent' : 'rgba(0,0,0,.15)'};background:${K.pcat === id ? '#23262a' : 'rgba(255,255,255,.55)'};color:${K.pcat === id ? '#fff' : '#23262a'};font-size:13px;cursor:pointer">${l}</button>`;
   const label = type === 'frame' ? 'กรอบแว่น' : 'เลนส์';
@@ -1436,7 +1439,7 @@ document.addEventListener('click', e => {
     const c = cartCalc(), qid = uid();
     const lrNote = lrSummary();
     const discNote = c.discTotal ? `ส่วนลด — กรอบ: ${c.discFrameAmt ? baht(c.discFrameAmt) : '-'} / เลนส์: ${c.discLensAmt ? baht(c.discLensAmt) : '-'}` : '';
-    save('quotes', { id: qid, customer_id: S.cust || null, quote_number: null, status: 'converted', subtotal_thb: c.sub, discount_thb: c.discTotal, total_thb: c.total, notes: [lrNote ? `ความต้องการลูกค้า: ${lrNote}` : '', discNote].filter(Boolean).join(' · ') || null, valid_until: null, receipt_date: now().slice(0, 10), meta: { payment: [], signature: '', seller: S.activeSeller || '' }, deleted_at: null });
+    save('quotes', { id: qid, customer_id: S.cust || null, quote_number: nextReceiptNo(), status: 'converted', subtotal_thb: c.sub, discount_thb: c.discTotal, total_thb: c.total, notes: [lrNote ? `ความต้องการลูกค้า: ${lrNote}` : '', discNote].filter(Boolean).join(' · ') || null, valid_until: null, receipt_date: now().slice(0, 10), meta: { payment: [], signature: '', seller: S.activeSeller || '' }, deleted_at: null });
     S.cart.forEach(i => save('quote_items', { id: uid(), quote_id: qid, product_id: i.id, item_name_snapshot: i.name, product_type: i.type, quantity: i.qty, unit_price_thb: i.price, line_total_thb: i.price * i.qty, meta: (i.code || i.color) ? { code: i.code || null, color: i.color || null } : null, deleted_at: null }));
     S.cart = []; K.step = 'done'; K.hist = []; K.lr = freshLR(); K.lastQuoteId = qid; K.discFrame = freshDisc(); K.discLens = freshDisc(); commit(); render(); toast('บันทึกการสั่งซื้อแล้ว');
   }
