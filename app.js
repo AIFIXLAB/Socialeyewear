@@ -158,7 +158,7 @@ const NEEDS = { general: 'ใช้งานทั่วไป', screen: 'ทำ
 const TYPES = { lens: 'เลนส์', frame: 'กรอบ', service: 'บริการ', other: 'อื่น ๆ' };
 const QST = { draft: 'ร่าง', presented: 'เสนอแล้ว', accepted: 'ลูกค้าตกลง', declined: 'ลูกค้าปฏิเสธ', expired: 'หมดอายุ', converted: 'ออกขายแล้ว' };
 const NAV = [['studio', 'Sales Studio'], ['customers', 'ลูกค้า'], ['products', 'สินค้า'], ['quotes', 'ใบเสนอราคา'], ['insights', 'ภาพรวม'], ['settings', 'ตั้งค่า']];
-const S = { v: 'studio', need: 'general', cart: [], cust: '', disc: 0, notes: '', q: '', pq: '', ptype: 'all', staff: null, mode: 'splash', custView: 'all', custFrom: '', custTo: '', catQ: '', catCompare: [] };
+const S = { v: 'studio', need: 'general', cart: [], cust: '', disc: 0, notes: '', q: '', pq: '', ptype: 'all', staff: null, mode: 'splash', custView: 'all', custFrom: '', custTo: '', catQ: '', catCompare: [], catDetail: null };
 const freshLR = () => ({ purpose: [], other: '', vision: [], lenstype: [], age: '', budget: '', occupation: '', notes: '' });
 let K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null };
 const kioskReset = () => { K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null }; };
@@ -417,9 +417,56 @@ function lensCatalogCard(p, selected) {
     ${ls.power_range ? `<p style="margin:0;font-size:12.5px;color:var(--mute,#777)"><b>ช่วงค่าสายตา:</b> ${esc(ls.power_range)}</p>` : ''}
     ${ls.warranty ? `<span class="tag">รับประกัน: ${esc(ls.warranty)}</span>` : ''}
     <label class="chk" style="margin-top:4px;display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" data-act="catcompare" data-id="${p.id}" ${selected ? 'checked' : ''}> เลือกเปรียบเทียบ</label>
+    <button class="btn line sm" data-act="catdetail" data-id="${p.id}">เปิดหน้านำเสนอลูกค้า</button>
+  </div>`;
+}
+function lensPresentView(p) {
+  const ls = p.lens_spec || {};
+  const designLabel = (LENS_DESIGN.find(d => d[0] === ls.design) || [])[1];
+  const surfaceLabel = (LENS_SURFACE.find(d => d[0] === ls.surface) || [])[1];
+  const coatLabels = (ls.coatings || []).map(k => (LENS_COATINGS.find(x => x[0] === k) || [])[1]).filter(Boolean).join(', ');
+  const points = (ls.highlight || '').split(/[,·\n]/).map(s => s.trim()).filter(Boolean);
+  const kicker = l => `<div style="color:var(--gold,#c7a252);font-size:12px;letter-spacing:.14em;font-weight:700;margin-bottom:6px">${l}</div>`;
+  const specRow = (l, v) => `<tr><td style="padding:12px 16px;border-bottom:1px solid var(--line,#e4ddd2);color:var(--mute,#777)">${l}</td><td style="padding:12px 16px;border-bottom:1px solid var(--line,#e4ddd2);font-weight:600">${v || '—'}</td></tr>`;
+  return `<div style="position:fixed;inset:0;background:var(--bg,#f4f1ea);overflow:auto;padding:28px 20px">
+    <div style="max-width:820px;margin:0 auto">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:22px">
+        <button class="btn line" data-act="catdetail" data-id="">‹ กลับไปแคตตาล็อก</button>
+        <button class="btn line" style="margin-left:auto" data-act="print">พิมพ์/บันทึกเป็น PDF</button>
+        <button class="btn line" data-act="gomode" data-id="">ปิด</button>
+      </div>
+      <div class="panel" style="padding:28px">
+        ${kicker('LENS TECHNOLOGY · เทคโนโลยีเลนส์')}
+        ${p.brand ? `<div class="tag" style="margin-bottom:4px">${esc(p.brand)}</div>` : ''}
+        <h1 style="margin:0 0 20px">${esc(p.product_name)}</h1>
+        <div style="background:#f3f0e9;border-radius:16px;height:260px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;margin-bottom:26px">
+          <div style="width:64px;height:64px;border-radius:50%;background:#fff;border:6px solid var(--gold,#c7a252)"></div>
+          <span class="tag">พื้นที่แสดงภาพสินค้า / เทคโนโลยีเลนส์</span>
+        </div>
+        ${kicker('DESIGNED FOR YOUR LIFE · ออกแบบมาเพื่อชีวิตคุณ')}
+        <p style="margin:0 0 10px">${esc(p.description || 'เลนส์คุณภาพที่เลือกใช้เทคโนโลยีเหมาะกับการใช้ชีวิตประจำวัน')}</p>
+        ${ls.target ? `<p style="margin:0 0 20px"><b>เหมาะสำหรับ:</b> ${esc(ls.target)}</p>` : ''}
+        ${points.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:26px">${points.map((pt, i) => `<div class="panel" style="padding:16px"><div style="font-weight:700;margin-bottom:4px">จุดเด่นที่ ${i + 1}</div><div class="tag" style="font-size:13px">${esc(pt)}</div></div>`).join('')}</div>` : ''}
+        ${kicker('TECHNICAL SPECIFICATIONS · ข้อมูลทางเทคนิค')}
+        <div style="border:1px solid var(--line,#e4ddd2);border-radius:12px;overflow:hidden;margin-bottom:22px">
+          <table style="width:100%;border-collapse:collapse"><tbody>
+            ${specRow('Index', ls.index ? esc(ls.index) : '')}
+            ${specRow('การออกแบบ', designLabel ? esc(designLabel) : '')}
+            ${specRow('เทคโนโลยี / เคลือบผิว', [surfaceLabel, coatLabels].filter(Boolean).map(esc).join(' · '))}
+            ${specRow('ช่วงค่าสายตา', ls.power_range ? esc(ls.power_range) : '')}
+          </tbody></table>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;background:#f3f0e9;border-radius:14px;padding:18px 22px">
+          <div><div class="tag">ราคาแนะนำ</div><div style="font-size:12px;color:var(--mute,#777)">${ls.warranty ? 'รับประกัน: ' + esc(ls.warranty) : 'สอบถามเงื่อนไขเพิ่มเติมกับพนักงาน'}</div></div>
+          <div style="font-size:26px;font-weight:700">${baht(p.retail_price_thb)}</div>
+        </div>
+      </div>
+      <p class="tag" style="text-align:center;margin-top:14px">SOCIAL EYEWEAR · ข้อมูลสำหรับประกอบการแนะนำสินค้า</p>
+    </div>
   </div>`;
 }
 function lensCatalogView() {
+  if (S.catDetail) { const p = find('products', S.catDetail); if (p) return lensPresentView(p); S.catDetail = null; }
   const q = (S.catQ || '').toLowerCase();
   const rows = live('products').filter(p => p.product_type === 'lens' && p.active !== false && [p.product_name, p.brand, p.sku, p.description].join(' ').toLowerCase().includes(q))
     .sort((a, b) => (a.brand || '').localeCompare(b.brand || '') || a.product_name.localeCompare(b.product_name));
@@ -931,6 +978,7 @@ document.addEventListener('click', e => {
   }
   else if (a === 'kioskprintreceipt') { if (K.lastQuoteId) quoteSheet(K.lastQuoteId); }
   else if (a === 'catcompare') { const arr = S.catCompare || []; S.catCompare = arr.includes(id) ? arr.filter(x => x !== id) : [...arr, id]; render(); }
+  else if (a === 'catdetail') { S.catDetail = id || null; render(); }
   else if (a === 'catcomparego') {
     const prods = (S.catCompare || []).map(pid => find('products', pid)).filter(Boolean);
     const rows = [
