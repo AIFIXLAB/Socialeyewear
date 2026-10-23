@@ -17,9 +17,9 @@ const COLS = {
   prescriptions: ['id', 'shop_id', 'customer_id', 'exam_date', 'od_sph', 'od_cyl', 'od_axis', 'os_sph', 'os_cyl', 'os_axis', 'pd', 'add_power', 'od_pd', 'os_pd', 'od_add', 'os_add', 'examiner', 'notes', 'deleted_at', 'created_at'],
   products: ['id', 'shop_id', 'product_type', 'sku', 'brand', 'color', 'product_name', 'description', 'features', 'retail_price_thb', 'cost_thb', 'stock_qty', 'active', 'lens_spec', 'deleted_at', 'created_at'],
   quotes: ['id', 'shop_id', 'customer_id', 'quote_number', 'status', 'subtotal_thb', 'discount_thb', 'total_thb', 'notes', 'valid_until', 'receipt_date', 'meta', 'deleted_at', 'created_at'],
-  quote_items: ['id', 'shop_id', 'quote_id', 'product_id', 'item_name_snapshot', 'product_type', 'quantity', 'unit_price_thb', 'line_total_thb', 'deleted_at', 'created_at'],
+  quote_items: ['id', 'shop_id', 'quote_id', 'product_id', 'item_name_snapshot', 'product_type', 'quantity', 'unit_price_thb', 'line_total_thb', 'meta', 'deleted_at', 'created_at'],
   claims: ['id', 'shop_id', 'customer_id', 'kind', 'frame_model', 'frame_code', 'issue', 'repair_items', 'cost_thb', 'pickup_date', 'photo', 'status', 'signed_at', 'notes', 'deleted_at', 'created_at'],
-  sellers: ['id', 'shop_id', 'name', 'role', 'deleted_at', 'created_at']
+  sellers: ['id', 'shop_id', 'name', 'role', 'pin', 'deleted_at', 'created_at']
 };
 const T = Object.keys(COLS);
 const db = {}; T.forEach(t => db[t] = ls.get('db_' + t, []));
@@ -166,7 +166,7 @@ const SHOP_ADDR = 'วิคตอเรียการ์เด้น ห้อ
 const SHOP_PHONE = '086-9885360 / 097-2382217';
 const SHOP_TAXID = '4101600006509';
 const NAV = [['customers', 'ลูกค้า'], ['products', 'สินค้า'], ['insights', 'ภาพรวม'], ['settings', 'ตั้งค่า']];
-const S = { v: 'customers', need: 'general', cart: [], cust: '', disc: 0, notes: '', q: '', pq: '', ptype: 'all', staff: null, mode: 'splash', custView: 'all', custFrom: '', custTo: '', catQ: '', catCompare: [], catDetail: null, catReturn: '', catDesign: '', catMain: '' };
+const S = { v: 'customers', need: 'general', cart: [], cust: '', disc: 0, notes: '', q: '', pq: '', ptype: 'all', staff: null, mode: 'splash', custView: 'all', custFrom: '', custTo: '', catQ: '', catCompare: [], catDetail: null, catReturn: '', catDesign: '', catMain: '', activeSeller: null };
 const freshLR = () => ({ purpose: [], other: '', vision: [], lenstype: [], age: '', budget: '', occupation: '', notes: '' });
 const freshDisc = () => ({ type: 'amt', val: 0 });
 let K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, discFrame: freshDisc(), discLens: freshDisc() };
@@ -393,7 +393,7 @@ const views = {
     const chips = [['all', 'ทั้งหมด'], ...Object.entries(TYPES)].map(([k, l]) => `<button class="chip ${S.ptype === k ? 'on' : ''}" data-act="ptype" data-id="${k}">${l}</button>`).join('');
     const missingOther = OTHER_ITEMS.filter(n => !live('products').some(p => p.product_name === n));
     const lensCount = live('products').filter(p => p.product_type === 'lens' && p.active !== false).length;
-    return `<div class="bar"><div><h1>สินค้า</h1><p class="sub" style="margin:0">ราคา สต็อก และแท็กการใช้งานสำหรับ Sales Studio</p></div><div class="tools"><input placeholder="ค้นหาชื่อ SKU แบรนด์" value="${esc(S.pq)}" data-bind="pq" style="width:220px">${missingOther.length ? `<button class="btn line" data-act="impother">นำเข้ารายการบริการเดิม ${missingOther.length} รายการ</button>` : ''}${lensCount ? `<button class="btn line" data-act="gomode" data-id="lenscat">เปิดแคตตาล็อกเลนส์</button>` : ''}<button class="btn" data-act="newprod">เพิ่มสินค้า</button></div></div>
+    return `<div class="bar"><div><h1>สินค้า</h1><p class="sub" style="margin:0">ราคา สต็อก และแท็กการใช้งานสำหรับ Sales Studio</p></div><div class="tools"><input placeholder="ค้นหาชื่อ SKU แบรนด์" value="${esc(S.pq)}" data-bind="pq" style="width:220px">${missingOther.length ? `<button class="btn line" data-act="impother">นำเข้ารายการบริการเดิม ${missingOther.length} รายการ</button>` : ''}${lensCount ? `<button class="btn line" data-act="gomode" data-id="lenscat">เปิดแคตตาล็อกเลนส์</button>` : ''}<button class="btn line" data-act="newframe">เพิ่มกรอบแว่น</button><button class="btn" data-act="newprod">เพิ่มสินค้า (เลนส์/อื่นๆ)</button></div></div>
     <div class="chips">${chips}</div>
     ${rows.length ? `<div class="panel wrap"><table><tr><th>สินค้า</th><th>ประเภท</th><th>ราคา</th>${mgr() ? '<th>ต้นทุน</th>' : ''}<th>สต็อก</th><th>สถานะ</th><th></th></tr>${rows.map(p => `<tr><td>${esc(p.product_name)}<br><span class="tag">${esc([p.sku, p.brand].filter(Boolean).join(' · '))}</span></td><td>${TYPES[p.product_type]}</td><td>${baht(p.retail_price_thb)}</td>${mgr() ? `<td>${p.cost_thb != null ? baht(p.cost_thb) : '-'}</td>` : ''}<td>${p.stock_qty == null ? '-' : `<span class="${p.stock_qty <= 2 ? 'warn' : ''}">${p.stock_qty}</span>`}</td><td>${p.active === false ? '<span class="st">ปิดขาย</span>' : '<span class="st accepted">ขายอยู่</span>'}</td><td class="act"><button class="btn line sm" data-act="editprod" data-id="${p.id}">แก้ไข</button>${mgr() ? ` <button class="btn line sm bad" data-act="delprod" data-id="${p.id}">ลบ</button>` : ''}</td></tr>`).join('')}</table></div>`
       : empty('ยังไม่มีสินค้า', `<button class="btn" data-act="newprod">เพิ่มสินค้า</button> ${live('products').length ? '' : '<button class="btn line" data-act="sample">เพิ่มสินค้าตัวอย่าง 8 รายการ</button>'}`)}`;
@@ -423,7 +423,7 @@ const views = {
     const acct = sess ? `<p>ล็อกอินเป็น <b>${esc(sess.email || sess.user?.email || '')}</b>${shop ? `<br>ร้าน: <b>${esc(shop.name)}</b> <span class="st">${{ owner: 'เจ้าของ', manager: 'ผู้จัดการ', staff: 'พนักงาน' }[shop.role]}</span>` : ''}</p><button class="btn" data-act="syncnow">ซิงก์ตอนนี้</button> <button class="btn line" data-act="logout">ออกจากระบบ</button>`
       : `<form data-form="auth"><label>อีเมล<input type="email" name="email" required autocomplete="username"></label><label>รหัสผ่าน (อย่างน้อย 6 ตัว)<input type="password" name="password" required minlength="6" autocomplete="current-password"></label><button class="btn" type="submit" value="login">เข้าสู่ระบบ</button> <button class="btn line" type="submit" value="signup">สมัครบัญชีใหม่</button></form>`;
     const mkShop = sess && !shop && navigator.onLine ? `<div class="panel"><h2>สร้างร้านของคุณ</h2><p class="tag">ยังไม่มีร้านผูกกับบัญชีนี้ ถ้าเป็นพนักงาน ให้เจ้าของร้านเพิ่มอีเมลของคุณในหน้านี้ก่อน</p><form data-form="shop"><label>ชื่อร้าน<input name="name" required></label><button class="btn" type="submit">สร้างร้าน</button></form></div>` : '';
-    const sellers = `<div class="panel"><h2>พนักงานขาย (เลือกตอนออกใบเสร็จ)</h2><p class="tag">แค่ใส่ชื่อไว้เลือกตอนออกใบเสร็จ ไม่ต้องสมัครเข้าระบบ ลบออกได้ตลอด</p><button type="button" class="btn line sm" data-act="sellerreport" style="margin-bottom:12px">ดูยอดขายแยกตามพนักงาน</button>${live('sellers').map(s => `<div class="row"><span>${esc(s.name)} <span class="st">${esc(ROLE_LABEL[s.role] || s.role || '')}</span></span><button class="btn line sm bad" data-act="delseller" data-id="${s.id}">ลบ</button></div>`).join('') || '<p class="tag">ยังไม่มีรายชื่อพนักงานขาย</p>'}<form data-form="seller" style="margin-top:14px"><div class="two"><label>ชื่อพนักงาน<input name="name" required></label><label>ตำแหน่ง<select name="role"><option value="staff">พนักงาน</option><option value="manager">ผู้จัดการ</option><option value="owner">เจ้าของ</option></select></label></div><button class="btn" type="submit">เพิ่มพนักงานขาย</button></form></div>`;
+    const sellers = `<div class="panel"><h2>พนักงานขาย (เลือกตอนออกใบเสร็จ)</h2><p class="tag">ใส่ชื่อ + รหัสผ่าน 4 หลัก ใช้กดเข้าหน้าบริการลูกค้าหน้าร้าน (เข้าได้เฉพาะหน้าบ้าน เข้าหลังบ้านไม่ได้) ไม่ต้องสมัครเข้าระบบ ลบออกได้ตลอด</p><button type="button" class="btn line sm" data-act="sellerreport" style="margin-bottom:12px">ดูยอดขายแยกตามพนักงาน</button>${live('sellers').map(s => `<div class="row"><span>${esc(s.name)} <span class="st">${esc(ROLE_LABEL[s.role] || s.role || '')}</span>${s.pin ? ` <span class="tag">รหัส ${esc(s.pin)}</span>` : ''}</span><button class="btn line sm bad" data-act="delseller" data-id="${s.id}">ลบ</button></div>`).join('') || '<p class="tag">ยังไม่มีรายชื่อพนักงานขาย</p>'}<form data-form="seller" style="margin-top:14px"><div class="two"><label>ชื่อพนักงาน<input name="name" required></label><label>ตำแหน่ง<select name="role"><option value="staff">พนักงาน</option><option value="manager">ผู้จัดการ</option><option value="owner">เจ้าของ</option></select></label></div><label>รหัสผ่าน 4 หลัก (สำหรับกดเข้าหน้าร้าน)<input name="pin" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="เช่น 1234"></label><button class="btn" type="submit">เพิ่มพนักงานขาย</button></form></div>`;
     return `<h1>ตั้งค่า</h1><p class="sub">เชื่อมต่อ Supabase เพื่อซิงก์ข้อมูลระหว่างเครื่อง</p>
     <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr))">
     <div class="panel"><h2>บัญชี</h2>${acct}</div>${mkShop}${sellers}
@@ -818,6 +818,18 @@ function readProdDraft(form) {
     }
   };
 }
+const FRAME_TYPES = [['semi', 'กรอบเซาะร่อง (Nylor)'], ['full', 'กรอบเต็ม (Full rim)'], ['rimless', 'กรอบเจาะ (Rimless)']];
+function frameForm(p = {}) {
+  const fs = p.lens_spec || {};
+  dialog(`<form data-form="frame" data-id="${p.id || ''}"><h2>${p.id ? 'แก้ไขกรอบแว่น' : 'เพิ่มกรอบแว่น'}</h2>
+    <div class="two">${fld('brand', 'ยี่ห้อกรอบ', p.brand)}${fld('manufacturer', 'บริษัทผู้ผลิต', fs.manufacturer)}</div>
+    <div class="two">${fld('product_name', 'ชื่อรุ่น / ชื่อสินค้า', p.product_name, 'text', 'required')}${fld('material', 'วัสดุ (Material)', fs.material)}</div>
+    <label>ประเภทกรอบ<select name="frame_type"><option value="">— ไม่ระบุ —</option>${FRAME_TYPES.map(([k, l]) => `<option value="${k}" ${fs.frame_type === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+    <div class="two">${fld('retail_price_thb', 'ราคาขาย (บาท)', p.retail_price_thb ?? 0, 'number', 'min="0" required')}${mgr() ? fld('cost_thb', 'ราคาต้นทุน (บาท)', p.cost_thb, 'number', 'min="0"') : ''}</div>
+    ${fld('purchased_at', 'วันที่ซื้อเข้า', fs.purchased_at || '', 'date')}
+    <p class="tag">รหัสกรอบ/สีกรอบ ให้ใส่ตอนเลือกกรอบในหน้าบริการลูกค้า (เพราะกรอบแต่ละชิ้นอาจรหัส/สีไม่เหมือนกัน)</p>
+    ${foot('บันทึกกรอบแว่น')}</form>`);
+}
 function prodForm(p = {}) {
   const brandList = knownBrands(p.product_type);
   const specList = [...LOOKUPS.lensTypes, ...LOOKUPS.lensIndex, ...LOOKUPS.contactTypes];
@@ -853,7 +865,7 @@ function prodForm(p = {}) {
 const SILVER_BG = 'linear-gradient(150deg,#f3f4f6 0%,#d6dadf 28%,#aab0b8 58%,#80858d 100%)';
 function splashView() {
   setThemeColor('#aab0b8');
-  return `<div data-act="splashgo" style="position:fixed;inset:0;background:${SILVER_BG};display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer">
+  return `<div style="position:fixed;inset:0;background:${SILVER_BG};display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px">
   <style>
     @keyframes seoSpin{to{transform:rotate(360deg)}}
     @keyframes seoPulse{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.03)}}
@@ -863,12 +875,17 @@ function splashView() {
     .seoLogoWrap{animation:seoIn .9s ease both}
     .seoTxt{animation:seoIn .9s ease .25s both}
   </style>
-  <div class="seoLogoWrap" style="position:relative;width:230px;height:230px;max-width:60vw;max-height:60vw">
+  <div class="seoLogoWrap" style="position:relative;width:200px;height:200px;max-width:50vw;max-height:50vw">
     <div class="seoRing"></div><div class="seoRing2"></div>
     <img src="${LOGO_DATA_URI}" style="position:relative;width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 16px 26px rgba(20,22,26,.35)) drop-shadow(0 0 18px rgba(255,255,255,.55))">
   </div>
-  <div class="seoTxt" style="margin-top:28px;color:#2c2f33;font-size:13px;letter-spacing:.35em;text-transform:uppercase;text-align:center;text-shadow:0 1px 0 rgba(255,255,255,.4)">Social Eyewear</div>
-  <div class="seoTxt" style="margin-top:6px;color:#565b61;font-size:11.5px;letter-spacing:.15em">แตะหน้าจอเพื่อเข้าสู่ระบบ</div>
+  <div class="seoTxt" style="margin-top:22px;color:#2c2f33;font-size:13px;letter-spacing:.35em;text-transform:uppercase;text-align:center;text-shadow:0 1px 0 rgba(255,255,255,.4)">Social Eyewear</div>
+  <div class="seoTxt" style="margin-top:6px;color:#565b61;font-size:11.5px;letter-spacing:.15em">กรอกรหัสพนักงานเพื่อเข้าใช้งาน</div>
+  <form data-form="pinlogin" class="seoTxt" style="margin-top:20px;display:flex;flex-direction:column;align-items:center;gap:10px">
+    <input name="pin" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="รหัส 4 หลัก" autofocus style="width:180px;text-align:center;font-size:22px;letter-spacing:.4em;padding:12px 10px;border-radius:12px;border:1px solid rgba(0,0,0,.15);background:rgba(255,255,255,.85);color:#23262a">
+    <button type="submit" class="btn" style="padding:10px 30px;border-radius:999px">เข้าใช้งาน</button>
+  </form>
+  <button type="button" data-act="splashgo" class="seoTxt" style="margin-top:20px;background:none;border:none;color:#565b61;font-size:11.5px;text-decoration:underline;cursor:pointer;padding:6px">เข้าสู่ระบบผู้ดูแล (Admin)</button>
   </div>`;
 }
 function hubView() {
@@ -882,7 +899,7 @@ function hubView() {
       <div style="font-size:12.5px;color:#565b61;line-height:1.7">ตรวจสายตา · แนะนำเลนส์ · ตัดกรอบและเลนส์ใหม่ · ซ่อมและเคลม</div>
     </button>
     <button data-act="gomode" data-id="admin" style="flex:1;min-width:240px;padding:30px 22px;border-radius:18px;border:1px solid rgba(255,255,255,.7);background:rgba(255,255,255,.55);backdrop-filter:blur(6px);box-shadow:0 14px 34px rgba(20,22,26,.2);color:#23262a;cursor:pointer;text-align:left">
-      <div style="font-size:18px;font-weight:700;margin-bottom:6px">ข้อมูลลูกค้า</div>
+      <div style="font-size:18px;font-weight:700;margin-bottom:6px">Admin</div>
       <div style="font-size:12.5px;color:#565b61;line-height:1.7">ประวัติลูกค้า สินค้า ใบเสนอราคา และภาพรวมร้าน</div>
     </button>
   </div>
@@ -1093,7 +1110,7 @@ function kioskCart() {
   </div>`;
   return `<div class="panel" style="padding:24px">
     <h2 style="margin-top:0">สรุปรายการ</h2>
-    ${S.cart.length ? S.cart.map(i => `<div class="row"><span>${esc(i.name)}<br><span class="tag">${baht(i.price)} × ${i.qty}</span></span><span class="qty"><button class="btn line sm" data-act="qty" data-id="${i.id}" data-d="-1">−</button><b>${i.qty}</b><button class="btn line sm" data-act="qty" data-id="${i.id}" data-d="1">+</button></span></div>`).join('') : '<p class="tag">ยังไม่ได้เลือกสินค้า</p>'}
+    ${S.cart.length ? S.cart.map(i => `<div class="row" style="align-items:flex-start"><span style="flex:1"><span>${esc(i.name)}</span><br><span class="tag">${baht(i.price)} × ${i.qty}</span>${i.type === 'frame' ? `<div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap"><input placeholder="รหัสกรอบ" value="${esc(i.code || '')}" data-bind="cartcode:${i.id}" style="width:132px;font-size:12.5px;padding:6px 8px"><input placeholder="สีกรอบ" value="${esc(i.color || '')}" data-bind="cartcolor:${i.id}" style="width:132px;font-size:12.5px;padding:6px 8px"></div>` : ''}</span><span class="qty"><button class="btn line sm" data-act="qty" data-id="${i.id}" data-d="-1">−</button><b>${i.qty}</b><button class="btn line sm" data-act="qty" data-id="${i.id}" data-d="1">+</button></span></div>`).join('') : '<p class="tag">ยังไม่ได้เลือกสินค้า</p>'}
     ${discRow('กรอบแว่น', 'frame', K.discFrame, c.frameSub, c.discFrameAmt)}
     ${discRow('เลนส์', 'lens', K.discLens, c.lensSub, c.discLensAmt)}
     <div class="row" style="border:0;margin-top:6px"><span>ยอดรวมก่อนลด</span><span>${baht(c.sub)}</span></div>
@@ -1152,8 +1169,8 @@ function kioskView() {
     <div style="max-width:${wide};margin:0 auto 22px;display:flex;align-items:center;gap:10px">
       <button data-act="kioskback" style="${backBtn}">‹ ย้อนกลับ</button>
       <img src="${LOGO_DATA_URI}" style="width:32px;height:32px;object-fit:contain;filter:drop-shadow(0 4px 8px rgba(20,22,26,.3))">
-      <span style="font-size:11.5px;letter-spacing:.18em;color:#23262a;font-weight:600">SOCIAL EYEWEAR · บริการลูกค้า</span>
-      <button data-act="gomode" data-id="hub" style="margin-left:auto;padding:8px 18px;border-radius:999px;border:1px solid rgba(255,255,255,.8);background:rgba(255,255,255,.65);box-shadow:0 6px 16px rgba(20,22,26,.18);color:#23262a;font-size:12.5px;cursor:pointer">ออก</button>
+      <span style="font-size:11.5px;letter-spacing:.18em;color:#23262a;font-weight:600">SOCIAL EYEWEAR · บริการลูกค้า${S.activeSeller ? ` · ${esc(S.activeSeller)}` : ''}</span>
+      <button data-act="kioskexit" style="margin-left:auto;padding:8px 18px;border-radius:999px;border:1px solid rgba(255,255,255,.8);background:rgba(255,255,255,.65);box-shadow:0 6px 16px rgba(20,22,26,.18);color:#23262a;font-size:12.5px;cursor:pointer">ออก</button>
     </div>
     <div style="max-width:${wide};margin:0 auto">${inner}</div>
   </div>`;
@@ -1194,7 +1211,7 @@ function receiptData(forQuoteId) {
     const meta = q.meta || {};
     return {
       customerId: q.customer_id, saved: true,
-      items: items.map(i => ({ name: i.item_name_snapshot, type: i.product_type, qty: i.quantity, price: i.unit_price_thb, lineTotal: i.line_total_thb, productId: i.product_id })),
+      items: items.map(i => ({ name: i.item_name_snapshot, type: i.product_type, qty: i.quantity, price: i.unit_price_thb, lineTotal: i.line_total_thb, productId: i.product_id, code: (i.meta || {}).code || '', color: (i.meta || {}).color || '' })),
       sub: q.subtotal_thb, discTotal: q.discount_thb, total: q.total_thb,
       defNo: q.quote_number || '', defDate: q.receipt_date || (q.created_at || '').slice(0, 10) || now().slice(0, 10),
       defPay: meta.payment || [], defSig: meta.signature || '', defSeller: meta.seller || ''
@@ -1203,25 +1220,28 @@ function receiptData(forQuoteId) {
   const c = cartCalc();
   return {
     customerId: K.custId, saved: false,
-    items: S.cart.map(i => ({ name: i.name, type: i.type, qty: i.qty, price: i.price, lineTotal: i.price * i.qty, productId: i.id })),
+    items: S.cart.map(i => ({ name: i.name, type: i.type, qty: i.qty, price: i.price, lineTotal: i.price * i.qty, productId: i.id, code: i.code || '', color: i.color || '' })),
     sub: c.sub, discTotal: c.discTotal, total: c.total,
     defNo: '', defDate: now().slice(0, 10),
-    defPay: [], defSig: '', defSeller: ''
+    defPay: [], defSig: '', defSeller: S.activeSeller || ''
   };
 }
-function itemExtraLine(productId, type) {
-  const p = productId ? find('products', productId) : null;
-  if (!p) return '';
-  if (type === 'frame') return [p.brand ? `ยี่ห้อ ${p.brand}` : '', p.color ? `สี ${p.color}` : '', p.sku ? `รหัส ${p.sku}` : ''].filter(Boolean).join(' · ');
-  if (type === 'lens') { const ls = p.lens_spec || {}; return [p.brand ? `ยี่ห้อ ${p.brand}` : '', ls.index ? `Index ${ls.index}` : '', p.sku ? `รหัส ${p.sku}` : ''].filter(Boolean).join(' · '); }
+function itemExtraLine(item, type) {
+  const p = item?.productId ? find('products', item.productId) : null;
+  if (type === 'frame') {
+    const code = item?.code || p?.sku || '';
+    const color = item?.color || p?.color || '';
+    return [p?.brand ? `ยี่ห้อ ${p.brand}` : '', color ? `สี ${color}` : '', code ? `รหัส ${code}` : ''].filter(Boolean).join(' · ');
+  }
+  if (type === 'lens') { const ls = p?.lens_spec || {}; return [p?.brand ? `ยี่ห้อ ${p.brand}` : '', ls.index ? `Index ${ls.index}` : '', p?.sku ? `รหัส ${p.sku}` : ''].filter(Boolean).join(' · '); }
   return '';
 }
 function receiptHTML() {
   const d = receiptData(RCPT_FOR);
   const cust = d.customerId ? find('customer_profiles', d.customerId) : null;
   const rx = d.customerId ? latestRx(d.customerId) : null;
-  const lensDetail = d.items.filter(i => i.type === 'lens').map(i => { const ex = itemExtraLine(i.productId, 'lens'); return ex ? `${i.name} (${ex})` : i.name; }).join(', ') || '-';
-  const frameDetail = d.items.filter(i => i.type === 'frame').map(i => { const ex = itemExtraLine(i.productId, 'frame'); return ex ? `${i.name} (${ex})` : i.name; }).join(', ') || '-';
+  const lensDetail = d.items.filter(i => i.type === 'lens').map(i => { const ex = itemExtraLine(i, 'lens'); return ex ? `รุ่น ${i.name} (${ex})` : `รุ่น ${i.name}`; }).join(', ') || '-';
+  const frameDetail = d.items.filter(i => i.type === 'frame').map(i => { const ex = itemExtraLine(i, 'frame'); return ex ? `${i.name} (${ex})` : i.name; }).join(', ') || '-';
   const rxRow = (label, sph, cyl, axis, add, pd) => `<tr><td style="padding:2px 12px 2px 0;font-weight:600;white-space:nowrap">${label}</td><td style="padding:2px 10px">SPH ${fmtP(sph)}</td><td style="padding:2px 10px">CYL ${fmtP(cyl)}</td><td style="padding:2px 10px">AXIS ${axis ?? '-'}</td><td style="padding:2px 10px">ADD ${fmtP(add)}</td><td style="padding:2px 0">PD ${pd ?? '-'}</td></tr>`;
   const rxLine = rx ? `<table style="margin:2px 0 0;font-size:12.5px">${rxRow('ขวา', rx.od_sph, rx.od_cyl, rx.od_axis, rx.od_add ?? rx.add_power, rx.od_pd ?? rx.pd)}${rxRow('ซ้าย', rx.os_sph, rx.os_cyl, rx.os_axis, rx.os_add ?? rx.add_power, rx.os_pd ?? rx.pd)}</table>${rx.examiner ? `<span class="tag">ผู้ตรวจ: ${esc(rx.examiner)}</span>` : ''}` : '<span class="tag">ไม่มีข้อมูลค่าสายตาในระบบ</span>';
   return `<div class="sheet">
@@ -1235,9 +1255,9 @@ function receiptHTML() {
     <div class="meta">เลขที่ ${esc(RCPT.no || '(ยังไม่ระบุ)')} · วันที่ ${day(RCPT.date)}${RCPT.seller ? ` · ผู้ขาย: ${esc(RCPT.seller)}` : ''}</div>
     <p style="margin:4px 0"><b>ชื่อ-นามสกุล:</b> ${esc(cust?.full_name || 'ลูกค้าทั่วไป')}${cust?.customer_code ? ` <span class="tag">(${esc(cust.customer_code)})</span>` : ''}</p>
     <div style="margin:4px 0"><b>ค่าสายตาที่ตัด:</b>${rxLine}</div>
-    <p style="margin:4px 0"><b>ชนิดเลนส์:</b> ${esc(lensDetail)}</p>
+    <p style="margin:4px 0"><b>เลนส์ที่ตัด:</b> ${esc(lensDetail)}</p>
     <p style="margin:4px 0 12px"><b>กรอบแว่น:</b> ${esc(frameDetail)}</p>
-    <table><tr><th>รายการ</th><th>จำนวน</th><th>ราคา/หน่วย</th><th style="text-align:right">รวม</th></tr>${d.items.map(i => { const ex = itemExtraLine(i.productId, i.type); return `<tr><td>${esc(i.name)}${ex ? `<br><span class="tag">${esc(ex)}</span>` : ''}</td><td>${i.qty}</td><td>${baht(i.price)}</td><td style="text-align:right">${baht(i.lineTotal)}</td></tr>`; }).join('')}</table>
+    <table><tr><th>รายการ</th><th>จำนวน</th><th>ราคา/หน่วย</th><th style="text-align:right">รวม</th></tr>${d.items.map(i => { const ex = itemExtraLine(i, i.type); return `<tr><td>${esc(i.name)}${ex ? `<br><span class="tag">${esc(ex)}</span>` : ''}</td><td>${i.qty}</td><td>${baht(i.price)}</td><td style="text-align:right">${baht(i.lineTotal)}</td></tr>`; }).join('')}</table>
     <div class="row"><span>รวม</span><span>${baht(d.sub)}</span></div>
     ${d.discTotal ? `<div class="row"><span>ส่วนลด</span><span>-${baht(d.discTotal)}</span></div>` : ''}
     <div class="row" style="border:0"><b>รวมสุทธิ</b><span class="total">${baht(d.total)}</span></div>
@@ -1341,7 +1361,8 @@ document.addEventListener('click', e => {
   else if (a === 'delcust') { if (confirm('ลบลูกค้ารายนี้? (ใบเสนอราคาเดิมยังอยู่)')) softDelete('customer_profiles', id); }
   else if (a === 'newrx') rxForm(id);
   else if (a === 'delrx') { if (confirm('ลบค่าสายตานี้?')) { softDelete('prescriptions', id); custView(b.dataset.cid); } }
-  else if (a === 'newprod') prodForm(); else if (a === 'editprod') prodForm(find('products', id));
+  else if (a === 'newprod') prodForm(); else if (a === 'newframe') frameForm();
+  else if (a === 'editprod') { const p = find('products', id); p.product_type === 'frame' ? frameForm(p) : prodForm(p); }
   else if (a === 'delprod') { if (confirm('ลบสินค้านี้?')) softDelete('products', id); }
   else if (a === 'sample') { SAMPLE.forEach(([product_type, product_name, retail_price_thb, f]) => save('products', { id: uid(), product_type, product_name, retail_price_thb, features: f ? f.split(',') : [], active: true, deleted_at: null })); commit(); }
   else if (a === 'impother') {
@@ -1371,8 +1392,9 @@ document.addEventListener('click', e => {
   else if (a === 'delseller') { if (confirm('ลบชื่อพนักงานขายนี้?')) softDelete('sellers', id); }
   else if (a === 'sellerreport') dialog(sellerReportHTML());
   else if (a === 'custview') { S.custView = id; render(); }
-  else if (a === 'splashgo') { S.mode = 'hub'; render(); }
+  else if (a === 'splashgo') { S.activeSeller = null; S.mode = 'hub'; render(); }
   else if (a === 'gomode') { if (id === 'kiosk') kioskReset(); S.mode = id; render(); }
+  else if (a === 'kioskexit') { const viaPin = !!S.activeSeller; S.activeSeller = null; S.mode = viaPin ? 'splash' : 'hub'; render(); }
   else if (a === 'opencatalog') { S.catReturn = id || ''; S.catDetail = null; S.mode = 'lenscat'; render(); }
   else if (a === 'closecatalog') { S.mode = S.catReturn || ''; S.catReturn = ''; render(); }
   else if (a === 'catdesign') { S.catDesign = id; render(); }
@@ -1414,8 +1436,8 @@ document.addEventListener('click', e => {
     const c = cartCalc(), qid = uid();
     const lrNote = lrSummary();
     const discNote = c.discTotal ? `ส่วนลด — กรอบ: ${c.discFrameAmt ? baht(c.discFrameAmt) : '-'} / เลนส์: ${c.discLensAmt ? baht(c.discLensAmt) : '-'}` : '';
-    save('quotes', { id: qid, customer_id: S.cust || null, quote_number: null, status: 'converted', subtotal_thb: c.sub, discount_thb: c.discTotal, total_thb: c.total, notes: [lrNote ? `ความต้องการลูกค้า: ${lrNote}` : '', discNote].filter(Boolean).join(' · ') || null, valid_until: null, receipt_date: now().slice(0, 10), meta: { payment: [], signature: '', seller: '' }, deleted_at: null });
-    S.cart.forEach(i => save('quote_items', { id: uid(), quote_id: qid, product_id: i.id, item_name_snapshot: i.name, product_type: i.type, quantity: i.qty, unit_price_thb: i.price, line_total_thb: i.price * i.qty, deleted_at: null }));
+    save('quotes', { id: qid, customer_id: S.cust || null, quote_number: null, status: 'converted', subtotal_thb: c.sub, discount_thb: c.discTotal, total_thb: c.total, notes: [lrNote ? `ความต้องการลูกค้า: ${lrNote}` : '', discNote].filter(Boolean).join(' · ') || null, valid_until: null, receipt_date: now().slice(0, 10), meta: { payment: [], signature: '', seller: S.activeSeller || '' }, deleted_at: null });
+    S.cart.forEach(i => save('quote_items', { id: uid(), quote_id: qid, product_id: i.id, item_name_snapshot: i.name, product_type: i.type, quantity: i.qty, unit_price_thb: i.price, line_total_thb: i.price * i.qty, meta: (i.code || i.color) ? { code: i.code || null, color: i.color || null } : null, deleted_at: null }));
     S.cart = []; K.step = 'done'; K.hist = []; K.lr = freshLR(); K.lastQuoteId = qid; K.discFrame = freshDisc(); K.discLens = freshDisc(); commit(); render(); toast('บันทึกการสั่งซื้อแล้ว');
   }
   else if (a === 'kioskprintreceipt') { if (K.lastQuoteId) openReceipt(K.lastQuoteId); }
@@ -1520,6 +1542,8 @@ document.addEventListener('input', e => {
   else if (k === 'catq') { S.catQ = e.target.value; refocus(); }
   else if (k === 'kpq') { K.pq = e.target.value; refocus(); }
   else if (k === 'ccnew') K.ccNew = e.target.value;
+  else if (k.startsWith('cartcode:')) { const x = S.cart.find(i => i.id === k.slice(9)); if (x) x.code = e.target.value; }
+  else if (k.startsWith('cartcolor:')) { const x = S.cart.find(i => i.id === k.slice(10)); if (x) x.color = e.target.value; }
 });
 document.addEventListener('submit', async e => {
   const f = e.target.closest('[data-form]'); if (!f) return; e.preventDefault();
@@ -1545,6 +1569,10 @@ document.addEventListener('submit', async e => {
       } : (o.lens_spec || null);
       save('products', { ...o, id: id || uid(), product_name: d.product_name.trim(), product_type: d.product_type, retail_price_thb: Math.round(+d.retail_price_thb) || 0, sku: d.sku.trim() || null, brand: d.brand.trim() || null, color: (d.color || '').trim() || null, cost_thb: mgr() ? num(d.cost_thb) : (o.cost_thb ?? null), stock_qty: num(d.stock_qty), description: d.description.trim() || null, features: d.features.split(',').map(s => s.trim()).filter(Boolean), active: !!d.active, lens_spec, deleted_at: null });
       closeDlg(); commit(); toast('บันทึกสินค้าแล้ว');
+    } else if (k === 'frame') {
+      const o = id ? find('products', id) : {};
+      save('products', { ...o, id: id || uid(), product_type: 'frame', product_name: d.product_name.trim(), brand: (d.brand || '').trim() || null, retail_price_thb: Math.round(+d.retail_price_thb) || 0, cost_thb: mgr() ? num(d.cost_thb) : (o.cost_thb ?? null), active: o.active === false ? false : true, lens_spec: { ...(o.lens_spec || {}), material: (d.material || '').trim() || null, manufacturer: (d.manufacturer || '').trim() || null, frame_type: d.frame_type || null, purchased_at: d.purchased_at || null }, deleted_at: null });
+      closeDlg(); commit(); toast('บันทึกกรอบแว่นแล้ว');
     } else if (k === 'quote') {
       save('quotes', { ...find('quotes', id), status: d.status, valid_until: d.valid_until || null, notes: d.notes.trim() || null }); closeDlg(); commit(); toast('บันทึกใบเสนอราคาแล้ว');
     } else if (k === 'receiptmeta') {
@@ -1559,7 +1587,14 @@ document.addEventListener('submit', async e => {
     } else if (k === 'staff') {
       await api('/rest/v1/rpc/add_staff', { method: 'POST', body: JSON.stringify({ p_shop: shop.id, p_email: d.email.trim(), p_role: d.role }) }); f.reset(); toast('เพิ่มพนักงานแล้ว'); loadStaff();
     } else if (k === 'seller') {
-      save('sellers', { id: uid(), name: d.name.trim(), role: d.role, deleted_at: null }); commit(); f.reset(); toast('เพิ่มพนักงานขายแล้ว');
+      const pin = (d.pin || '').trim();
+      if (pin && !/^\d{4}$/.test(pin)) { toast('รหัสผ่านต้องเป็นตัวเลข 4 หลัก'); return; }
+      save('sellers', { id: uid(), name: d.name.trim(), role: d.role, pin: pin || null, deleted_at: null }); commit(); f.reset(); toast('เพิ่มพนักงานขายแล้ว');
+    } else if (k === 'pinlogin') {
+      const pin = (d.pin || '').trim();
+      const seller = live('sellers').find(s => s.pin && s.pin === pin);
+      if (!seller) { toast('รหัสผ่านไม่ถูกต้อง'); return; }
+      S.activeSeller = seller.name; kioskReset(); S.mode = 'kiosk'; render(); toast(`สวัสดี ${seller.name}`);
     } else if (k === 'kiosklookup') {
       const qstr = d.phone.trim(), ph = digits(qstr);
       let matches = ph.length >= 8 ? live('customer_profiles').filter(c => digits(c.phone) === ph) : [];
@@ -1593,5 +1628,4 @@ window.addEventListener('online', () => { setStatus(); sync(); }); window.addEve
 setInterval(sync, 60000);
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
 persist(); render(); sync();
-setTimeout(() => { if (S.mode === 'splash') { S.mode = 'hub'; render(); } }, 3500);
 })();
