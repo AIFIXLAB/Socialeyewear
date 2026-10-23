@@ -159,7 +159,7 @@ const NEEDS = { general: 'ใช้งานทั่วไป', screen: 'ทำ
 const TYPES = { lens: 'เลนส์', frame: 'กรอบ', service: 'บริการ', other: 'อื่น ๆ' };
 const QST = { draft: 'ร่าง', presented: 'เสนอแล้ว', accepted: 'ลูกค้าตกลง', declined: 'ลูกค้าปฏิเสธ', expired: 'หมดอายุ', converted: 'ออกขายแล้ว' };
 const NAV = [['customers', 'ลูกค้า'], ['products', 'สินค้า'], ['insights', 'ภาพรวม'], ['settings', 'ตั้งค่า']];
-const S = { v: 'customers', need: 'general', cart: [], cust: '', disc: 0, notes: '', q: '', pq: '', ptype: 'all', staff: null, mode: 'splash', custView: 'all', custFrom: '', custTo: '', catQ: '', catCompare: [], catDetail: null, catReturn: '', catDesign: '' };
+const S = { v: 'customers', need: 'general', cart: [], cust: '', disc: 0, notes: '', q: '', pq: '', ptype: 'all', staff: null, mode: 'splash', custView: 'all', custFrom: '', custTo: '', catQ: '', catCompare: [], catDetail: null, catReturn: '', catDesign: '', catMain: '' };
 const freshLR = () => ({ purpose: [], other: '', vision: [], lenstype: [], age: '', budget: '', occupation: '', notes: '' });
 let K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null };
 const kioskReset = () => { K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, detailProdId: null }; };
@@ -405,10 +405,11 @@ function lensCatalogCard(p, selected) {
   const surfaceLabel = (LENS_SURFACE.find(d => d[0] === ls.surface) || [])[1];
   const coatBadges = (ls.coatings || []).map(k => (LENS_COATINGS.find(x => x[0] === k) || [])[1]).filter(Boolean)
     .map(l => `<span style="background:#eef1f4;border-radius:999px;padding:3px 10px;font-size:12px;display:inline-block;margin:2px 4px 0 0">${esc(l)}</span>`).join('');
-  return `<div class="panel" style="padding:20px;display:flex;flex-direction:column;gap:8px;${selected ? 'outline:2px solid #ab8a5e' : ''}">
+  const isMain = selected && p.id === S.catMain;
+  return `<div class="panel" style="padding:20px;display:flex;flex-direction:column;gap:8px;${isMain ? 'outline:2px solid #16294a' : selected ? 'outline:2px solid #ab8a5e' : ''}">
     ${ls.photo_url ? `<img src="${esc(ls.photo_url)}" style="width:100%;height:140px;object-fit:cover;border-radius:10px;margin-bottom:4px" onerror="this.style.display='none'">` : ''}
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
-      <div>${p.brand ? `<div class="tag">${esc(p.brand)}</div>` : ''}<div style="font-size:17px;font-weight:700">${esc(p.product_name)}</div></div>
+      <div>${p.brand ? `<div class="tag">${esc(p.brand)}</div>` : ''}<div style="font-size:17px;font-weight:700">${esc(p.product_name)}</div>${isMain ? `<span class="tag" style="background:#16294a;color:#fff;border-radius:999px;padding:2px 10px;display:inline-block;margin-top:4px">★ ตัวหลักที่ใช้เทียบ</span>` : ''}</div>
       <div style="font-size:19px;font-weight:700;white-space:nowrap">${baht(p.retail_price_thb)}</div>
     </div>
     ${p.sku ? `<div class="tag">SKU: ${esc(p.sku)}</div>` : ''}
@@ -423,7 +424,10 @@ function lensCatalogCard(p, selected) {
     ${lensHighlights(ls).filter(h => h.title).map(h => `<p style="margin:0;font-size:12.5px;color:var(--mute,#777)"><b>${esc(h.title)}</b>${h.desc ? ' — ' + esc(h.desc) : ''}</p>`).join('')}
     ${ls.power_range ? `<p style="margin:0;font-size:12.5px;color:var(--mute,#777)"><b>ช่วงค่าสายตา:</b> ${esc(ls.power_range)}</p>` : ''}
     ${ls.warranty ? `<span class="tag">รับประกัน: ${esc(ls.warranty)}</span>` : ''}
-    <label class="chk" style="margin-top:4px;display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" data-act="catcompare" data-id="${p.id}" ${selected ? 'checked' : ''}> เลือกเปรียบเทียบ</label>
+    <div style="display:flex;align-items:center;gap:10px;margin-top:4px;flex-wrap:wrap">
+      <label class="chk" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:0"><input type="checkbox" data-act="catcompare" data-id="${p.id}" ${selected ? 'checked' : ''}> เลือกเปรียบเทียบ</label>
+      ${selected && !isMain ? `<button type="button" class="btn line sm" data-act="catsetmain" data-id="${p.id}">ตั้งเป็นตัวหลัก</button>` : ''}
+    </div>
     <button class="btn line sm" data-act="catdetail" data-id="${p.id}">เปิดหน้านำเสนอลูกค้า</button>
   </div>`;
 }
@@ -439,9 +443,11 @@ function lensPresentView(p) {
     <div style="max-width:820px;margin:0 auto">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:22px">
         <button class="btn line" data-act="catdetail" data-id="">‹ กลับไปแคตตาล็อก</button>
-        <button class="btn line" style="margin-left:auto" data-act="print">พิมพ์/บันทึกเป็น PDF</button>
+        <button class="btn" style="margin-left:auto" data-act="catcomparefromdetail" data-id="${p.id}">⇄ เปรียบเทียบรุ่นนี้กับรุ่นอื่น</button>
+        <button class="btn line" data-act="print">พิมพ์/บันทึกเป็น PDF</button>
         <button class="btn line" data-act="closecatalog">ปิด</button>
       </div>
+      ${(S.catCompare || []).includes(p.id) ? `<p class="tag" style="margin:-10px 0 14px">${p.id === S.catMain ? '★ รุ่นนี้ถูกตั้งเป็น "ตัวหลัก" สำหรับเปรียบเทียบอยู่' : 'รุ่นนี้อยู่ในรายการเปรียบเทียบแล้ว'}${(S.catCompare || []).length > 1 ? ` · เทียบอยู่ ${(S.catCompare || []).length} รุ่น — <button type="button" data-act="catcomparego" style="background:none;border:0;padding:0;color:#16294a;font-weight:600;text-decoration:underline;cursor:pointer;font:inherit">ดูตารางเปรียบเทียบ</button>` : ''}</p>` : ''}
       <div class="panel" style="padding:28px">
         ${kicker('LENS TECHNOLOGY · เทคโนโลยีเลนส์')}
         ${p.brand ? `<div class="tag" style="margin-bottom:4px">${esc(p.brand)}</div>` : ''}
@@ -504,6 +510,90 @@ function lensCatalogView() {
   </div>`;
 }
 
+function openLensCompare() {
+  let prods = (S.catCompare || []).map(pid => find('products', pid)).filter(Boolean);
+  if (!prods.length) return;
+  if (!S.catMain || !prods.find(p => p.id === S.catMain)) S.catMain = prods[0].id;
+  const main = prods.find(p => p.id === S.catMain);
+  const others = prods.filter(p => p.id !== S.catMain);
+  prods = [main, ...others];
+  const minPrice = Math.min(...prods.map(p => p.retail_price_thb || Infinity));
+  const specVal = (p, fn) => { const v = fn(p); return v || '—'; };
+  const rows = [
+    ['โครงสร้าง/ประเภท', p => (LENS_DESIGN.find(d => d[0] === (p.lens_spec || {}).design) || [])[1]],
+    ['ดัชนีหักเหแสง', p => (p.lens_spec || {}).index],
+    ['การขัดเลนส์', p => (LENS_SURFACE.find(d => d[0] === (p.lens_spec || {}).surface) || [])[1]],
+    ['โค้ตติ้ง/คุณสมบัติ', p => ((p.lens_spec || {}).coatings || []).map(c => (LENS_COATINGS.find(x => x[0] === c) || [])[1]).filter(Boolean).join(', ')],
+    ['ระดับสินค้า', p => (p.lens_spec || {}).tier],
+    ['เหมาะกับลูกค้า', p => (p.lens_spec || {}).target],
+    ['ช่วงค่าสายตา', p => (p.lens_spec || {}).power_range],
+    ['การรับประกัน', p => (p.lens_spec || {}).warranty],
+    ['SKU', p => p.sku],
+  ];
+  const tierRank = t => { const i = LENS_TIER_OPTS.indexOf(t || ''); return i < 0 ? null : i; };
+  // pros/cons of `p` evaluated against `main`
+  const evalVs = (p, main) => {
+    const pros = [], cons = [];
+    const pls = p.lens_spec || {}, mls = main.lens_spec || {};
+    const pPrice = p.retail_price_thb, mPrice = main.retail_price_thb;
+    if (pPrice != null && mPrice != null && pPrice !== mPrice) {
+      const diff = Math.abs(pPrice - mPrice);
+      if (pPrice < mPrice) pros.push(`ราคาถูกกว่าตัวหลัก ${baht(diff)}`);
+      else cons.push(`ราคาแพงกว่าตัวหลัก ${baht(diff)}`);
+    }
+    const pIdx = parseFloat(pls.index), mIdx = parseFloat(mls.index);
+    if (!isNaN(pIdx) && !isNaN(mIdx) && pIdx !== mIdx) {
+      if (pIdx > mIdx) pros.push(`Index สูงกว่า (${pls.index}) — เลนส์บางและเบากว่าตัวหลัก`);
+      else cons.push(`Index ต่ำกว่า (${pls.index}) — เลนส์หนา/หนักกว่าตัวหลัก`);
+    }
+    const pTier = tierRank(pls.tier), mTier = tierRank(mls.tier);
+    if (pTier != null && mTier != null && pTier !== mTier) {
+      if (pTier > mTier) pros.push(`ระดับสินค้าสูงกว่า (${pls.tier} เทียบกับ ${mls.tier})`);
+      else cons.push(`ระดับสินค้าต่ำกว่า (${pls.tier} เทียบกับ ${mls.tier})`);
+    }
+    const pCoat = pls.coatings || [], mCoat = mls.coatings || [];
+    const extra = pCoat.filter(c => !mCoat.includes(c)).map(c => (LENS_COATINGS.find(x => x[0] === c) || [])[1]).filter(Boolean);
+    const missing = mCoat.filter(c => !pCoat.includes(c)).map(c => (LENS_COATINGS.find(x => x[0] === c) || [])[1]).filter(Boolean);
+    if (extra.length) pros.push(`มีคุณสมบัติเพิ่มจากตัวหลัก: ${extra.join(', ')}`);
+    if (missing.length) cons.push(`ไม่มีคุณสมบัติที่ตัวหลักมี: ${missing.join(', ')}`);
+    const pH = lensHighlights(pls).filter(h => h.title).map(h => h.title);
+    const mH = lensHighlights(mls).filter(h => h.title).map(h => h.title);
+    const uniqueH = pH.filter(t => !mH.includes(t));
+    if (uniqueH.length) pros.push(`จุดเด่นเฉพาะตัวที่ตัวหลักไม่มี: ${uniqueH.join(', ')}`);
+    if (pls.design !== mls.design && pls.design && mls.design) {
+      cons.push(`เป็นเลนส์คนละประเภทกับตัวหลัก (${(LENS_DESIGN.find(d => d[0] === pls.design) || [])[1] || pls.design})`);
+    }
+    return { pros, cons };
+  };
+  const col = (p, isMain) => {
+    const ls = p.lens_spec || {};
+    const pts = lensHighlights(ls).filter(h => h.title);
+    const cheapest = prods.length > 1 && p.retail_price_thb === minPrice;
+    const ev = isMain ? null : evalVs(p, main);
+    return `<div style="min-width:240px;max-width:280px;flex:1;background:#fff;border:1px solid #d7dde6;border-radius:14px;overflow:hidden;${isMain ? 'outline:3px solid #16294a' : cheapest ? 'outline:2px solid #ab8a5e' : ''}">
+      <div style="height:110px;background:#f3f0e9;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative">${ls.photo_url ? `<img src="${esc(ls.photo_url)}" style="width:100%;height:100%;object-fit:cover">` : `<span class="tag">ไม่มีรูป</span>`}${isMain ? `<span style="position:absolute;top:8px;left:8px;background:#16294a;color:#fff;font-size:11px;font-weight:700;border-radius:999px;padding:3px 10px">★ ตัวหลัก</span>` : ''}</div>
+      <div style="padding:14px">
+        ${p.brand ? `<div class="tag">${esc(p.brand)}</div>` : ''}
+        <div style="font-weight:700;font-size:15px;margin-bottom:6px">${esc(p.product_name)}</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;flex-wrap:wrap"><span style="font-size:19px;font-weight:700">${baht(p.retail_price_thb)}</span>${cheapest && prods.length > 1 ? `<span class="tag" style="background:#ab8a5e22;color:#8a6a3f;border-radius:999px;padding:2px 8px">ถูกสุด</span>` : ''}</div>
+        ${pts.length ? `<div style="margin-bottom:10px"><div style="font-size:11.5px;font-weight:700;color:#16294a;margin-bottom:4px">จุดเด่น</div><ul style="margin:0;padding-left:18px;font-size:12.5px;color:#444">${pts.map(h => `<li>${esc(h.title)}${h.desc ? ' — ' + esc(h.desc) : ''}</li>`).join('')}</ul></div>` : ''}
+        ${ev ? `<div style="margin-bottom:10px;background:#f7faf5;border-radius:10px;padding:10px">
+          <div style="font-size:11.5px;font-weight:700;color:#1a6b3a;margin-bottom:4px">ข้อดีเทียบกับตัวหลัก</div>
+          ${ev.pros.length ? `<ul style="margin:0 0 8px;padding-left:18px;font-size:12px;color:#1a6b3a">${ev.pros.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : `<p class="tag" style="margin:0 0 8px;font-size:12px">ไม่มีข้อได้เปรียบชัดเจน</p>`}
+          <div style="font-size:11.5px;font-weight:700;color:#a23b2a;margin-bottom:4px">ข้อสังเกต / ด้อยกว่าตัวหลัก</div>
+          ${ev.cons.length ? `<ul style="margin:0;padding-left:18px;font-size:12px;color:#a23b2a">${ev.cons.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : `<p class="tag" style="margin:0;font-size:12px">ไม่มีข้อด้อยที่ชัดเจน</p>`}
+        </div>` : `<p class="tag" style="margin-bottom:10px">ตัวเลือกหลักที่ใช้เป็นฐานเปรียบเทียบ</p>`}
+        <table style="width:100%;border-collapse:collapse;font-size:12.5px">${rows.map(([label, fn]) => `<tr><td style="padding:5px 0;color:#777;vertical-align:top;white-space:nowrap;padding-right:8px">${label}</td><td style="padding:5px 0;font-weight:600">${esc(specVal(p, fn))}</td></tr>`).join('')}</table>
+        ${!isMain ? `<button type="button" class="btn line sm" style="width:100%;margin-top:10px" data-act="catsetmain" data-id="${p.id}" data-incompare="1">ตั้งรุ่นนี้เป็นตัวหลักแทน</button>` : ''}
+      </div>
+    </div>`;
+  };
+  dialog(`<style>#dlg{width:min(1120px,95vw)!important;max-width:95vw!important}</style>
+    <h2 style="margin:0 0 4px">เปรียบเทียบเลนส์</h2>
+    <p class="tag" style="margin:0 0 14px">เทียบ ${prods.length} รุ่น โดยใช้ <b>${esc(main.product_name)}</b> เป็นตัวหลัก (กรอบสีกรมท่า) — รุ่นอื่นจะแสดงข้อดี/ข้อสังเกตเทียบกับตัวหลัก · ราคาต่ำสุดมีกรอบไฮไลท์สีแทน</p>
+    <div style="display:flex;gap:14px;overflow-x:auto;padding-bottom:4px">${prods.map(p => col(p, p.id === main.id)).join('')}</div>
+    <div class="foot"><button class="btn line" data-act="close">ปิด</button></div>`);
+}
 const ORIG_THEME_COLOR = (() => { const m = document.querySelector('meta[name="theme-color"]'); return m ? m.content : null; })();
 function setThemeColor(c) {
   let m = document.querySelector('meta[name="theme-color"]');
@@ -1073,43 +1163,30 @@ document.addEventListener('click', e => {
     S.cart = []; K.step = 'done'; K.hist = []; K.lr = freshLR(); K.lastQuoteId = qid; commit(); render(); toast('บันทึกการสั่งซื้อแล้ว');
   }
   else if (a === 'kioskprintreceipt') { if (K.lastQuoteId) quoteSheet(K.lastQuoteId); }
-  else if (a === 'catcompare') { const arr = S.catCompare || []; S.catCompare = arr.includes(id) ? arr.filter(x => x !== id) : [...arr, id]; render(); }
-  else if (a === 'catdetail') { S.catDetail = id || null; render(); }
-  else if (a === 'catcomparego') {
-    const prods = (S.catCompare || []).map(pid => find('products', pid)).filter(Boolean);
-    const minPrice = Math.min(...prods.map(p => p.retail_price_thb || Infinity));
-    const specVal = (p, fn) => { const v = fn(p); return v || '—'; };
-    const rows = [
-      ['โครงสร้าง/ประเภท', p => (LENS_DESIGN.find(d => d[0] === (p.lens_spec || {}).design) || [])[1]],
-      ['ดัชนีหักเหแสง', p => (p.lens_spec || {}).index],
-      ['การขัดเลนส์', p => (LENS_SURFACE.find(d => d[0] === (p.lens_spec || {}).surface) || [])[1]],
-      ['โค้ตติ้ง/คุณสมบัติ', p => ((p.lens_spec || {}).coatings || []).map(c => (LENS_COATINGS.find(x => x[0] === c) || [])[1]).filter(Boolean).join(', ')],
-      ['ระดับสินค้า', p => (p.lens_spec || {}).tier],
-      ['เหมาะกับลูกค้า', p => (p.lens_spec || {}).target],
-      ['ช่วงค่าสายตา', p => (p.lens_spec || {}).power_range],
-      ['การรับประกัน', p => (p.lens_spec || {}).warranty],
-    ];
-    const col = p => {
-      const ls = p.lens_spec || {};
-      const pts = lensHighlights(ls).filter(h => h.title);
-      const cheapest = prods.length > 1 && p.retail_price_thb === minPrice;
-      return `<div style="min-width:220px;flex:1;background:#fff;border:1px solid #d7dde6;border-radius:14px;overflow:hidden;${cheapest ? 'outline:2px solid #ab8a5e' : ''}">
-        <div style="height:110px;background:#f3f0e9;display:flex;align-items:center;justify-content:center;overflow:hidden">${ls.photo_url ? `<img src="${esc(ls.photo_url)}" style="width:100%;height:100%;object-fit:cover">` : `<span class="tag">ไม่มีรูป</span>`}</div>
-        <div style="padding:14px">
-          ${p.brand ? `<div class="tag">${esc(p.brand)}</div>` : ''}
-          <div style="font-weight:700;font-size:15px;margin-bottom:6px">${esc(p.product_name)}</div>
-          <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px"><span style="font-size:19px;font-weight:700">${baht(p.retail_price_thb)}</span>${cheapest ? `<span class="tag" style="background:#ab8a5e22;color:#8a6a3f;border-radius:999px;padding:2px 8px">ถูกสุด</span>` : ''}</div>
-          ${pts.length ? `<div style="margin-bottom:10px"><div style="font-size:11.5px;font-weight:700;color:#16294a;margin-bottom:4px">จุดเด่น</div><ul style="margin:0;padding-left:18px;font-size:12.5px;color:#444">${pts.map(h => `<li>${esc(h.title)}${h.desc ? ' — ' + esc(h.desc) : ''}</li>`).join('')}</ul></div>` : ''}
-          <table style="width:100%;border-collapse:collapse;font-size:12.5px">${rows.map(([label, fn]) => `<tr><td style="padding:5px 0;color:#777;vertical-align:top;white-space:nowrap;padding-right:8px">${label}</td><td style="padding:5px 0;font-weight:600">${esc(specVal(p, fn))}</td></tr>`).join('')}</table>
-        </div>
-      </div>`;
-    };
-    dialog(`<style>#dlg{width:min(1040px,95vw)!important;max-width:95vw!important}</style>
-      <h2 style="margin:0 0 4px">เปรียบเทียบเลนส์</h2>
-      <p class="tag" style="margin:0 0 14px">เทียบ ${prods.length} รุ่น — ราคาต่ำสุดจะมีกรอบไฮไลท์ให้</p>
-      <div style="display:flex;gap:14px;overflow-x:auto;padding-bottom:4px">${prods.map(col).join('')}</div>
-      <div class="foot"><button class="btn line" data-act="close">ปิด</button></div>`);
+  else if (a === 'catcompare') {
+    const arr = S.catCompare || []; const on = arr.includes(id);
+    S.catCompare = on ? arr.filter(x => x !== id) : [...arr, id];
+    if (on && S.catMain === id) S.catMain = S.catCompare[0] || '';
+    if (!on && !S.catMain) S.catMain = id;
+    render();
   }
+  else if (a === 'catsetmain') {
+    if (!(S.catCompare || []).includes(id)) return;
+    S.catMain = id;
+    if (b.dataset.incompare) { openLensCompare(); } else { render(); }
+  }
+  else if (a === 'catcomparefromdetail') {
+    const p = find('products', id);
+    if (!p) return;
+    S.catMain = id;
+    if (!(S.catCompare || []).includes(id)) S.catCompare = [...(S.catCompare || []), id];
+    S.catDesign = (p.lens_spec || {}).design || '';
+    S.catDetail = null;
+    render();
+    toast('ตั้งรุ่นนี้เป็นตัวหลักแล้ว — เลือกรุ่นอื่นเพื่อเปรียบเทียบต่อ');
+  }
+  else if (a === 'catdetail') { S.catDetail = id || null; render(); }
+  else if (a === 'catcomparego') openLensCompare();
 });
 document.addEventListener('change', e => {
   const k = e.target.dataset.bind; if (!k) return;
