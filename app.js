@@ -133,6 +133,23 @@ const LENS_DESIGN = [['single_far', 'Single Vision - มองไกล'], ['sin
 const LENS_SURFACE = [['spherical', 'Spherical'], ['aspheric', 'Aspheric (ลดบิดเบือนด้านข้าง)'], ['double_aspheric', 'Double Aspheric'], ['freeform', 'Freeform Individual']];
 const LENS_INDEX_OPTS = ['1.50', '1.56', '1.60', '1.67', '1.74'];
 const LENS_COATINGS = [['blue', 'กรองแสงสีฟ้า (Blue Block)'], ['photo', 'เปลี่ยนสีอัตโนมัติ (Photochromic)'], ['uv400', 'กัน UV400'], ['polarized', 'ตัดแสงสะท้อน (Polarized)'], ['ar', 'เคลือบกันแสงสะท้อน (Anti-Reflective)'], ['hard', 'กันรอยขีดข่วน (Hard Coat)'], ['hydro', 'กันน้ำ/คราบมัน (Hydrophobic/Oleophobic)'], ['fog', 'กันฝ้า (Anti-Fog)']];
+/* ---------- แบบสอบถามความต้องการก่อนแนะนำเลนส์ (หน้ากิออส) ---------- */
+const PURPOSE_OPTS = [['screen', 'ทำงานหน้าจอ', '🖥️'], ['mobile', 'มือถือ/แท็บเล็ต', '📱'], ['read', 'อ่านหนังสือ', '📖'], ['drive', 'ขับรถ', '🚗'], ['daily', 'ใช้ชีวิตประจำวัน', '🏠'], ['outdoor', 'กิจกรรมกลางแจ้ง', '🏔️'], ['fashion', 'แฟชั่น/ใส่ทั่วไป', '🕶️'], ['general', 'ใช้งานทั่วไป', '🕐']];
+const VISION_OPTS = [['allrange', 'คมชัดทุกระยะ (ไกล-กลาง-ใกล้)'], ['fartired', 'มองไกลแล้วตาล้า/อ่านไม่ชัด'], ['glare', 'มีแสงสะท้อน/แสงจ้า'], ['darklow', 'มองในที่มืดไม่ชัด'], ['blue', 'ป้องกันแสงสีฟ้า (หน้าจอ/ไฟ LED)'], ['uv', 'ลดแสงสะท้อน/กัน UV'], ['thin', 'ต้องการเลนส์บาง น้ำหนักเบา'], ['durable', 'ต้องการความทนทาน (กันรอย/กันกระแทก)']];
+const LENSTYPE_OPTS = [['sv_far', 'Single Vision (มองไกล)', 'linear-gradient(135deg,#dce9f5,#aecbe8)'], ['sv_near', 'Single Vision (มองใกล้)', 'linear-gradient(135deg,#d7e9f0,#9fc6d6)'], ['progressive', 'โปรเกรสซีฟ (มองหลายระยะ)', 'conic-gradient(from 180deg,#e8d9f2,#c9a8e3,#e8d9f2)'], ['blue', 'กรองแสงสีฟ้า', 'linear-gradient(135deg,#cfe3fb,#5e9ae8)'], ['photo', 'เปลี่ยนสีอัตโนมัติ', 'linear-gradient(135deg,#f3e2c8,#c99a52)'], ['sun', 'เลนส์กันแดด', 'linear-gradient(135deg,#444b52,#1b1e22)']];
+function lrSummary() {
+  const lr = K.lr || freshLR();
+  const names = (opts, ids) => opts.filter(o => (ids || []).includes(o[0])).map(o => o[1]);
+  const parts = [];
+  const purp = names(PURPOSE_OPTS, lr.purpose); if (lr.other) purp.push(lr.other);
+  if (purp.length) parts.push('ใช้งาน: ' + purp.join(', '));
+  const vis = names(VISION_OPTS, lr.vision); if (vis.length) parts.push('ต้องการ: ' + vis.join(', '));
+  const lt = names(LENSTYPE_OPTS, lr.lenstype); if (lt.length) parts.push('ประเภทเลนส์: ' + lt.join(', '));
+  if (lr.budget) parts.push('งบ: ' + lr.budget);
+  if (lr.occupation) parts.push('อาชีพ: ' + lr.occupation);
+  if (lr.notes) parts.push('หมายเหตุ: ' + lr.notes);
+  return parts.join(' · ');
+}
 const CC_SEED = ["ตาพร่ามัว", "มองไกลไม่ชัด", "มองใกล้ไม่ชัด", "ปวดตา/ปวดกระบอกตา", "ตาแห้ง", "คันตา/ระคายเคือง", "ตาแดง", "น้ำตาไหล", "เห็นภาพซ้อน", "แพ้แสง/สู้แสงไม่ได้", "ปวดศีรษะบ่อย", "สายตาล้า/เพลีย", "แว่นเก่าชำรุด/อยากเปลี่ยนใหม่", "ตรวจสายตาประจำปี"];
 const knownCC = () => [...new Set([...CC_SEED, ...ls.get('ccSeed', [])])];
 
@@ -142,8 +159,9 @@ const TYPES = { lens: 'เลนส์', frame: 'กรอบ', service: 'บร
 const QST = { draft: 'ร่าง', presented: 'เสนอแล้ว', accepted: 'ลูกค้าตกลง', declined: 'ลูกค้าปฏิเสธ', expired: 'หมดอายุ', converted: 'ออกขายแล้ว' };
 const NAV = [['studio', 'Sales Studio'], ['customers', 'ลูกค้า'], ['products', 'สินค้า'], ['quotes', 'ใบเสนอราคา'], ['insights', 'ภาพรวม'], ['settings', 'ตั้งค่า']];
 const S = { v: 'studio', need: 'general', cart: [], cust: '', disc: 0, notes: '', q: '', pq: '', ptype: 'all', staff: null, mode: 'splash', custView: 'all', custFrom: '', custTo: '' };
-let K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [] };
-const kioskReset = () => { K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [] }; };
+const freshLR = () => ({ purpose: [], other: '', vision: [], lenstype: [], age: '', budget: '', occupation: '', notes: '' });
+let K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR() };
+const kioskReset = () => { K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR() }; };
 const empty = (m, a = '') => `<div class="empty">${m}${a ? `<br><br>${a}` : ''}</div>`;
 const fmtP = v => v == null || v === '' ? '-' : (+v > 0 ? '+' : '') + (+v).toFixed(2);
 const day = d => d ? new Date(d).toLocaleDateString('th-TH') : '-';
@@ -605,6 +623,56 @@ function kioskQuickAddProd(type) {
     ${foot('เพิ่มสินค้า')}
   </form>`);
 }
+function kioskLensReq() {
+  const lr = K.lr;
+  const sec = (n, accent, title, hint, body) => `<div class="panel" style="padding:22px 24px 24px;border-top:4px solid ${accent}">
+    <h2 style="margin:0 0 4px;display:flex;align-items:center;gap:10px;font-size:15.5px"><span style="width:24px;height:24px;border-radius:50%;background:${accent};color:#fff;font-size:12.5px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${n}</span> ${title}</h2>
+    <p class="tag" style="margin:0 0 14px">${hint}</p>
+    ${body}
+  </div>`;
+  const icard = (group, k, icon, label, accent) => { const on = lr[group].includes(k); return `<button type="button" data-act="lrtoggle" data-group="${group}" data-id="${k}" style="position:relative;padding:16px 8px 12px;text-align:center;border:1.5px solid ${on ? accent : 'rgba(0,0,0,.1)'};background:${on ? accent + '14' : '#fff'};border-radius:14px;cursor:pointer;font:inherit">
+    <span style="position:absolute;top:8px;left:8px;width:16px;height:16px;border-radius:5px;border:1.5px solid ${on ? accent : 'rgba(0,0,0,.25)'};background:${on ? accent : '#fff'};color:#fff;font-size:11px;line-height:15px;display:block">${on ? '✓' : ''}</span>
+    <span style="display:flex;align-items:center;justify-content:center;width:38px;height:38px;margin:2px auto 8px;border-radius:50%;background:${on ? accent : accent + '20'};font-size:18px">${icon}</span>
+    <span style="display:block;font-size:12px;line-height:1.3;color:#23262a">${esc(label)}</span>
+  </button>`; };
+  const chkrow = (group, k, label, accent) => { const on = lr[group].includes(k); return `<button type="button" data-act="lrtoggle" data-group="${group}" data-id="${k}" style="display:flex;align-items:center;gap:10px;border:1.5px solid ${on ? accent : 'rgba(0,0,0,.1)'};background:${on ? accent + '14' : '#fff'};border-radius:12px;padding:11px 13px;font-size:13px;cursor:pointer;text-align:left;font:inherit;color:#23262a">
+    <span style="width:17px;height:17px;border-radius:5px;border:1.5px solid ${on ? accent : 'rgba(0,0,0,.25)'};background:${on ? accent : '#fff'};color:#fff;font-size:11px;line-height:15px;flex-shrink:0;display:inline-block;text-align:center">${on ? '✓' : ''}</span>${esc(label)}
+  </button>`; };
+  const lcard = (k, label, bg, accent) => { const on = lr.lenstype.includes(k); return `<button type="button" data-act="lrtoggle" data-group="lenstype" data-id="${k}" style="position:relative;border:1.5px solid ${on ? accent : 'rgba(0,0,0,.1)'};background:${on ? accent + '14' : '#fff'};border-radius:14px;padding:14px 10px;text-align:center;cursor:pointer;font:inherit">
+    <span style="position:absolute;top:8px;left:8px;width:16px;height:16px;border-radius:5px;border:1.5px solid ${on ? accent : 'rgba(0,0,0,.25)'};background:${on ? accent : '#fff'};color:#fff;font-size:11px;line-height:15px;display:block">${on ? '✓' : ''}</span>
+    <span style="display:block;width:38px;height:24px;margin:4px auto 9px;border-radius:50%/40%;background:${bg}"></span>
+    <span style="display:block;font-size:12px;line-height:1.3;color:#23262a">${esc(label)}</span>
+  </button>`; };
+  return `
+    ${sec(1, '#3f5586', 'วัตถุประสงค์การใช้งาน', 'คุณต้องการใช้แว่นทำอะไรบ้าง? (เลือกได้มากกว่า 1 ข้อ)', `
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+        ${PURPOSE_OPTS.map(([k, l, ic]) => icard('purpose', k, ic, l, '#3f5586')).join('')}
+        <div style="grid-column:span 4;display:flex;align-items:center;gap:8px;border:1.5px dashed rgba(0,0,0,.2);border-radius:12px;padding:10px 13px;background:#fff">
+          <span style="font-size:13px">อื่นๆ</span><input data-bind="lrother" value="${esc(lr.other || '')}" placeholder="โปรดระบุ" style="flex:1;border:0;padding:2px;background:transparent">
+        </div>
+      </div>`)}
+    ${sec(2, '#b3577a', 'ความต้องการด้านการมองเห็น', 'มีปัญหาหรือความต้องการพิเศษอะไรบ้าง?', `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">${VISION_OPTS.map(([k, l]) => chkrow('vision', k, l, '#b3577a')).join('')}</div>`)}
+    ${sec(3, '#4a8f6b', 'ประเภทเลนส์ที่ต้องการตัด', 'เลือกได้มากกว่า 1 ข้อ', `
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">${LENSTYPE_OPTS.map(([k, l, bg]) => lcard(k, l, bg, '#4a8f6b')).join('')}</div>`)}
+    ${sec(4, '#8a6bb8', 'ข้อมูลเพิ่มเติม', 'เพื่อการแนะนำที่ตรงกับความต้องการของลูกค้า', `
+      <form data-form="lensreq">
+        <div class="two">
+          <label>อายุ<input name="age" type="number" min="0" value="${esc(lr.age || '')}"></label>
+          <label>งบประมาณโดยประมาณ<select name="budget">
+            <option value="" ${!lr.budget ? 'selected' : ''}>— ไม่ระบุ —</option>
+            <option value="ไม่เกิน 5,000 บาท" ${lr.budget === 'ไม่เกิน 5,000 บาท' ? 'selected' : ''}>ไม่เกิน 5,000 บาท</option>
+            <option value="5,001–10,000 บาท" ${lr.budget === '5,001–10,000 บาท' ? 'selected' : ''}>5,001–10,000 บาท</option>
+            <option value="10,001–15,000 บาท" ${lr.budget === '10,001–15,000 บาท' ? 'selected' : ''}>10,001–15,000 บาท</option>
+            <option value="มากกว่า 15,000 บาท" ${lr.budget === 'มากกว่า 15,000 บาท' ? 'selected' : ''}>มากกว่า 15,000 บาท</option>
+          </select></label>
+        </div>
+        <label>อาชีพ / ลักษณะงาน<input name="occupation" value="${esc(lr.occupation || '')}" placeholder="เช่น งานออฟฟิศ, ขับรถส่งของ, ครู"></label>
+        <label>หมายเหตุเพิ่มเติม<textarea name="notes" rows="2" placeholder="เช่น เน้นสี/สไตล์, ความกังวลอื่นๆ">${esc(lr.notes || '')}</textarea></label>
+        <div class="foot"><button type="button" class="btn line" data-act="kioskback">ย้อนกลับ</button><button class="btn" type="submit">ถัดไป: ดูเลนส์ที่แนะนำ →</button></div>
+      </form>`)}
+  `;
+}
 function kioskProductBrowse() {
   const type = K.pcat || 'frame';
   const q = (K.pq || '').toLowerCase();
@@ -620,8 +688,10 @@ function kioskProductBrowse() {
   </div>`; };
   const tab = (id, l) => `<button data-act="kioskcat" data-id="${id}" style="padding:9px 18px;border-radius:999px;border:1px solid ${K.pcat === id ? 'transparent' : 'rgba(0,0,0,.15)'};background:${K.pcat === id ? '#23262a' : 'rgba(255,255,255,.55)'};color:${K.pcat === id ? '#fff' : '#23262a'};font-size:13px;cursor:pointer">${l}</button>`;
   const label = type === 'frame' ? 'กรอบแว่น' : 'เลนส์';
+  const summary = type === 'lens' ? lrSummary() : '';
   return `<div>
     <div style="display:flex;gap:10px;margin-bottom:14px">${tab('frame', 'กรอบแว่น')}${tab('lens', 'เลนส์')}<span class="tag" style="margin-left:auto;align-self:center">ตะกร้า ${S.cart.length} รายการ</span></div>
+    ${summary ? `<div class="panel" style="padding:10px 14px;margin-bottom:14px;font-size:12.5px;color:#444"><b>ความต้องการลูกค้า:</b> ${esc(summary)}</div>` : ''}
     <div style="display:flex;gap:10px;margin-bottom:14px">
       <input placeholder="ค้นหา${label} ชื่อ/ยี่ห้อ" value="${esc(K.pq || '')}" data-bind="kpq" style="flex:1">
       <button data-act="kioskaddprod" data-id="${type}" class="btn line sm" style="white-space:nowrap">+ เพิ่มสินค้าใหม่</button>
@@ -680,9 +750,9 @@ function kioskDone() {
 }
 function kioskView() {
   setThemeColor('#aab0b8');
-  const steps = { lookup: kioskLookup, newcust: kioskNewCust, menu: kioskMenu, history: kioskHistory, examintake: kioskExamIntake, claimform: kioskClaimForm, pick: kioskProductBrowse, cart: kioskCart, done: kioskDone };
+  const steps = { lookup: kioskLookup, newcust: kioskNewCust, menu: kioskMenu, history: kioskHistory, examintake: kioskExamIntake, claimform: kioskClaimForm, lensreq: kioskLensReq, pick: kioskProductBrowse, cart: kioskCart, done: kioskDone };
   const inner = (steps[K.step] || kioskLookup)();
-  const wide = ['pick', 'cart'].includes(K.step) ? '680px' : '560px';
+  const wide = ['pick', 'cart', 'lensreq'].includes(K.step) ? '680px' : '560px';
   const backBtn = 'padding:8px 14px;border-radius:999px;border:1px solid rgba(255,255,255,.8);background:rgba(255,255,255,.65);box-shadow:0 6px 16px rgba(20,22,26,.18);color:#23262a;font-size:12.5px;cursor:pointer;display:inline-flex;align-items:center;gap:4px';
   return `<div style="position:fixed;inset:0;background:${SILVER_BG};overflow:auto;padding:36px 18px">
     <div style="max-width:${wide};margin:0 auto 22px;display:flex;align-items:center;gap:10px">
@@ -764,9 +834,11 @@ document.addEventListener('click', e => {
   else if (a === 'kioskcat') { K.pcat = id; K.pq = ''; render(); }
   else if (a === 'svc') {
     K.hist.push(K.step);
-    if (id === 'lens' || id === 'frame') { S.cust = K.custId; K.pq = ''; K.pcat = id; K.step = 'pick'; render(); }
+    if (id === 'lens') { K.lr = freshLR(); K.step = 'lensreq'; render(); }
+    else if (id === 'frame') { S.cust = K.custId; K.pq = ''; K.pcat = 'frame'; K.step = 'pick'; render(); }
     else { if (id === 'exam') { K.cc = []; K.ccOther = ''; K.ccNew = ''; } K.step = id === 'exam' ? 'examintake' : 'claimform'; render(); }
   }
+  else if (a === 'lrtoggle') { const group = b.dataset.group, arr = K.lr[group]; K.lr[group] = arr.includes(id) ? arr.filter(x => x !== id) : [...arr, id]; render(); }
   else if (a === 'histopen') {
     const kind = b.dataset.kind;
     if (kind === 'quote') quoteSheet(id);
@@ -787,9 +859,10 @@ document.addEventListener('click', e => {
     if (!S.cart.length) return toast('เลือกสินค้าอย่างน้อย 1 รายการก่อน');
     S.cust = K.custId;
     const sub = cartSub(), qid = uid();
-    save('quotes', { id: qid, customer_id: S.cust || null, quote_number: null, status: 'converted', subtotal_thb: sub, discount_thb: 0, total_thb: sub, notes: null, valid_until: null, deleted_at: null });
+    const lrNote = lrSummary();
+    save('quotes', { id: qid, customer_id: S.cust || null, quote_number: null, status: 'converted', subtotal_thb: sub, discount_thb: 0, total_thb: sub, notes: lrNote ? `ความต้องการลูกค้า: ${lrNote}` : null, valid_until: null, deleted_at: null });
     S.cart.forEach(i => save('quote_items', { id: uid(), quote_id: qid, product_id: i.id, item_name_snapshot: i.name, product_type: i.type, quantity: i.qty, unit_price_thb: i.price, line_total_thb: i.price * i.qty, deleted_at: null }));
-    S.cart = []; K.step = 'done'; K.hist = []; commit(); render(); toast('บันทึกการสั่งซื้อแล้ว');
+    S.cart = []; K.step = 'done'; K.hist = []; K.lr = freshLR(); commit(); render(); toast('บันทึกการสั่งซื้อแล้ว');
   }
 });
 document.addEventListener('change', e => {
@@ -803,6 +876,7 @@ document.addEventListener('change', e => {
   else if (k === 'newprodtype') { const draft = readProdDraft(e.target.closest('form')); draft.product_type = e.target.value; prodForm(draft); }
   else if (k === 'claimphoto') { const f = e.target.files[0]; if (f) fileToThumb(f).then(du => { K.photo = du; render(); }); }
   else if (k === 'ccother') K.ccOther = e.target.value;
+  else if (k === 'lrother') K.lr.other = e.target.value;
   else if (k === 'custfrom') { S.custFrom = e.target.value; render(); }
   else if (k === 'custto') { S.custTo = e.target.value; render(); }
 });
@@ -850,6 +924,9 @@ document.addEventListener('submit', async e => {
       const ccText = [K.cc.join(', '), (K.ccOther || '').trim()].filter(Boolean).join(' / ');
       const pre = [ccText && `CC: ${ccText}`, d.disease && `โรคประจำตัว: ${d.disease}`, d.eye_history && `โรคตา/ประวัติ: ${d.eye_history}`, d.meds && `ประวัติการใช้ยา: ${d.meds}`].filter(Boolean).join(' · ');
       rxForm(K.custId, pre);
+    } else if (k === 'lensreq') {
+      K.lr.age = d.age || ''; K.lr.budget = d.budget || ''; K.lr.occupation = (d.occupation || '').trim(); K.lr.notes = (d.notes || '').trim();
+      S.cust = K.custId; K.pq = ''; K.pcat = 'lens'; K.hist.push(K.step); K.step = 'pick'; render();
     } else if (k === 'claimform') {
       save('claims', { id: uid(), customer_id: K.custId, kind: d.kind, frame_model: d.frame_model.trim() || null, frame_code: d.frame_code.trim() || null, issue: d.issue.trim() || null, repair_items: d.repair_items.trim() || null, cost_thb: num(d.cost_thb), pickup_date: d.pickup_date || null, photo: K.photo || null, status: 'pending', signed_at: d.signed ? now() : null, notes: null, deleted_at: null });
       commit(); K.photo = null; K.step = 'done'; K.hist = []; render(); toast('บันทึกรายการซ่อม/เคลมแล้ว');
