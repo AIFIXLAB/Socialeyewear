@@ -162,7 +162,7 @@ const NAV = [['customers', 'ลูกค้า'], ['products', 'สินค้�
 const S = { v: 'customers', need: 'general', cart: [], cust: '', disc: 0, notes: '', q: '', pq: '', ptype: 'all', staff: null, mode: 'splash', custView: 'all', custFrom: '', custTo: '', catQ: '', catCompare: [], catDetail: null };
 const freshLR = () => ({ purpose: [], other: '', vision: [], lenstype: [], age: '', budget: '', occupation: '', notes: '' });
 let K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null };
-const kioskReset = () => { K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null }; };
+const kioskReset = () => { K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, detailProdId: null }; };
 const empty = (m, a = '') => `<div class="empty">${m}${a ? `<br><br>${a}` : ''}</div>`;
 const fmtP = v => v == null || v === '' ? '-' : (+v > 0 ? '+' : '') + (+v).toFixed(2);
 const day = d => d ? new Date(d).toLocaleDateString('th-TH') : '-';
@@ -872,9 +872,10 @@ function kioskProductBrowse() {
   const rows = live('products').filter(p => p.product_type === type && p.active !== false && [p.product_name, p.brand, p.description].join(' ').toLowerCase().includes(q));
   const inCart = pid => S.cart.find(i => i.id === pid);
   const card = p => { const x = inCart(p.id); return `<div class="panel" style="padding:14px;display:flex;justify-content:space-between;align-items:center;gap:12px">
-    <div><div style="font-weight:600">${esc(p.product_name)}</div><div class="tag">${esc([p.brand, p.description].filter(Boolean).join(' · '))}</div></div>
+    <div style="cursor:pointer" data-act="kioskproddetail" data-id="${p.id}"><div style="font-weight:600">${esc(p.product_name)}</div><div class="tag">${esc([p.brand, p.description].filter(Boolean).join(' · '))}</div></div>
     <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
       <b>${baht(p.retail_price_thb)}</b>
+      <button data-act="kioskproddetail" data-id="${p.id}" class="btn line sm">ดีเทล</button>
       ${x ? `<span class="qty"><button class="btn line sm" data-act="qty" data-id="${p.id}" data-d="-1">−</button><b>${x.qty}</b><button class="btn line sm" data-act="qty" data-id="${p.id}" data-d="1">+</button></span>` : `<button data-act="add" data-id="${p.id}" class="btn sm">เลือก</button>`}
       <button data-act="kioskdelprod" data-id="${p.id}" class="btn line sm bad" title="ลบสินค้านี้">ลบ</button>
     </div>
@@ -891,6 +892,41 @@ function kioskProductBrowse() {
     <div style="display:flex;flex-direction:column;gap:10px;max-height:48vh;overflow:auto;padding-right:2px">${rows.length ? rows.map(card).join('') : '<p class="tag">ยังไม่มีสินค้าในหมวดนี้ — เพิ่มสินค้าได้ที่หลังบ้าน หน้า "สินค้า"</p>'}</div>
     <div class="foot" style="margin-top:18px;justify-content:flex-end">
       <button class="btn" data-act="kioskstep" data-id="cart">ถัดไป (${S.cart.length} รายการ)</button>
+    </div>
+  </div>`;
+}
+function kioskProductDetailView() {
+  const p = find('products', K.detailProdId);
+  if (!p) return '<p class="tag">ไม่พบสินค้านี้</p>';
+  const ls = p.lens_spec || {};
+  const designLabel = (LENS_DESIGN.find(d => d[0] === ls.design) || [])[1];
+  const surfaceLabel = (LENS_SURFACE.find(d => d[0] === ls.surface) || [])[1];
+  const coatLabels = (ls.coatings || []).map(k => (LENS_COATINGS.find(x => x[0] === k) || [])[1]).filter(Boolean).join(', ');
+  const points = lensHighlights(ls).filter(h => h.title || h.desc);
+  const specRow = (l, v) => v ? `<tr><td style="padding:10px 14px;border-bottom:1px solid rgba(0,0,0,.08);color:#666">${l}</td><td style="padding:10px 14px;border-bottom:1px solid rgba(0,0,0,.08);font-weight:600">${v}</td></tr>` : '';
+  const x = S.cart.find(i => i.id === p.id);
+  return `<div class="panel" style="padding:24px">
+    ${p.brand ? `<div class="tag">${esc(p.brand)}</div>` : ''}
+    <h2 style="margin:4px 0 2px">${esc(p.product_name)}</h2>
+    ${ls.tier ? `<span class="tag">ระดับ: ${esc(ls.tier)}</span>` : ''}
+    <div style="background:#f3f0e9;border-radius:14px;height:200px;overflow:hidden;display:flex;align-items:center;justify-content:center;margin:14px 0">
+      ${ls.photo_url ? `<img src="${esc(ls.photo_url)}" style="width:100%;height:100%;object-fit:cover">` : `<span class="tag">ไม่มีรูปภาพ</span>`}
+    </div>
+    ${p.description ? `<p style="margin:0 0 10px">${esc(p.description)}</p>` : ''}
+    ${ls.target ? `<p style="margin:0 0 14px"><b>เหมาะกับลูกค้า:</b> ${esc(ls.target)}</p>` : ''}
+    ${points.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:16px">${points.map((pt, i) => `<div class="panel" style="padding:12px"><div style="font-weight:700;font-size:13px">จุดเด่นที่ ${i + 1}${pt.title ? ': ' + esc(pt.title) : ''}</div>${pt.desc ? `<div class="tag" style="font-size:12px">${esc(pt.desc)}</div>` : ''}</div>`).join('')}</div>` : ''}
+    <div style="border:1px solid rgba(0,0,0,.08);border-radius:10px;overflow:hidden;margin-bottom:16px">
+      <table style="width:100%;border-collapse:collapse"><tbody>
+        ${specRow('Index', ls.index ? esc(ls.index) : '')}
+        ${specRow('การออกแบบ', designLabel ? esc(designLabel) : '')}
+        ${specRow('เทคโนโลยี / เคลือบผิว', [surfaceLabel, coatLabels].filter(Boolean).map(esc).join(' · '))}
+        ${specRow('ช่วงค่าสายตา', ls.power_range ? esc(ls.power_range) : '')}
+        ${specRow('รับประกัน', ls.warranty ? esc(ls.warranty) : '')}
+      </tbody></table>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+      <b style="font-size:22px">${baht(p.retail_price_thb)}</b>
+      ${x ? `<span class="tag">อยู่ในตะกร้าแล้ว (${x.qty})</span>` : `<button class="btn" data-act="add" data-id="${p.id}">เลือก</button>`}
     </div>
   </div>`;
 }
@@ -944,9 +980,9 @@ function kioskDone() {
 }
 function kioskView() {
   setThemeColor('#aab0b8');
-  const steps = { lookup: kioskLookup, lookupresults: kioskLookupResults, newcust: kioskNewCust, menu: kioskMenu, history: kioskHistory, examintake: kioskExamIntake, claimform: kioskClaimForm, lensreq: kioskLensReq, pick: kioskProductBrowse, cart: kioskCart, done: kioskDone };
+  const steps = { lookup: kioskLookup, lookupresults: kioskLookupResults, newcust: kioskNewCust, menu: kioskMenu, history: kioskHistory, examintake: kioskExamIntake, claimform: kioskClaimForm, lensreq: kioskLensReq, pick: kioskProductBrowse, productdetail: kioskProductDetailView, cart: kioskCart, done: kioskDone };
   const inner = (steps[K.step] || kioskLookup)();
-  const wide = ['pick', 'cart', 'lensreq'].includes(K.step) ? '680px' : '560px';
+  const wide = ['pick', 'cart', 'lensreq', 'productdetail'].includes(K.step) ? '680px' : '560px';
   const backBtn = 'padding:8px 14px;border-radius:999px;border:1px solid rgba(255,255,255,.8);background:rgba(255,255,255,.65);box-shadow:0 6px 16px rgba(20,22,26,.18);color:#23262a;font-size:12.5px;cursor:pointer;display:inline-flex;align-items:center;gap:4px';
   return `<div style="position:fixed;inset:0;background:${SILVER_BG};overflow:auto;padding:36px 18px">
     <div style="max-width:${wide};margin:0 auto 22px;display:flex;align-items:center;gap:10px">
@@ -1050,6 +1086,7 @@ document.addEventListener('click', e => {
   }
   else if (a === 'kioskaddprod') kioskQuickAddProd(id);
   else if (a === 'kioskdelprod') { if (confirm('ลบสินค้านี้?')) { S.cart = S.cart.filter(i => i.id !== id); softDelete('products', id); render(); } }
+  else if (a === 'kioskproddetail') { K.detailProdId = id; K.hist.push(K.step); K.step = 'productdetail'; render(); }
   else if (a === 'kioskcheckout') {
     if (!S.cart.length) return toast('เลือกสินค้าอย่างน้อย 1 รายการก่อน');
     S.cust = K.custId;
