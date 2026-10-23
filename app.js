@@ -169,8 +169,63 @@ const NAV = [['customers', 'ลูกค้า'], ['products', 'สินค้�
 const S = { v: 'customers', need: 'general', cart: [], cust: '', disc: 0, notes: '', q: '', pq: '', ptype: 'all', staff: null, mode: 'splash', custView: 'all', custFrom: '', custTo: '', catQ: '', catCompare: [], catDetail: null, catReturn: '', catDesign: '', catMain: '', activeSeller: null };
 const freshLR = () => ({ purpose: [], other: '', vision: [], lenstype: [], age: '', budget: '', occupation: '', notes: '' });
 const freshDisc = () => ({ type: 'amt', val: 0 });
-let K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, discFrame: freshDisc(), discLens: freshDisc() };
-const kioskReset = () => { K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, detailProdId: null, discFrame: freshDisc(), discLens: freshDisc() }; };
+let K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, discFrame: freshDisc(), discLens: freshDisc(), lensFilterOn: true };
+const kioskReset = () => { K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, detailProdId: null, discFrame: freshDisc(), discLens: freshDisc(), lensFilterOn: true }; };
+
+/* ---------- จับคู่เลนส์กับความต้องการลูกค้า (หน้าบริการลูกค้า ขั้นตอนที่ 1-3) ---------- */
+const LENSTYPE_STRUCT = ['sv_far', 'sv_near', 'progressive'];
+const LENSTYPE_COAT = ['blue', 'photo', 'sun'];
+function lensTypeTest(p, key) {
+  const ls = p.lens_spec || {};
+  const coats = ls.coatings || [];
+  if (key === 'sv_far') return ls.design === 'single_far';
+  if (key === 'sv_near') return ls.design === 'single_near';
+  if (key === 'progressive') return ls.design === 'progressive';
+  if (key === 'blue') return coats.includes('blue');
+  if (key === 'photo') return coats.includes('photo');
+  if (key === 'sun') return coats.includes('polarized') || /กันแดด|Sportive|Sun/i.test(p.product_name || '');
+  return false;
+}
+// กรองแบบเข้ม เฉพาะข้อ 3 (โครงสร้างเลนส์) เพราะถ้าเลือก "Single Vision" แล้วเจอโปรเกรสซีฟคือผิดประเภทจริง ๆ
+// ถ้าสินค้าไม่มีข้อมูล lens_spec เลย (สินค้าเก่าที่ยังไม่ได้ระบุ) จะไม่ตัดออก กันไม่ให้สินค้าที่ร้านเพิ่มเองหายไปจากรายการ
+function lensPassesHardFilter(p, lr) {
+  const ls = p.lens_spec || {};
+  const coats = ls.coatings || [];
+  const structSel = lr.lenstype.filter(k => LENSTYPE_STRUCT.includes(k));
+  const coatSel = lr.lenstype.filter(k => LENSTYPE_COAT.includes(k));
+  if (structSel.length && ls.design) {
+    if (!structSel.some(k => lensTypeTest(p, k))) return false;
+  }
+  if (coatSel.length && (Array.isArray(ls.coatings) || /กันแดด|Sportive|Sun/i.test(p.product_name || ''))) {
+    if (!coatSel.some(k => lensTypeTest(p, k))) return false;
+  }
+  return true;
+}
+const VISION_MATCH = {
+  allrange: p => (p.lens_spec || {}).design === 'progressive',
+  fartired: p => ['progressive', 'office', 'digital'].includes((p.lens_spec || {}).design),
+  glare: p => { const c = (p.lens_spec || {}).coatings || []; return c.includes('ar') || c.includes('polarized'); },
+  darklow: p => ((p.lens_spec || {}).coatings || []).includes('ar'),
+  blue: p => ((p.lens_spec || {}).coatings || []).includes('blue'),
+  uv: p => { const c = (p.lens_spec || {}).coatings || []; return c.includes('uv400') || c.includes('polarized'); },
+  thin: p => { const i = parseFloat((p.lens_spec || {}).index); return !isNaN(i) && i >= 1.60; },
+  durable: p => ((p.lens_spec || {}).coatings || []).includes('hard'),
+};
+const PURPOSE_MATCH = {
+  screen: p => ['digital', 'office'].includes((p.lens_spec || {}).design) || ((p.lens_spec || {}).coatings || []).includes('blue'),
+  mobile: p => ((p.lens_spec || {}).coatings || []).includes('blue') || (p.lens_spec || {}).design === 'digital',
+  read: p => ['single_near', 'office'].includes((p.lens_spec || {}).design),
+  drive: p => ((p.lens_spec || {}).coatings || []).includes('polarized'),
+  outdoor: p => { const c = (p.lens_spec || {}).coatings || []; return c.includes('photo') || c.includes('polarized'); },
+};
+// คะแนนความตรงความต้องการ (ข้อ 1-2) ใช้จัดลำดับเท่านั้น ไม่ใช้ตัดรายการออก เพราะเป็นความต้องการที่ไม่เข้มงวดเท่าโครงสร้างเลนส์
+function lensMatchScore(p, lr) {
+  let score = 0, total = 0;
+  (lr.vision || []).forEach(k => { if (VISION_MATCH[k]) { total++; if (VISION_MATCH[k](p)) score++; } });
+  (lr.purpose || []).forEach(k => { if (PURPOSE_MATCH[k]) { total++; if (PURPOSE_MATCH[k](p)) score++; } });
+  return { score, total };
+}
+function lrHasCriteria(lr) { return !!(lr.lenstype.length || lr.vision.length || lr.purpose.length); }
 const empty = (m, a = '') => `<div class="empty">${m}${a ? `<br><br>${a}` : ''}</div>`;
 const fmtP = v => v == null || v === '' ? '-' : (+v > 0 ? '+' : '') + (+v).toFixed(2);
 const day = d => d ? new Date(d).toLocaleDateString('th-TH') : '-';
@@ -1069,11 +1124,18 @@ function kioskLensReq() {
 function kioskProductBrowse() {
   const type = K.pcat || 'frame';
   const q = (K.pq || '').toLowerCase();
-  const rows = live('products').filter(p => p.product_type === type && p.active !== false && [p.product_name, p.brand, p.description].join(' ').toLowerCase().includes(q));
+  let rows = live('products').filter(p => p.product_type === type && p.active !== false && [p.product_name, p.brand, p.description].join(' ').toLowerCase().includes(q));
+  const totalBeforeFilter = rows.length;
+  const lr = K.lr || freshLR();
+  const hasCriteria = type === 'lens' && lrHasCriteria(lr);
+  const filterOn = K.lensFilterOn !== false;
+  if (hasCriteria && filterOn) rows = rows.filter(p => lensPassesHardFilter(p, lr));
+  const scored = rows.map(p => ({ p, ...(hasCriteria ? lensMatchScore(p, lr) : { score: 0, total: 0 }) }));
+  if (hasCriteria) scored.sort((a, b) => b.score - a.score || (a.p.retail_price_thb || 0) - (b.p.retail_price_thb || 0));
   const inCart = pid => S.cart.find(i => i.id === pid);
-  const card = p => { const x = inCart(p.id); return `<div class="panel" style="padding:14px">
+  const card = ({ p, score, total }) => { const x = inCart(p.id); return `<div class="panel" style="padding:14px">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
-      <div style="cursor:pointer" data-act="kioskproddetail" data-id="${p.id}"><div style="font-weight:600">${esc(p.product_name)}</div><div class="tag">${esc([p.brand, p.description].filter(Boolean).join(' · '))}</div></div>
+      <div style="cursor:pointer" data-act="kioskproddetail" data-id="${p.id}"><div style="font-weight:600">${esc(p.product_name)}</div><div class="tag">${esc([p.brand, p.description].filter(Boolean).join(' · '))}${hasCriteria && total ? ` · ตรงความต้องการ ${score}/${total} ข้อ` : ''}</div></div>
       <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
         <b>${baht(p.retail_price_thb)}</b>
         <button data-act="kioskproddetail" data-id="${p.id}" class="btn line sm">ดีเทล</button>
@@ -1093,7 +1155,11 @@ function kioskProductBrowse() {
       <input placeholder="ค้นหา${label} ชื่อ/ยี่ห้อ" value="${esc(K.pq || '')}" data-bind="kpq" style="flex:1">
       ${type === 'lens' ? `<button data-act="opencatalog" data-id="kiosk" class="btn line sm" style="white-space:nowrap">เปิดแคตตาล็อก/เปรียบเทียบเลนส์</button>` : ''}
     </div>
-    <div style="display:flex;flex-direction:column;gap:10px;max-height:48vh;overflow:auto;padding-right:2px">${rows.length ? rows.map(card).join('') : '<p class="tag">ยังไม่มีสินค้าในหมวดนี้ — เพิ่มสินค้าได้ที่หลังบ้าน หน้า "สินค้า"</p>'}</div>
+    ${hasCriteria ? `<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;font-size:12.5px;color:#444">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" data-act="lensfiltertoggle" ${filterOn ? 'checked' : ''}> กรองเฉพาะประเภทเลนส์ที่เลือกไว้ในขั้นตอนที่ 3</label>
+      <span class="tag">${filterOn ? `พบ ${rows.length} จาก ${totalBeforeFilter} รายการที่ตรงประเภท` : `แสดงทั้งหมด ${rows.length} รายการ (ไม่ได้กรอง)`}</span>
+    </div>` : ''}
+    <div style="display:flex;flex-direction:column;gap:10px;max-height:48vh;overflow:auto;padding-right:2px">${scored.length ? scored.map(card).join('') : (hasCriteria ? empty('ไม่พบเลนส์ที่ตรงกับประเภทที่เลือกไว้', '<button class="btn line sm" data-act="lensfiltertoggle" data-force="off">ดูเลนส์ทั้งหมดแทน</button>') : '<p class="tag">ยังไม่มีสินค้าในหมวดนี้ — เพิ่มสินค้าได้ที่หลังบ้าน หน้า "สินค้า"</p>')}</div>
     <div class="foot" style="margin-top:18px;justify-content:flex-end">
       <button class="btn" data-act="kioskstep" data-id="cart">ถัดไป (${S.cart.length} รายการ)</button>
     </div>
@@ -1771,6 +1837,7 @@ document.addEventListener('click', e => {
     else { if (id === 'exam') { K.cc = []; K.ccOther = ''; K.ccNew = ''; } K.step = id === 'exam' ? 'examintake' : 'claimform'; render(); }
   }
   else if (a === 'lrtoggle') { const group = b.dataset.group, arr = K.lr[group]; K.lr[group] = arr.includes(id) ? arr.filter(x => x !== id) : [...arr, id]; render(); }
+  else if (a === 'lensfiltertoggle') { K.lensFilterOn = b.dataset.force === 'off' ? false : (b.tagName === 'INPUT' ? b.checked : true); render(); }
   else if (a === 'kiosklookuppick') { K.custId = id; K.hist.push(K.step); K.step = 'menu'; render(); }
   else if (a === 'histopen') {
     const kind = b.dataset.kind;
