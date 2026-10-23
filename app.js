@@ -400,7 +400,7 @@ function lensCatalogCard(p, selected) {
   const surfaceLabel = (LENS_SURFACE.find(d => d[0] === ls.surface) || [])[1];
   const coatBadges = (ls.coatings || []).map(k => (LENS_COATINGS.find(x => x[0] === k) || [])[1]).filter(Boolean)
     .map(l => `<span style="background:#eef1f4;border-radius:999px;padding:3px 10px;font-size:12px;display:inline-block;margin:2px 4px 0 0">${esc(l)}</span>`).join('');
-  return `<div class="panel" style="padding:20px;display:flex;flex-direction:column;gap:8px;${selected ? 'outline:2px solid var(--gold,#c7a252)' : ''}">
+  return `<div class="panel" style="padding:20px;display:flex;flex-direction:column;gap:8px;${selected ? 'outline:2px solid #ab8a5e' : ''}">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
       <div>${p.brand ? `<div class="tag">${esc(p.brand)}</div>` : ''}<div style="font-size:17px;font-weight:700">${esc(p.product_name)}</div></div>
       <div style="font-size:19px;font-weight:700;white-space:nowrap">${baht(p.retail_price_thb)}</div>
@@ -426,7 +426,7 @@ function lensPresentView(p) {
   const surfaceLabel = (LENS_SURFACE.find(d => d[0] === ls.surface) || [])[1];
   const coatLabels = (ls.coatings || []).map(k => (LENS_COATINGS.find(x => x[0] === k) || [])[1]).filter(Boolean).join(', ');
   const points = (ls.highlight || '').split(/[,·\n]/).map(s => s.trim()).filter(Boolean);
-  const kicker = l => `<div style="color:var(--gold,#c7a252);font-size:12px;letter-spacing:.14em;font-weight:700;margin-bottom:6px">${l}</div>`;
+  const kicker = l => `<div style="color:#ab8a5e;font-size:12px;letter-spacing:.14em;font-weight:700;margin-bottom:6px">${l}</div>`;
   const specRow = (l, v) => `<tr><td style="padding:12px 16px;border-bottom:1px solid var(--line,#e4ddd2);color:var(--mute,#777)">${l}</td><td style="padding:12px 16px;border-bottom:1px solid var(--line,#e4ddd2);font-weight:600">${v || '—'}</td></tr>`;
   return `<div style="position:fixed;inset:0;background:var(--bg,#f4f1ea);overflow:auto;padding:28px 20px">
     <div style="max-width:820px;margin:0 auto">
@@ -440,7 +440,7 @@ function lensPresentView(p) {
         ${p.brand ? `<div class="tag" style="margin-bottom:4px">${esc(p.brand)}</div>` : ''}
         <h1 style="margin:0 0 20px">${esc(p.product_name)}</h1>
         <div style="background:#f3f0e9;border-radius:16px;height:260px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;margin-bottom:26px">
-          <div style="width:64px;height:64px;border-radius:50%;background:#fff;border:6px solid var(--gold,#c7a252)"></div>
+          <div style="width:64px;height:64px;border-radius:50%;background:#fff;border:6px solid #ab8a5e"></div>
           <span class="tag">พื้นที่แสดงภาพสินค้า / เทคโนโลยีเลนส์</span>
         </div>
         ${kicker('DESIGNED FOR YOUR LIFE · ออกแบบมาเพื่อชีวิตคุณ')}
@@ -545,43 +545,89 @@ function custView(id) {
   <div class="foot"><button class="btn line" data-act="close">ปิด</button><button class="btn line" data-act="editcust" data-id="${id}">แก้ไขข้อมูล</button><button class="btn" data-act="newrx" data-id="${id}">เพิ่มค่าสายตา</button></div>`);
 }
 const knownBrands = type => { const used = live('products').filter(p => !type || p.product_type === type).map(p => p.brand).filter(Boolean); const base = type === 'frame' ? LOOKUPS.frameBrands : type === 'lens' ? [...LOOKUPS.lensBrands, ...LOOKUPS.contactBrands] : [...LOOKUPS.frameBrands, ...LOOKUPS.lensBrands, ...LOOKUPS.contactBrands]; return [...new Set([...base, ...used])]; };
+const TAN_FORM_STYLE = `<style>
+  .tanform{background:#faf6ee;border-radius:14px;padding:6px 4px 2px}
+  .tanform .sec{margin-bottom:6px}
+  .tanform .secnum{color:#ab8a5e;font-size:11.5px;letter-spacing:.14em;font-weight:700;text-transform:uppercase;margin:20px 0 12px;padding-bottom:8px;border-bottom:1px solid #ecdfc8}
+  .tanform .sec:first-of-type .secnum{margin-top:2px}
+  .tanform label{display:block;font-size:13px;margin-bottom:14px;color:#3a332a}
+  .tanform label > span.lbl{display:block;font-weight:600;margin-bottom:6px;color:#2c2f33}
+  .tanform input[type=text],.tanform input[type=number],.tanform input:not([type]),.tanform select,.tanform textarea{width:100%;padding:11px 13px;border-radius:10px;border:1px solid #e3d9c6;background:#fff;font-size:13.5px;font-family:inherit;box-sizing:border-box}
+  .tanform .two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .tanform .coatwrap{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 4px}
+  .tanform .coatwrap label.chk{display:inline-flex;align-items:center;gap:6px;border:1px solid #e3d9c6;border-radius:999px;padding:7px 13px;font-size:12.5px;margin:0;background:#fff}
+  .tanform .chkrow{display:flex;align-items:center;gap:8px;margin-top:4px}
+  .tanform .foot{display:flex;justify-content:flex-end;gap:10px;margin:22px 0 4px}
+  .tanform .foot button{padding:12px 24px;border-radius:999px;font-size:14px;cursor:pointer;border:1px solid transparent}
+  .tanform .foot button[type=submit]{background:#ab8a5e;color:#fff}
+  .tanform .foot button.line{background:#fff;border-color:#e3d9c6;color:#3a332a}
+  @media (min-width:1px){.tanform .two{grid-template-columns:1fr 1fr}}
+</style>`;
+function tfld(n, label, v = '', t = 'text', extra = '') { return `<label><span class="lbl">${label}</span><input name="${n}" type="${t}" value="${esc(v)}" ${extra}></label>`; }
 function lensFields(p) {
   const ls = p.lens_spec || {};
   const coat = new Set(ls.coatings || []);
   const show = (p.product_type || 'lens') === 'lens';
-  return `<div id="lensFields" style="${show ? '' : 'display:none'};margin-top:14px;padding-top:14px;border-top:1px dashed var(--line,#e4ddd2)">
-    <p class="tag" style="margin:0 0 10px">รายละเอียดเลนส์ (ช่วยพนักงานแนะนำลูกค้าหน้าร้านให้ตัดสินใจง่ายขึ้น)</p>
-    <div class="two">
-      <label>โครงสร้าง/ประเภทเลนส์<select name="ls_design"><option value="">— ไม่ระบุ —</option>${LENS_DESIGN.map(([k, l]) => `<option value="${k}" ${ls.design === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
-      <label>ดัชนีหักเหแสง (Index)<select name="ls_index"><option value="">— ไม่ระบุ —</option>${LENS_INDEX_OPTS.map(v => `<option value="${v}" ${ls.index === v ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
+  const hl = (ls.highlight || '').split(',').map(s => s.trim());
+  return `<div id="lensFields" style="${show ? '' : 'display:none'}">
+    <div class="sec">
+      <div class="secnum">02 / จุดเด่นและประโยชน์</div>
+      <label><span class="lbl">เหมาะสำหรับ (ใช้พูดแนะนำลูกค้า)</span><input name="ls_target" value="${esc(ls.target)}" placeholder="เช่น เหมาะกับคนทำงานหน้าจอนานเกิน 6 ชม./วัน"></label>
+      ${tfld('ls_hl1', 'จุดเด่นที่ 1', hl[0] || '', 'text', 'placeholder="เช่น มุมมองกว้างขึ้น 30%"')}
+      ${tfld('ls_hl2', 'จุดเด่นที่ 2', hl[1] || '', 'text', 'placeholder="เช่น คมชัดระดับ HD"')}
+      ${tfld('ls_hl3', 'จุดเด่นที่ 3', hl[2] || '', 'text', 'placeholder="เช่น มีตัวเลือกการเคลือบผิว"')}
     </div>
-    <label>โครงสร้างการขัดเลนส์<select name="ls_surface"><option value="">— ไม่ระบุ —</option>${LENS_SURFACE.map(([k, l]) => `<option value="${k}" ${ls.surface === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
-    <label style="display:block;margin-top:12px">การถนอมสายตา / โค้ตติ้ง (เลือกได้หลายอัน)</label>
-    <div style="display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 4px">${LENS_COATINGS.map(([k, l]) => `<label class="chk" style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line,#e4ddd2);border-radius:999px;padding:6px 12px;font-size:13px;margin:0"><input type="checkbox" name="ls_coat" value="${k}" ${coat.has(k) ? 'checked' : ''}>${l}</label>`).join('')}</div>
-    <label>เหมาะสำหรับ (ใช้พูดแนะนำลูกค้า)<input name="ls_target" value="${esc(ls.target)}" placeholder='เช่น เหมาะกับคนทำงานหน้าจอนานเกิน 6 ชม./วัน'></label>
-    <label>จุดเด่นสั้น ๆ<input name="ls_highlight" value="${esc(ls.highlight)}" placeholder="เช่น มุมมองกว้างขึ้น 30%, คมชัดระดับ HD"></label>
-    <div class="two">
-      <label>ช่วงค่าสายตาที่รองรับ<input name="ls_power" value="${esc(ls.power_range)}" placeholder="เช่น SPH -10 ถึง +6, CYL ถึง -4"></label>
-      <label>การรับประกัน<input name="ls_warranty" value="${esc(ls.warranty)}" placeholder="เช่น ปรับตัว 60 วัน / โค้ตหลุดลอก 1 ปี"></label>
+    <div class="sec">
+      <div class="secnum">03 / ข้อมูลทางเทคนิค</div>
+      <div class="two">
+        <label><span class="lbl">โครงสร้าง/ประเภทเลนส์</span><select name="ls_design"><option value="">— ไม่ระบุ —</option>${LENS_DESIGN.map(([k, l]) => `<option value="${k}" ${ls.design === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+        <label><span class="lbl">ดัชนีหักเหแสง (Index)</span><select name="ls_index"><option value="">— ไม่ระบุ —</option>${LENS_INDEX_OPTS.map(v => `<option value="${v}" ${ls.index === v ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
+      </div>
+      <label><span class="lbl">โครงสร้างการขัดเลนส์</span><select name="ls_surface"><option value="">— ไม่ระบุ —</option>${LENS_SURFACE.map(([k, l]) => `<option value="${k}" ${ls.surface === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      <label><span class="lbl">การถนอมสายตา / โค้ตติ้ง (เลือกได้หลายอัน)</span></label>
+      <div class="coatwrap">${LENS_COATINGS.map(([k, l]) => `<label class="chk"><input type="checkbox" name="ls_coat" value="${k}" ${coat.has(k) ? 'checked' : ''}>${l}</label>`).join('')}</div>
+      <div class="two" style="margin-top:14px">
+        <label><span class="lbl">ช่วงค่าสายตาที่รองรับ</span><input name="ls_power" value="${esc(ls.power_range)}" placeholder="เช่น SPH -10 ถึง +6, CYL ถึง -4"></label>
+        <label><span class="lbl">การรับประกัน</span><input name="ls_warranty" value="${esc(ls.warranty)}" placeholder="เช่น ปรับตัว 60 วัน / โค้ตหลุดลอก 1 ปี"></label>
+      </div>
     </div>
   </div>`;
 }
 function readProdDraft(form) {
   const g = n => form.elements[n]?.value ?? '';
   const coatings = [...form.querySelectorAll('[name="ls_coat"]:checked')].map(x => x.value);
+  const highlight = [g('ls_hl1'), g('ls_hl2'), g('ls_hl3')].map(s => s.trim()).filter(Boolean).join(', ');
   return {
     id: form.dataset.id || '', product_name: g('product_name'), product_type: g('product_type'), retail_price_thb: g('retail_price_thb'),
     sku: g('sku'), brand: g('brand'), cost_thb: g('cost_thb'), stock_qty: g('stock_qty'), description: g('description'),
     features: g('features').split(',').map(s => s.trim()).filter(Boolean),
     active: form.elements['active'] ? form.elements['active'].checked : true,
-    lens_spec: { design: g('ls_design'), index: g('ls_index'), surface: g('ls_surface'), coatings, target: g('ls_target'), highlight: g('ls_highlight'), power_range: g('ls_power'), warranty: g('ls_warranty') }
+    lens_spec: { design: g('ls_design'), index: g('ls_index'), surface: g('ls_surface'), coatings, target: g('ls_target'), highlight, power_range: g('ls_power'), warranty: g('ls_warranty') }
   };
 }
 function prodForm(p = {}) {
   const brandList = knownBrands(p.product_type);
   const specList = [...LOOKUPS.lensTypes, ...LOOKUPS.lensIndex, ...LOOKUPS.contactTypes];
   const opts = l => l.map(v => `<option value="${esc(v)}">`).join('');
-  dialog(`<form data-form="prod" data-id="${p.id || ''}"><h2>${p.id ? 'แก้ไขสินค้า' : 'เพิ่มสินค้า'}</h2>${fld('product_name', 'ชื่อสินค้า', p.product_name, 'text', 'required')}<div class="two"><label>ประเภท<select name="product_type" data-bind="newprodtype">${Object.entries(TYPES).map(([k, l]) => `<option value="${k}" ${p.product_type === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>${fld('retail_price_thb', 'ราคาขาย (บาท)', p.retail_price_thb ?? 0, 'number', 'min="0" required')}${fld('sku', 'SKU', p.sku)}<label>แบรนด์<input name="brand" value="${esc(p.brand)}" list="brandlist" placeholder="พิมพ์หรือเลือกจากรายการเดิม"></label>${mgr() ? fld('cost_thb', 'ต้นทุน (บาท)', p.cost_thb, 'number', 'min="0"') : ''}${fld('stock_qty', 'จำนวนคงเหลือ (เว้นว่าง = ไม่ติดตาม)', p.stock_qty, 'number', 'step="1"')}</div><label>รายละเอียดสั้น ๆ<input name="description" value="${esc(p.description)}" list="speclist" placeholder="เช่น ชนิดเลนส์, Index, ประเภทคอนแทคเลนส์"></label>${fld('features', 'แท็กการใช้งาน: general, screen, drive, outdoor, progressive (คั่นด้วยคอมมา)', (p.features || []).join(', '))}<label class="chk"><input type="checkbox" name="active" ${p.active === false ? '' : 'checked'}> เปิดขาย (แสดงใน Sales Studio)</label>${lensFields(p)}${foot('บันทึกสินค้า')}</form><datalist id="brandlist">${opts(brandList)}</datalist><datalist id="speclist">${opts(specList)}</datalist>`);
+  dialog(`${TAN_FORM_STYLE}<div class="tanform"><form data-form="prod" data-id="${p.id || ''}">
+    <h2 style="margin:0 0 4px">${p.id ? 'แก้ไขสินค้า' : 'เพิ่มสินค้า'}</h2>
+    <p class="tag" style="margin:0 0 4px">กรอกข้อมูลตามที่ร้านต้องการ สามารถเว้นช่องที่ยังไม่มีข้อมูลได้</p>
+    <div class="sec">
+      <div class="secnum">01 / ข้อมูลทั่วไป</div>
+      ${tfld('product_name', 'ชื่อสินค้า', p.product_name, 'text', 'required')}
+      <div class="two"><label><span class="lbl">ประเภท</span><select name="product_type" data-bind="newprodtype">${Object.entries(TYPES).map(([k, l]) => `<option value="${k}" ${p.product_type === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>${tfld('retail_price_thb', 'ราคาขาย (บาท)', p.retail_price_thb ?? 0, 'number', 'min="0" required')}</div>
+      <div class="two">${tfld('sku', 'SKU', p.sku)}<label><span class="lbl">แบรนด์ / ยี่ห้อ</span><input name="brand" value="${esc(p.brand)}" list="brandlist" placeholder="เช่น HOYA, Essilor, ZEISS"></label></div>
+      <div class="two">${mgr() ? tfld('cost_thb', 'ต้นทุน (บาท)', p.cost_thb, 'number', 'min="0"') : '<div></div>'}${tfld('stock_qty', 'จำนวนคงเหลือ (เว้นว่าง = ไม่ติดตาม)', p.stock_qty, 'number', 'step="1"')}</div>
+      <label><span class="lbl">รายละเอียดสินค้า</span><input name="description" value="${esc(p.description)}" list="speclist" placeholder="อธิบายว่าสินค้านี้เหมาะกับใคร ช่วยเรื่องอะไร และมีจุดเด่นอย่างไร"></label>
+    </div>
+    ${lensFields(p)}
+    <div class="sec">
+      <div class="secnum">04 / การแสดงผลและสถานะ</div>
+      ${tfld('features', 'แท็กการใช้งาน: general, screen, drive, outdoor, progressive (คั่นด้วยคอมมา)', (p.features || []).join(', '))}
+      <div class="chkrow"><label class="chk" style="margin:0"><input type="checkbox" name="active" ${p.active === false ? '' : 'checked'}> เปิดขาย (แสดงใน Sales Studio)</label></div>
+    </div>
+    <div class="foot"><button type="button" class="btn line" data-act="close">ยกเลิก</button><button class="btn" type="submit">บันทึกสินค้า</button></div>
+  </form></div><datalist id="brandlist">${opts(brandList)}</datalist><datalist id="speclist">${opts(specList)}</datalist>`);
 }
 /* ---------- หน้าอินโทร / หน้าเลือกหมวด / กิออสบริการลูกค้า ---------- */
 const SILVER_BG = 'linear-gradient(150deg,#f3f4f6 0%,#d6dadf 28%,#aab0b8 58%,#80858d 100%)';
