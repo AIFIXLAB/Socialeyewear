@@ -1,4 +1,4 @@
-:root{--forest:#5a4530;--moss:#6e5a3d;--cream:#f6f1e4;--paper:#fffdf7;--gold:#c9a961;--gold-d:#8f7330;--ink:#18231d;--mute:#69756d;--line:#e2dac3;--bad:#a23b2a;
+:root{--forest:#16294a;--moss:#1f3a63;--cream:#f6f1e4;--paper:#fffdf7;--gold:#c9a961;--gold-d:#8f7330;--ink:#18231d;--mute:#69756d;--line:#e2dac3;--bad:#a23b2a;
 --f:'Prompt','Noto Sans Thai','Sarabun',system-ui,sans-serif}
 @media(prefers-color-scheme:dark){:root{--cream:#0f1d16;--paper:#16271e;--ink:#efe9d6;--mute:#9faea5;--line:#2a3f33;--gold-d:#d9bd78}}
 *{box-sizing:border-box}html,body{height:100%}

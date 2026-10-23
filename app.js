@@ -426,9 +426,9 @@ function lensPresentView(p) {
   const surfaceLabel = (LENS_SURFACE.find(d => d[0] === ls.surface) || [])[1];
   const coatLabels = (ls.coatings || []).map(k => (LENS_COATINGS.find(x => x[0] === k) || [])[1]).filter(Boolean).join(', ');
   const points = (ls.highlight || '').split(/[,·\n]/).map(s => s.trim()).filter(Boolean);
-  const kicker = l => `<div style="color:#ab8a5e;font-size:12px;letter-spacing:.14em;font-weight:700;margin-bottom:6px">${l}</div>`;
+  const kicker = l => `<div style="color:#16294a;font-size:12px;letter-spacing:.14em;font-weight:700;margin-bottom:6px">${l}</div>`;
   const specRow = (l, v) => `<tr><td style="padding:12px 16px;border-bottom:1px solid var(--line,#e4ddd2);color:var(--mute,#777)">${l}</td><td style="padding:12px 16px;border-bottom:1px solid var(--line,#e4ddd2);font-weight:600">${v || '—'}</td></tr>`;
-  return `<div style="position:fixed;inset:0;background:var(--bg,#f4f1ea);overflow:auto;padding:28px 20px">
+  return `<div style="position:fixed;inset:0;background:#eef1f5;overflow:auto;padding:28px 20px">
     <div style="max-width:820px;margin:0 auto">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:22px">
         <button class="btn line" data-act="catdetail" data-id="">‹ กลับไปแคตตาล็อก</button>
@@ -440,7 +440,7 @@ function lensPresentView(p) {
         ${p.brand ? `<div class="tag" style="margin-bottom:4px">${esc(p.brand)}</div>` : ''}
         <h1 style="margin:0 0 20px">${esc(p.product_name)}</h1>
         <div style="background:#f3f0e9;border-radius:16px;height:260px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;margin-bottom:26px">
-          <div style="width:64px;height:64px;border-radius:50%;background:#fff;border:6px solid #ab8a5e"></div>
+          <div style="width:64px;height:64px;border-radius:50%;background:#fff;border:6px solid #16294a"></div>
           <span class="tag">พื้นที่แสดงภาพสินค้า / เทคโนโลยีเลนส์</span>
         </div>
         ${kicker('DESIGNED FOR YOUR LIFE · ออกแบบมาเพื่อชีวิตคุณ')}
@@ -471,7 +471,7 @@ function lensCatalogView() {
   const rows = live('products').filter(p => p.product_type === 'lens' && p.active !== false && [p.product_name, p.brand, p.sku, p.description].join(' ').toLowerCase().includes(q))
     .sort((a, b) => (a.brand || '').localeCompare(b.brand || '') || a.product_name.localeCompare(b.product_name));
   const sel = S.catCompare || [];
-  return `<div style="position:fixed;inset:0;background:var(--bg,#f4f1ea);overflow:auto;padding:28px 20px">
+  return `<div style="position:fixed;inset:0;background:#eef1f5;overflow:auto;padding:28px 20px">
     <div style="max-width:1180px;margin:0 auto">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;flex-wrap:wrap">
         <h1 style="margin:0">แคตตาล็อกเลนส์</h1>
@@ -546,21 +546,21 @@ function custView(id) {
 }
 const knownBrands = type => { const used = live('products').filter(p => !type || p.product_type === type).map(p => p.brand).filter(Boolean); const base = type === 'frame' ? LOOKUPS.frameBrands : type === 'lens' ? [...LOOKUPS.lensBrands, ...LOOKUPS.contactBrands] : [...LOOKUPS.frameBrands, ...LOOKUPS.lensBrands, ...LOOKUPS.contactBrands]; return [...new Set([...base, ...used])]; };
 const TAN_FORM_STYLE = `<style>
-  .tanform{background:#faf6ee;border-radius:14px;padding:6px 4px 2px}
+  .tanform{background:#eef1f5;border-radius:14px;padding:6px 4px 2px}
   .tanform .sec{margin-bottom:6px}
-  .tanform .secnum{color:#ab8a5e;font-size:11.5px;letter-spacing:.14em;font-weight:700;text-transform:uppercase;margin:20px 0 12px;padding-bottom:8px;border-bottom:1px solid #ecdfc8}
+  .tanform .secnum{color:#16294a;font-size:11.5px;letter-spacing:.14em;font-weight:700;text-transform:uppercase;margin:20px 0 12px;padding-bottom:8px;border-bottom:1px solid #d7dde6}
   .tanform .sec:first-of-type .secnum{margin-top:2px}
   .tanform label{display:block;font-size:13px;margin-bottom:14px;color:#3a332a}
   .tanform label > span.lbl{display:block;font-weight:600;margin-bottom:6px;color:#2c2f33}
-  .tanform input[type=text],.tanform input[type=number],.tanform input:not([type]),.tanform select,.tanform textarea{width:100%;padding:11px 13px;border-radius:10px;border:1px solid #e3d9c6;background:#fff;font-size:13.5px;font-family:inherit;box-sizing:border-box}
+  .tanform input[type=text],.tanform input[type=number],.tanform input:not([type]),.tanform select,.tanform textarea{width:100%;padding:11px 13px;border-radius:10px;border:1px solid #d7dde6;background:#fff;font-size:13.5px;font-family:inherit;box-sizing:border-box}
   .tanform .two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
   .tanform .coatwrap{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 4px}
-  .tanform .coatwrap label.chk{display:inline-flex;align-items:center;gap:6px;border:1px solid #e3d9c6;border-radius:999px;padding:7px 13px;font-size:12.5px;margin:0;background:#fff}
+  .tanform .coatwrap label.chk{display:inline-flex;align-items:center;gap:6px;border:1px solid #d7dde6;border-radius:999px;padding:7px 13px;font-size:12.5px;margin:0;background:#fff}
   .tanform .chkrow{display:flex;align-items:center;gap:8px;margin-top:4px}
   .tanform .foot{display:flex;justify-content:flex-end;gap:10px;margin:22px 0 4px}
   .tanform .foot button{padding:12px 24px;border-radius:999px;font-size:14px;cursor:pointer;border:1px solid transparent}
   .tanform .foot button[type=submit]{background:#ab8a5e;color:#fff}
-  .tanform .foot button.line{background:#fff;border-color:#e3d9c6;color:#3a332a}
+  .tanform .foot button.line{background:#fff;border-color:#d7dde6;color:#3a332a}
   @media (min-width:1px){.tanform .two{grid-template-columns:1fr 1fr}}
 </style>`;
 function tfld(n, label, v = '', t = 'text', extra = '') { return `<label><span class="lbl">${label}</span><input name="${n}" type="${t}" value="${esc(v)}" ${extra}></label>`; }
