@@ -13,7 +13,7 @@ const errText = e => { const m = e?.message || String(e); try { return JSON.pars
 /* ---------- โครงสร้างข้อมูล (ตรงกับ supabase/schema.sql) ---------- */
 const COLS = {
   customer_profiles: ['id', 'shop_id', 'customer_code', 'full_name', 'phone', 'budget_thb', 'lifestyle', 'notes', 'consent_recorded_at', 'deleted_at', 'created_at'],
-  prescriptions: ['id', 'shop_id', 'customer_id', 'exam_date', 'od_sph', 'od_cyl', 'od_axis', 'os_sph', 'os_cyl', 'os_axis', 'pd', 'add_power', 'notes', 'deleted_at', 'created_at'],
+  prescriptions: ['id', 'shop_id', 'customer_id', 'exam_date', 'od_sph', 'od_cyl', 'od_axis', 'os_sph', 'os_cyl', 'os_axis', 'pd', 'add_power', 'od_pd', 'os_pd', 'od_add', 'os_add', 'examiner', 'notes', 'deleted_at', 'created_at'],
   products: ['id', 'shop_id', 'product_type', 'sku', 'brand', 'product_name', 'description', 'features', 'retail_price_thb', 'cost_thb', 'stock_qty', 'active', 'lens_spec', 'deleted_at', 'created_at'],
   quotes: ['id', 'shop_id', 'customer_id', 'quote_number', 'status', 'subtotal_thb', 'discount_thb', 'total_thb', 'notes', 'valid_until', 'deleted_at', 'created_at'],
   quote_items: ['id', 'shop_id', 'quote_id', 'product_id', 'item_name_snapshot', 'product_type', 'quantity', 'unit_price_thb', 'line_total_thb', 'deleted_at', 'created_at'],
@@ -158,8 +158,8 @@ const knownCC = () => [...new Set([...CC_SEED, ...ls.get('ccSeed', [])])];
 const NEEDS = { general: 'ใช้งานทั่วไป', screen: 'ทำงานหน้าจอ', drive: 'ขับรถ/กลางคืน', outdoor: 'กลางแจ้ง', progressive: 'สายตายาว/โปรเกรสซีฟ' };
 const TYPES = { lens: 'เลนส์', frame: 'กรอบ', service: 'บริการ', other: 'อื่น ๆ' };
 const QST = { draft: 'ร่าง', presented: 'เสนอแล้ว', accepted: 'ลูกค้าตกลง', declined: 'ลูกค้าปฏิเสธ', expired: 'หมดอายุ', converted: 'ออกขายแล้ว' };
-const NAV = [['studio', 'Sales Studio'], ['customers', 'ลูกค้า'], ['products', 'สินค้า'], ['quotes', 'ใบเสนอราคา'], ['insights', 'ภาพรวม'], ['settings', 'ตั้งค่า']];
-const S = { v: 'studio', need: 'general', cart: [], cust: '', disc: 0, notes: '', q: '', pq: '', ptype: 'all', staff: null, mode: 'splash', custView: 'all', custFrom: '', custTo: '', catQ: '', catCompare: [], catDetail: null };
+const NAV = [['customers', 'ลูกค้า'], ['products', 'สินค้า'], ['insights', 'ภาพรวม'], ['settings', 'ตั้งค่า']];
+const S = { v: 'customers', need: 'general', cart: [], cust: '', disc: 0, notes: '', q: '', pq: '', ptype: 'all', staff: null, mode: 'splash', custView: 'all', custFrom: '', custTo: '', catQ: '', catCompare: [], catDetail: null };
 const freshLR = () => ({ purpose: [], other: '', vision: [], lenstype: [], age: '', budget: '', occupation: '', notes: '' });
 let K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null };
 const kioskReset = () => { K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null }; };
@@ -280,9 +280,13 @@ function analyze(rows) {
   return res;
 }
 function nextCode() {
-  let best = null;
-  for (const c of db.customer_profiles) { const m = /^(.*?)(\d+)$/.exec(c.customer_code || ''); if (m && (!best || +m[2] > best.n)) best = { p: m[1], n: +m[2], len: m[2].length }; }
-  return best ? best.p + String(best.n + 1).padStart(best.len, '0') : '';
+  const yy = String(new Date().getFullYear()).slice(-2);
+  let maxN = 0;
+  for (const c of db.customer_profiles) {
+    const code = c.customer_code || '';
+    if (code.startsWith(yy) && /^\d{6}$/.test(code)) { const n = +code.slice(2); if (n > maxN) maxN = n; }
+  }
+  return yy + String(maxN + 1).padStart(4, '0');
 }
 // IMPORT-HELPERS-END
 let IMP = null;
@@ -513,7 +517,7 @@ function render() {
   if (S.mode === 'lenscat') return overlay(lensCatalogView());
   if (ORIG_THEME_COLOR != null) setThemeColor(ORIG_THEME_COLOR);
   closeOverlay();
-  $('#nav').innerHTML = NAV.map(([k, l]) => `<button data-act="go" data-id="${k}" class="${S.v === k ? 'on' : ''}">${l}</button>`).join('');
+  $('#nav').innerHTML = `<button data-act="gomode" data-id="hub">‹ กลับหน้าหลัก</button><div style="height:1px;background:rgba(255,255,255,.14);margin:4px 2px"></div>` + NAV.map(([k, l]) => `<button data-act="go" data-id="${k}" class="${S.v === k ? 'on' : ''}">${l}</button>`).join('');
   $('#view').innerHTML = views[S.v](); setStatus();
 }
 const dialog = html => { const d = $('#dlg'); d.innerHTML = html; if (!d.open) d.showModal(); };
@@ -526,7 +530,11 @@ function custForm(c = {}, from = '') {
 }
 function rxForm(cid, pre = '') {
   const g = (n, l, st = '0.25') => fld(n, l, '', 'number', `step="${st}"`);
-  dialog(`<form data-form="rx" data-cid="${cid}"><h2>เพิ่มค่าสายตา · ${esc(custName(cid))}</h2>${fld('exam_date', 'วันที่ตรวจ', now().slice(0, 10), 'date')}<div class="two">${g('od_sph', 'ขวา SPH')}${g('od_cyl', 'ขวา CYL')}${fld('od_axis', 'ขวา AXIS (0-180)', '', 'number', 'min="0" max="180"')}<span></span>${g('os_sph', 'ซ้าย SPH')}${g('os_cyl', 'ซ้าย CYL')}${fld('os_axis', 'ซ้าย AXIS (0-180)', '', 'number', 'min="0" max="180"')}<span></span>${g('pd', 'PD', '0.5')}${g('add_power', 'ADD')}</div><label>บันทึก<textarea name="notes" rows="2">${esc(pre)}</textarea></label>${foot('บันทึกค่าสายตา')}</form>`);
+  dialog(`<form data-form="rx" data-cid="${cid}"><h2>เพิ่มค่าสายตา · ${esc(custName(cid))}</h2>
+    <div class="two">${fld('exam_date', 'วันที่ตรวจ', now().slice(0, 10), 'date')}${fld('examiner', 'ผู้ตรวจ', '', 'text')}</div>
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:0 10px">${g('od_sph', 'ขวา SPH')}${g('od_cyl', 'ขวา CYL')}${fld('od_axis', 'ขวา AXIS (0-180)', '', 'number', 'min="0" max="180"')}${g('od_add', 'ขวา ADD')}${g('od_pd', 'ขวา PD', '0.5')}</div>
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:0 10px;margin-top:4px">${g('os_sph', 'ซ้าย SPH')}${g('os_cyl', 'ซ้าย CYL')}${fld('os_axis', 'ซ้าย AXIS (0-180)', '', 'number', 'min="0" max="180"')}${g('os_add', 'ซ้าย ADD')}${g('os_pd', 'ซ้าย PD', '0.5')}</div>
+    <label>บันทึก<textarea name="notes" rows="2">${esc(pre)}</textarea></label>${foot('บันทึกค่าสายตา')}</form>`);
 }
 function custView(id) {
   const c = find('customer_profiles', id), rx = db.prescriptions.filter(r => !r.deleted_at && r.customer_id === id).sort((a, b) => (b.exam_date || b.created_at).localeCompare(a.exam_date || a.created_at));
@@ -534,7 +542,7 @@ function custView(id) {
   const cls = live('claims').filter(x => x.customer_id === id).sort((a, b) => b.created_at.localeCompare(a.created_at));
   dialog(`<style>#dlg{width:min(760px,95vw)!important;max-width:95vw!important}</style>
   <h2>${esc(c.full_name)} <span class="tag">${esc(c.customer_code || '')}</span></h2><p class="tag">${esc([c.phone, c.budget_thb ? 'งบ ' + baht(c.budget_thb) : '', c.lifestyle].filter(Boolean).join(' · '))}${c.notes ? '<br>' + esc(c.notes) : ''}</p>
-  <h3>ประวัติค่าสายตา</h3>${rx.length ? `<div class="wrap"><table><tr><th>วันที่</th><th>ขวา SPH/CYL/AXIS</th><th>ซ้าย SPH/CYL/AXIS</th><th>PD</th><th>ADD</th><th></th></tr>${rx.map(r => `<tr><td>${day(r.exam_date || r.created_at)}</td><td>${fmtP(r.od_sph)} / ${fmtP(r.od_cyl)} / ${r.od_axis ?? '-'}</td><td>${fmtP(r.os_sph)} / ${fmtP(r.os_cyl)} / ${r.os_axis ?? '-'}</td><td>${r.pd ?? '-'}</td><td>${fmtP(r.add_power)}</td><td>${mgr() ? `<button class="btn line sm bad" data-act="delrx" data-id="${r.id}" data-cid="${id}">ลบ</button>` : ''}</td></tr>`).join('')}</table></div>` : '<p class="tag">ยังไม่มีค่าสายตา</p>'}
+  <h3>ประวัติค่าสายตา</h3>${rx.length ? `<div class="wrap"><table><tr><th>วันที่</th><th>ผู้ตรวจ</th><th>ขวา SPH/CYL/AXIS</th><th>ขวา ADD/PD</th><th>ซ้าย SPH/CYL/AXIS</th><th>ซ้าย ADD/PD</th><th></th></tr>${rx.map(r => `<tr><td>${day(r.exam_date || r.created_at)}</td><td class="tag">${esc(r.examiner || '-')}</td><td>${fmtP(r.od_sph)} / ${fmtP(r.od_cyl)} / ${r.od_axis ?? '-'}</td><td class="tag">${fmtP(r.od_add ?? r.add_power)} / ${r.od_pd ?? r.pd ?? '-'}</td><td>${fmtP(r.os_sph)} / ${fmtP(r.os_cyl)} / ${r.os_axis ?? '-'}</td><td class="tag">${fmtP(r.os_add ?? r.add_power)} / ${r.os_pd ?? r.pd ?? '-'}</td><td>${mgr() ? `<button class="btn line sm bad" data-act="delrx" data-id="${r.id}" data-cid="${id}">ลบ</button>` : ''}</td></tr>`).join('')}</table></div>` : '<p class="tag">ยังไม่มีค่าสายตา</p>'}
   <h3 style="margin-top:18px">ประวัติการซื้อ</h3>
   <div style="display:flex;flex-direction:column;gap:10px">${qs.length ? qs.slice().sort((a, b) => b.created_at.localeCompare(a.created_at)).map(q => {
     const items = live('quote_items').filter(i => i.quote_id === q.id);
@@ -873,9 +881,8 @@ function kioskProductBrowse() {
     ${summary ? `<div class="panel" style="padding:10px 14px;margin-bottom:14px;font-size:12.5px;color:#444"><b>ความต้องการลูกค้า:</b> ${esc(summary)}</div>` : ''}
     <div style="display:flex;gap:10px;margin-bottom:14px">
       <input placeholder="ค้นหา${label} ชื่อ/ยี่ห้อ" value="${esc(K.pq || '')}" data-bind="kpq" style="flex:1">
-      <button data-act="kioskaddprod" data-id="${type}" class="btn line sm" style="white-space:nowrap">+ เพิ่มสินค้าใหม่</button>
     </div>
-    <div style="display:flex;flex-direction:column;gap:10px;max-height:48vh;overflow:auto;padding-right:2px">${rows.length ? rows.map(card).join('') : '<p class="tag">ยังไม่มีสินค้าในหมวดนี้ — กด "เพิ่มสินค้าใหม่" เพื่อเพิ่มเลย</p>'}</div>
+    <div style="display:flex;flex-direction:column;gap:10px;max-height:48vh;overflow:auto;padding-right:2px">${rows.length ? rows.map(card).join('') : '<p class="tag">ยังไม่มีสินค้าในหมวดนี้ — เพิ่มสินค้าได้ที่หลังบ้าน หน้า "สินค้า"</p>'}</div>
     <div class="foot" style="margin-top:18px;justify-content:flex-end">
       <button class="btn" data-act="kioskstep" data-id="cart">ถัดไป (${S.cart.length} รายการ)</button>
     </div>
@@ -1024,7 +1031,7 @@ document.addEventListener('click', e => {
   else if (a === 'histopen') {
     const kind = b.dataset.kind;
     if (kind === 'quote') quoteSheet(id);
-    else if (kind === 'rx') { const r = find('prescriptions', id); dialog(`<h2>ประวัติตรวจสายตา</h2><p class="tag">${day(r.exam_date || r.created_at)}</p><p>ขวา ${fmtP(r.od_sph)}/${fmtP(r.od_cyl)}×${r.od_axis ?? '-'}<br>ซ้าย ${fmtP(r.os_sph)}/${fmtP(r.os_cyl)}×${r.os_axis ?? '-'}</p>${r.notes ? `<p class="tag">${esc(r.notes)}</p>` : ''}<div class="foot"><button class="btn line" data-act="close">ปิด</button></div>`); }
+    else if (kind === 'rx') { const r = find('prescriptions', id); dialog(`<h2>ประวัติตรวจสายตา</h2><p class="tag">${day(r.exam_date || r.created_at)}${r.examiner ? ' · ผู้ตรวจ: ' + esc(r.examiner) : ''}</p><p>ขวา ${fmtP(r.od_sph)}/${fmtP(r.od_cyl)}×${r.od_axis ?? '-'} · ADD ${fmtP(r.od_add ?? r.add_power)} · PD ${r.od_pd ?? r.pd ?? '-'}<br>ซ้าย ${fmtP(r.os_sph)}/${fmtP(r.os_cyl)}×${r.os_axis ?? '-'} · ADD ${fmtP(r.os_add ?? r.add_power)} · PD ${r.os_pd ?? r.pd ?? '-'}</p>${r.notes ? `<p class="tag">${esc(r.notes)}</p>` : ''}<div class="foot"><button class="btn line" data-act="close">ปิด</button></div>`); }
     else if (kind === 'claim') { const x = find('claims', id); dialog(`<h2>${x.kind === 'claim' ? 'เคลมประกัน' : 'ซ่อมแว่น'}</h2><p class="tag">${day(x.created_at)}${x.frame_model ? ' · ' + esc(x.frame_model) : ''}</p>${x.issue ? `<p>${esc(x.issue)}</p>` : ''}${x.repair_items ? `<p class="tag">${esc(x.repair_items)}</p>` : ''}${x.pickup_date ? `<p class="tag">นัดรับ: ${day(x.pickup_date)}</p>` : ''}${x.cost_thb != null ? `<p><b>${baht(x.cost_thb)}</b></p>` : ''}<div class="foot"><button class="btn line" data-act="close">ปิด</button></div>`); }
   }
   else if (a === 'cctoggle') { K.cc = K.cc.includes(id) ? K.cc.filter(x => x !== id) : [...K.cc, id]; render(); }
@@ -1104,7 +1111,7 @@ document.addEventListener('submit', async e => {
       save('customer_profiles', { ...o, id: nid, full_name: d.full_name.trim(), customer_code: d.customer_code.trim() || null, phone: d.phone.trim() || null, budget_thb: num(d.budget_thb), lifestyle: d.lifestyle.trim() || null, notes: d.notes.trim() || null, consent_recorded_at: d.consent ? (o.consent_recorded_at || now()) : null, deleted_at: null });
       if (f.dataset.from === 'studio') S.cust = nid; closeDlg(); commit(); toast('บันทึกลูกค้าแล้ว');
     } else if (k === 'rx') {
-      save('prescriptions', { id: uid(), customer_id: f.dataset.cid, exam_date: d.exam_date || null, od_sph: num(d.od_sph), od_cyl: num(d.od_cyl), od_axis: num(d.od_axis), os_sph: num(d.os_sph), os_cyl: num(d.os_cyl), os_axis: num(d.os_axis), pd: num(d.pd), add_power: num(d.add_power), notes: d.notes.trim() || null, deleted_at: null });
+      save('prescriptions', { id: uid(), customer_id: f.dataset.cid, exam_date: d.exam_date || null, examiner: (d.examiner || '').trim() || null, od_sph: num(d.od_sph), od_cyl: num(d.od_cyl), od_axis: num(d.od_axis), os_sph: num(d.os_sph), os_cyl: num(d.os_cyl), os_axis: num(d.os_axis), od_pd: num(d.od_pd), os_pd: num(d.os_pd), od_add: num(d.od_add), os_add: num(d.os_add), pd: null, add_power: null, notes: d.notes.trim() || null, deleted_at: null });
       commit(); custView(f.dataset.cid); toast('บันทึกค่าสายตาแล้ว');
     } else if (k === 'prod') {
       const o = id ? find('products', id) : {};
