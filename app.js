@@ -15,7 +15,7 @@ const COLS = {
   customer_profiles: ['id', 'shop_id', 'customer_code', 'full_name', 'phone', 'budget_thb', 'lifestyle', 'notes', 'consent_recorded_at', 'deleted_at', 'created_at'],
   prescriptions: ['id', 'shop_id', 'customer_id', 'exam_date', 'od_sph', 'od_cyl', 'od_axis', 'os_sph', 'os_cyl', 'os_axis', 'pd', 'add_power', 'od_pd', 'os_pd', 'od_add', 'os_add', 'examiner', 'notes', 'deleted_at', 'created_at'],
   products: ['id', 'shop_id', 'product_type', 'sku', 'brand', 'product_name', 'description', 'features', 'retail_price_thb', 'cost_thb', 'stock_qty', 'active', 'lens_spec', 'deleted_at', 'created_at'],
-  quotes: ['id', 'shop_id', 'customer_id', 'quote_number', 'status', 'subtotal_thb', 'discount_thb', 'total_thb', 'notes', 'valid_until', 'deleted_at', 'created_at'],
+  quotes: ['id', 'shop_id', 'customer_id', 'quote_number', 'status', 'subtotal_thb', 'discount_thb', 'total_thb', 'notes', 'valid_until', 'receipt_date', 'deleted_at', 'created_at'],
   quote_items: ['id', 'shop_id', 'quote_id', 'product_id', 'item_name_snapshot', 'product_type', 'quantity', 'unit_price_thb', 'line_total_thb', 'deleted_at', 'created_at'],
   claims: ['id', 'shop_id', 'customer_id', 'kind', 'frame_model', 'frame_code', 'issue', 'repair_items', 'cost_thb', 'pickup_date', 'photo', 'status', 'signed_at', 'notes', 'deleted_at', 'created_at']
 };
@@ -161,12 +161,28 @@ const QST = { draft: 'ร่าง', presented: 'เสนอแล้ว', acce
 const NAV = [['customers', 'ลูกค้า'], ['products', 'สินค้า'], ['insights', 'ภาพรวม'], ['settings', 'ตั้งค่า']];
 const S = { v: 'customers', need: 'general', cart: [], cust: '', disc: 0, notes: '', q: '', pq: '', ptype: 'all', staff: null, mode: 'splash', custView: 'all', custFrom: '', custTo: '', catQ: '', catCompare: [], catDetail: null, catReturn: '', catDesign: '', catMain: '' };
 const freshLR = () => ({ purpose: [], other: '', vision: [], lenstype: [], age: '', budget: '', occupation: '', notes: '' });
-let K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null };
-const kioskReset = () => { K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, detailProdId: null }; };
+const freshDisc = () => ({ type: 'amt', val: 0 });
+let K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, discFrame: freshDisc(), discLens: freshDisc() };
+const kioskReset = () => { K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, detailProdId: null, discFrame: freshDisc(), discLens: freshDisc() }; };
 const empty = (m, a = '') => `<div class="empty">${m}${a ? `<br><br>${a}` : ''}</div>`;
 const fmtP = v => v == null || v === '' ? '-' : (+v > 0 ? '+' : '') + (+v).toFixed(2);
 const day = d => d ? new Date(d).toLocaleDateString('th-TH') : '-';
 const cartSub = () => S.cart.reduce((n, i) => n + i.price * i.qty, 0);
+function discAmt(cfg, base) {
+  const v = Math.max(0, +(cfg && cfg.val) || 0);
+  const amt = cfg && cfg.type === 'pct' ? base * v / 100 : v;
+  return Math.min(base, Math.round(amt));
+}
+function cartCalc() {
+  const frameSub = S.cart.filter(i => i.type === 'frame').reduce((n, i) => n + i.price * i.qty, 0);
+  const lensSub = S.cart.filter(i => i.type === 'lens').reduce((n, i) => n + i.price * i.qty, 0);
+  const otherSub = S.cart.filter(i => i.type !== 'frame' && i.type !== 'lens').reduce((n, i) => n + i.price * i.qty, 0);
+  const discFrameAmt = discAmt(K.discFrame, frameSub);
+  const discLensAmt = discAmt(K.discLens, lensSub);
+  const sub = frameSub + lensSub + otherSub;
+  const discTotal = discFrameAmt + discLensAmt;
+  return { frameSub, lensSub, otherSub, discFrameAmt, discLensAmt, sub, discTotal, total: sub - discTotal };
+}
 const latestRx = cid => db.prescriptions.filter(r => !r.deleted_at && r.customer_id === cid).sort((a, b) => (b.exam_date || b.created_at).localeCompare(a.exam_date || a.created_at))[0];
 const rxText = r => r ? `ขวา ${fmtP(r.od_sph)}${r.od_cyl != null ? '/' + fmtP(r.od_cyl) + '×' + (r.od_axis ?? '-') : ''} · ซ้าย ${fmtP(r.os_sph)}${r.os_cyl != null ? '/' + fmtP(r.os_cyl) + '×' + (r.os_axis ?? '-') : ''}` : 'ยังไม่มีค่าสายตา';
 const custName = id => find('customer_profiles', id)?.full_name || 'ลูกค้าทั่วไป';
@@ -1044,13 +1060,29 @@ function kioskProductBrowse() {
   </div>`;
 }
 function kioskCart() {
-  const sub = cartSub();
+  const c = cartCalc();
+  const discRow = (label, group, cfg, base, amt) => !base ? '' : `<div class="panel" style="padding:12px 14px;margin-top:10px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+      <b style="font-size:13px">ส่วนลด${label} <span class="tag">(ยอดก่อนลด ${baht(base)})</span></b>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button type="button" data-act="disctype" data-group="${group}" data-id="pct" class="btn ${cfg.type === 'pct' ? '' : 'line'} sm">%</button>
+        <button type="button" data-act="disctype" data-group="${group}" data-id="amt" class="btn ${cfg.type === 'amt' ? '' : 'line'} sm">บาท</button>
+        <input type="number" min="0" step="1" value="${cfg.val || ''}" placeholder="0" data-bind="disc${group}val" style="width:90px">
+      </div>
+    </div>
+    ${amt ? `<div class="tag" style="margin-top:4px">ลดไปแล้ว ${baht(amt)}</div>` : ''}
+  </div>`;
   return `<div class="panel" style="padding:24px">
     <h2 style="margin-top:0">สรุปรายการ</h2>
     ${S.cart.length ? S.cart.map(i => `<div class="row"><span>${esc(i.name)}<br><span class="tag">${baht(i.price)} × ${i.qty}</span></span><span class="qty"><button class="btn line sm" data-act="qty" data-id="${i.id}" data-d="-1">−</button><b>${i.qty}</b><button class="btn line sm" data-act="qty" data-id="${i.id}" data-d="1">+</button></span></div>`).join('') : '<p class="tag">ยังไม่ได้เลือกสินค้า</p>'}
-    <div class="row" style="border:0;margin-top:6px"><b>รวมทั้งสิ้น</b><b>${baht(sub)}</b></div>
+    ${discRow('กรอบแว่น', 'frame', K.discFrame, c.frameSub, c.discFrameAmt)}
+    ${discRow('เลนส์', 'lens', K.discLens, c.lensSub, c.discLensAmt)}
+    <div class="row" style="border:0;margin-top:6px"><span>ยอดรวมก่อนลด</span><span>${baht(c.sub)}</span></div>
+    ${c.discTotal ? `<div class="row" style="border:0"><span>ส่วนลดรวม</span><span>-${baht(c.discTotal)}</span></div>` : ''}
+    <div class="row" style="border:0"><b>รวมทั้งสิ้น</b><b>${baht(c.total)}</b></div>
     <div class="foot" style="margin-top:18px">
       <button class="btn line" data-act="kioskback">ย้อนกลับ</button>
+      ${S.cart.length ? `<button class="btn line" data-act="receiptpreview">ดูตัวอย่าง/พิมพ์ใบเสร็จ</button>` : ''}
       <button class="btn" data-act="kioskcheckout">ยืนยันสั่งซื้อ</button>
     </div>
   </div>`;
@@ -1114,6 +1146,61 @@ function quoteSheet(id) {
   <div class="row"><span>รวม</span><span>${baht(q.subtotal_thb)}</span></div>${q.discount_thb ? `<div class="row"><span>ส่วนลด</span><span>-${baht(q.discount_thb)}</span></div>` : ''}
   <div class="row" style="border:0"><b>รวมสุทธิ</b><span class="total">${baht(q.total_thb)}</span></div>${q.notes ? `<p class="tag">หมายเหตุ: ${esc(q.notes)}</p>` : ''}
   <form data-form="quote" data-id="${id}" class="noprint"><div class="two"><label>สถานะ<select name="status">${Object.entries(QST).map(([k, l]) => `<option value="${k}" ${q.status === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>${fld('valid_until', 'ใช้ได้ถึง', q.valid_until || '', 'date')}</div><label>หมายเหตุ<textarea name="notes" rows="2">${esc(q.notes)}</textarea></label><div class="foot"><button type="button" class="btn line" data-act="close">ปิด</button><button type="button" class="btn line" data-act="print">พิมพ์ / PDF</button><button class="btn" type="submit">บันทึก</button></div></form></div>`);
+}
+let RCPT = null, RCPT_FOR = null;
+function receiptData(forQuoteId) {
+  if (forQuoteId) {
+    const q = find('quotes', forQuoteId);
+    const items = live('quote_items').filter(i => i.quote_id === forQuoteId);
+    return {
+      customerId: q.customer_id, saved: true,
+      items: items.map(i => ({ name: i.item_name_snapshot, type: i.product_type, qty: i.quantity, price: i.unit_price_thb, lineTotal: i.line_total_thb })),
+      sub: q.subtotal_thb, discTotal: q.discount_thb, total: q.total_thb,
+      defNo: q.quote_number || '', defDate: q.receipt_date || (q.created_at || '').slice(0, 10) || now().slice(0, 10)
+    };
+  }
+  const c = cartCalc();
+  return {
+    customerId: K.custId, saved: false,
+    items: S.cart.map(i => ({ name: i.name, type: i.type, qty: i.qty, price: i.price, lineTotal: i.price * i.qty })),
+    sub: c.sub, discTotal: c.discTotal, total: c.total,
+    defNo: '', defDate: now().slice(0, 10)
+  };
+}
+function receiptHTML() {
+  const d = receiptData(RCPT_FOR);
+  const cust = d.customerId ? find('customer_profiles', d.customerId) : null;
+  const rx = d.customerId ? latestRx(d.customerId) : null;
+  const lensNames = d.items.filter(i => i.type === 'lens').map(i => i.name).join(', ') || '-';
+  const frameNames = d.items.filter(i => i.type === 'frame').map(i => i.name).join(', ') || '-';
+  const rxLine = rx ? `ขวา ${fmtP(rx.od_sph)}${rx.od_cyl != null ? '/' + fmtP(rx.od_cyl) + '×' + (rx.od_axis ?? '-') : ''} ADD ${fmtP(rx.od_add ?? rx.add_power)} PD ${rx.od_pd ?? rx.pd ?? '-'} · ซ้าย ${fmtP(rx.os_sph)}${rx.os_cyl != null ? '/' + fmtP(rx.os_cyl) + '×' + (rx.os_axis ?? '-') : ''} ADD ${fmtP(rx.os_add ?? rx.add_power)} PD ${rx.os_pd ?? rx.pd ?? '-'}${rx.examiner ? ` · ผู้ตรวจ: ${esc(rx.examiner)}` : ''}` : 'ไม่มีข้อมูลค่าสายตาในระบบ';
+  return `<div class="sheet">
+    <h2 style="margin-bottom:2px">ใบเสร็จรับเงิน</h2>
+    <div class="meta">${esc(shop?.name || 'Social Eyewear')} · เลขที่ ${esc(RCPT.no || '(ยังไม่ระบุ)')} · วันที่ ${day(RCPT.date)}</div>
+    <p style="margin:4px 0"><b>ชื่อ-นามสกุล:</b> ${esc(cust?.full_name || 'ลูกค้าทั่วไป')}${cust?.customer_code ? ` <span class="tag">(${esc(cust.customer_code)})</span>` : ''}</p>
+    <p style="margin:4px 0"><b>ค่าสายตาที่ตัด:</b> ${rxLine}</p>
+    <p style="margin:4px 0"><b>ชนิดเลนส์:</b> ${esc(lensNames)}</p>
+    <p style="margin:4px 0 12px"><b>กรอบแว่น:</b> ${esc(frameNames)}</p>
+    <table><tr><th>รายการ</th><th>จำนวน</th><th>ราคา/หน่วย</th><th style="text-align:right">รวม</th></tr>${d.items.map(i => `<tr><td>${esc(i.name)}</td><td>${i.qty}</td><td>${baht(i.price)}</td><td style="text-align:right">${baht(i.lineTotal)}</td></tr>`).join('')}</table>
+    <div class="row"><span>รวม</span><span>${baht(d.sub)}</span></div>
+    ${d.discTotal ? `<div class="row"><span>ส่วนลด</span><span>-${baht(d.discTotal)}</span></div>` : ''}
+    <div class="row" style="border:0"><b>รวมสุทธิ</b><span class="total">${baht(d.total)}</span></div>
+    <form data-form="receiptmeta" class="noprint" style="margin-top:14px">
+      <div class="two"><label>เลขที่ใบเสร็จ<input name="receipt_no" value="${esc(RCPT.no)}" placeholder="เช่น RC-270001"></label><label>วันที่ออกใบเสร็จ<input type="date" name="receipt_date" value="${esc(RCPT.date)}"></label></div>
+      <p class="tag">แก้เลขที่/วันที่แล้วกด "อัปเดตตัวอย่าง" เพื่อให้ใบเสร็จด้านบนเปลี่ยนตาม ก่อนสั่งพิมพ์</p>
+      <div class="foot">
+        <button type="button" class="btn line" data-act="close">ปิด</button>
+        <button type="submit" class="btn line">อัปเดตตัวอย่าง</button>
+        <button type="button" class="btn" data-act="print">พิมพ์ใบเสร็จ</button>
+      </div>
+    </form>
+  </div>`;
+}
+function openReceipt(forQuoteId) {
+  RCPT_FOR = forQuoteId || null;
+  const d = receiptData(RCPT_FOR);
+  RCPT = { no: d.defNo, date: d.defDate };
+  dialog(receiptHTML());
 }
 
 const SAMPLE = [['lens', 'เลนส์ Single Vision ใส', 1500, 'general'], ['lens', 'เลนส์ Blue Light Cut', 2800, 'screen,general'], ['lens', 'เลนส์ Photochromic', 4200, 'outdoor,drive'], ['lens', 'เลนส์ Anti-Glare Drive', 3900, 'drive'], ['lens', 'เลนส์ Progressive Premium', 9800, 'progressive'], ['frame', 'กรอบ Titanium Round', 5900, ''], ['frame', 'กรอบ Acetate Classic', 3500, ''], ['service', 'ค่าตรวจวัดสายตา', 300, '']];
@@ -1206,13 +1293,19 @@ document.addEventListener('click', e => {
   else if (a === 'kioskcheckout') {
     if (!S.cart.length) return toast('เลือกสินค้าอย่างน้อย 1 รายการก่อน');
     S.cust = K.custId;
-    const sub = cartSub(), qid = uid();
+    const c = cartCalc(), qid = uid();
     const lrNote = lrSummary();
-    save('quotes', { id: qid, customer_id: S.cust || null, quote_number: null, status: 'converted', subtotal_thb: sub, discount_thb: 0, total_thb: sub, notes: lrNote ? `ความต้องการลูกค้า: ${lrNote}` : null, valid_until: null, deleted_at: null });
+    const discNote = c.discTotal ? `ส่วนลด — กรอบ: ${c.discFrameAmt ? baht(c.discFrameAmt) : '-'} / เลนส์: ${c.discLensAmt ? baht(c.discLensAmt) : '-'}` : '';
+    save('quotes', { id: qid, customer_id: S.cust || null, quote_number: null, status: 'converted', subtotal_thb: c.sub, discount_thb: c.discTotal, total_thb: c.total, notes: [lrNote ? `ความต้องการลูกค้า: ${lrNote}` : '', discNote].filter(Boolean).join(' · ') || null, valid_until: null, receipt_date: now().slice(0, 10), deleted_at: null });
     S.cart.forEach(i => save('quote_items', { id: uid(), quote_id: qid, product_id: i.id, item_name_snapshot: i.name, product_type: i.type, quantity: i.qty, unit_price_thb: i.price, line_total_thb: i.price * i.qty, deleted_at: null }));
-    S.cart = []; K.step = 'done'; K.hist = []; K.lr = freshLR(); K.lastQuoteId = qid; commit(); render(); toast('บันทึกการสั่งซื้อแล้ว');
+    S.cart = []; K.step = 'done'; K.hist = []; K.lr = freshLR(); K.lastQuoteId = qid; K.discFrame = freshDisc(); K.discLens = freshDisc(); commit(); render(); toast('บันทึกการสั่งซื้อแล้ว');
   }
-  else if (a === 'kioskprintreceipt') { if (K.lastQuoteId) quoteSheet(K.lastQuoteId); }
+  else if (a === 'kioskprintreceipt') { if (K.lastQuoteId) openReceipt(K.lastQuoteId); }
+  else if (a === 'receiptpreview') openReceipt(null);
+  else if (a === 'disctype') {
+    const g = b.dataset.group === 'frame' ? K.discFrame : K.discLens;
+    g.type = id; render();
+  }
   else if (a === 'catcompare') {
     const arr = S.catCompare || []; const on = arr.includes(id);
     S.catCompare = on ? arr.filter(x => x !== id) : [...arr, id];
@@ -1257,6 +1350,8 @@ document.addEventListener('change', e => {
   if (k === 'impfile') importFile(e.target.files[0]);
   else if (k === 'cust') { S.cust = e.target.value; render(); }
   else if (k === 'disc') { S.disc = Math.max(0, Math.round(+e.target.value || 0)); render(); }
+  else if (k === 'discframeval') { K.discFrame.val = Math.max(0, +e.target.value || 0); render(); }
+  else if (k === 'disclensval') { K.discLens.val = Math.max(0, +e.target.value || 0); render(); }
   else if (k === 'notes') S.notes = e.target.value;
   else if (k === 'qstatus') { save('quotes', { ...find('quotes', e.target.dataset.id), status: e.target.value }); commit(); }
   else if (k === 'url' || k === 'key') { ls.set(k, e.target.value.trim()); toast('บันทึกการตั้งค่าแล้ว'); setStatus(); }
@@ -1319,6 +1414,10 @@ document.addEventListener('submit', async e => {
       closeDlg(); commit(); toast('บันทึกสินค้าแล้ว');
     } else if (k === 'quote') {
       save('quotes', { ...find('quotes', id), status: d.status, valid_until: d.valid_until || null, notes: d.notes.trim() || null }); closeDlg(); commit(); toast('บันทึกใบเสนอราคาแล้ว');
+    } else if (k === 'receiptmeta') {
+      RCPT = { no: (d.receipt_no || '').trim(), date: d.receipt_date || now().slice(0, 10) };
+      if (RCPT_FOR) { save('quotes', { ...find('quotes', RCPT_FOR), quote_number: RCPT.no || null, receipt_date: RCPT.date }); commit(); }
+      dialog(receiptHTML());
     } else if (k === 'auth') {
       await auth(e.submitter?.value === 'signup' ? 'signup' : 'login', d.email.trim(), d.password); toast('เข้าสู่ระบบแล้ว'); render(); await sync(); if (!shop) S.v = 'settings'; render(); loadStaff();
     } else if (k === 'shop') {
