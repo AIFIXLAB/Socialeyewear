@@ -14,7 +14,7 @@ const errText = e => { const m = e?.message || String(e); try { return JSON.pars
 const COLS = {
   customer_profiles: ['id', 'shop_id', 'customer_code', 'full_name', 'phone', 'budget_thb', 'lifestyle', 'notes', 'consent_recorded_at', 'deleted_at', 'created_at'],
   prescriptions: ['id', 'shop_id', 'customer_id', 'exam_date', 'od_sph', 'od_cyl', 'od_axis', 'os_sph', 'os_cyl', 'os_axis', 'pd', 'add_power', 'notes', 'deleted_at', 'created_at'],
-  products: ['id', 'shop_id', 'product_type', 'sku', 'brand', 'product_name', 'description', 'features', 'retail_price_thb', 'cost_thb', 'stock_qty', 'active', 'deleted_at', 'created_at'],
+  products: ['id', 'shop_id', 'product_type', 'sku', 'brand', 'product_name', 'description', 'features', 'retail_price_thb', 'cost_thb', 'stock_qty', 'active', 'lens_spec', 'deleted_at', 'created_at'],
   quotes: ['id', 'shop_id', 'customer_id', 'quote_number', 'status', 'subtotal_thb', 'discount_thb', 'total_thb', 'notes', 'valid_until', 'deleted_at', 'created_at'],
   quote_items: ['id', 'shop_id', 'quote_id', 'product_id', 'item_name_snapshot', 'product_type', 'quantity', 'unit_price_thb', 'line_total_thb', 'deleted_at', 'created_at'],
   claims: ['id', 'shop_id', 'customer_id', 'kind', 'frame_model', 'frame_code', 'issue', 'repair_items', 'cost_thb', 'pickup_date', 'photo', 'status', 'signed_at', 'notes', 'deleted_at', 'created_at']
@@ -129,6 +129,10 @@ const LOOKUPS = {
   contactTypes: ["oneday clear", "oneday color", "oneday toric", "1m clear", "onemonth color", "onemonth toric", "Big Eye กล่องฟ้า", "Big Eye กล่องส้ม", "Big Eye กล่องชมพู", "น้ำยาทำความสะอาดคอนแทคเลนส์", "คอนแทคเลนส์ใส", "น้ำตาเทียม", "multifocal clear", "multifocal color", "toric color"]
 };
 const OTHER_ITEMS = ["ค่าบริการเครื่องรูดบัตร", "ตรวจวัดสายตา", "ซ่อมแว่นตา", "ค่าส่งพัสดุ", "ค่าบริการประกอบ", "อะไหล่แว่นตา", "tint ย้อมสี", "vat7%"];
+const LENS_DESIGN = [['single_far', 'Single Vision - มองไกล'], ['single_near', 'Single Vision - มองใกล้'], ['digital', 'Digital / Anti-Fatigue (ลดอาการล้าสายตา)'], ['office', 'Office Lens (ระยะกลาง-ใกล้)'], ['progressive', 'Progressive (มองได้ทุกระยะ)']];
+const LENS_SURFACE = [['spherical', 'Spherical'], ['aspheric', 'Aspheric (ลดบิดเบือนด้านข้าง)'], ['double_aspheric', 'Double Aspheric'], ['freeform', 'Freeform Individual']];
+const LENS_INDEX_OPTS = ['1.50', '1.56', '1.60', '1.67', '1.74'];
+const LENS_COATINGS = [['blue', 'กรองแสงสีฟ้า (Blue Block)'], ['photo', 'เปลี่ยนสีอัตโนมัติ (Photochromic)'], ['uv400', 'กัน UV400'], ['polarized', 'ตัดแสงสะท้อน (Polarized)'], ['ar', 'เคลือบกันแสงสะท้อน (Anti-Reflective)'], ['hard', 'กันรอยขีดข่วน (Hard Coat)'], ['hydro', 'กันน้ำ/คราบมัน (Hydrophobic/Oleophobic)'], ['fog', 'กันฝ้า (Anti-Fog)']];
 const CC_SEED = ["ตาพร่ามัว", "มองไกลไม่ชัด", "มองใกล้ไม่ชัด", "ปวดตา/ปวดกระบอกตา", "ตาแห้ง", "คันตา/ระคายเคือง", "ตาแดง", "น้ำตาไหล", "เห็นภาพซ้อน", "แพ้แสง/สู้แสงไม่ได้", "ปวดศีรษะบ่อย", "สายตาล้า/เพลีย", "แว่นเก่าชำรุด/อยากเปลี่ยนใหม่", "ตรวจสายตาประจำปี"];
 const knownCC = () => [...new Set([...CC_SEED, ...ls.get('ccSeed', [])])];
 
@@ -428,11 +432,43 @@ function custView(id) {
   <div class="foot"><button class="btn line" data-act="close">ปิด</button><button class="btn line" data-act="editcust" data-id="${id}">แก้ไขข้อมูล</button><button class="btn" data-act="newrx" data-id="${id}">เพิ่มค่าสายตา</button></div>`);
 }
 const knownBrands = type => { const used = live('products').filter(p => !type || p.product_type === type).map(p => p.brand).filter(Boolean); const base = type === 'frame' ? LOOKUPS.frameBrands : type === 'lens' ? [...LOOKUPS.lensBrands, ...LOOKUPS.contactBrands] : [...LOOKUPS.frameBrands, ...LOOKUPS.lensBrands, ...LOOKUPS.contactBrands]; return [...new Set([...base, ...used])]; };
+function lensFields(p) {
+  const ls = p.lens_spec || {};
+  const coat = new Set(ls.coatings || []);
+  const show = (p.product_type || 'lens') === 'lens';
+  return `<div id="lensFields" style="${show ? '' : 'display:none'};margin-top:14px;padding-top:14px;border-top:1px dashed var(--line,#e4ddd2)">
+    <p class="tag" style="margin:0 0 10px">รายละเอียดเลนส์ (ช่วยพนักงานแนะนำลูกค้าหน้าร้านให้ตัดสินใจง่ายขึ้น)</p>
+    <div class="two">
+      <label>โครงสร้าง/ประเภทเลนส์<select name="ls_design"><option value="">— ไม่ระบุ —</option>${LENS_DESIGN.map(([k, l]) => `<option value="${k}" ${ls.design === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      <label>ดัชนีหักเหแสง (Index)<select name="ls_index"><option value="">— ไม่ระบุ —</option>${LENS_INDEX_OPTS.map(v => `<option value="${v}" ${ls.index === v ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
+    </div>
+    <label>โครงสร้างการขัดเลนส์<select name="ls_surface"><option value="">— ไม่ระบุ —</option>${LENS_SURFACE.map(([k, l]) => `<option value="${k}" ${ls.surface === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+    <label style="display:block;margin-top:12px">การถนอมสายตา / โค้ตติ้ง (เลือกได้หลายอัน)</label>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 4px">${LENS_COATINGS.map(([k, l]) => `<label class="chk" style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line,#e4ddd2);border-radius:999px;padding:6px 12px;font-size:13px;margin:0"><input type="checkbox" name="ls_coat" value="${k}" ${coat.has(k) ? 'checked' : ''}>${l}</label>`).join('')}</div>
+    <label>เหมาะสำหรับ (ใช้พูดแนะนำลูกค้า)<input name="ls_target" value="${esc(ls.target)}" placeholder='เช่น เหมาะกับคนทำงานหน้าจอนานเกิน 6 ชม./วัน'></label>
+    <label>จุดเด่นสั้น ๆ<input name="ls_highlight" value="${esc(ls.highlight)}" placeholder="เช่น มุมมองกว้างขึ้น 30%, คมชัดระดับ HD"></label>
+    <div class="two">
+      <label>ช่วงค่าสายตาที่รองรับ<input name="ls_power" value="${esc(ls.power_range)}" placeholder="เช่น SPH -10 ถึง +6, CYL ถึง -4"></label>
+      <label>การรับประกัน<input name="ls_warranty" value="${esc(ls.warranty)}" placeholder="เช่น ปรับตัว 60 วัน / โค้ตหลุดลอก 1 ปี"></label>
+    </div>
+  </div>`;
+}
+function readProdDraft(form) {
+  const g = n => form.elements[n]?.value ?? '';
+  const coatings = [...form.querySelectorAll('[name="ls_coat"]:checked')].map(x => x.value);
+  return {
+    id: form.dataset.id || '', product_name: g('product_name'), product_type: g('product_type'), retail_price_thb: g('retail_price_thb'),
+    sku: g('sku'), brand: g('brand'), cost_thb: g('cost_thb'), stock_qty: g('stock_qty'), description: g('description'),
+    features: g('features').split(',').map(s => s.trim()).filter(Boolean),
+    active: form.elements['active'] ? form.elements['active'].checked : true,
+    lens_spec: { design: g('ls_design'), index: g('ls_index'), surface: g('ls_surface'), coatings, target: g('ls_target'), highlight: g('ls_highlight'), power_range: g('ls_power'), warranty: g('ls_warranty') }
+  };
+}
 function prodForm(p = {}) {
   const brandList = knownBrands(p.product_type);
   const specList = [...LOOKUPS.lensTypes, ...LOOKUPS.lensIndex, ...LOOKUPS.contactTypes];
   const opts = l => l.map(v => `<option value="${esc(v)}">`).join('');
-  dialog(`<form data-form="prod" data-id="${p.id || ''}"><h2>${p.id ? 'แก้ไขสินค้า' : 'เพิ่มสินค้า'}</h2>${fld('product_name', 'ชื่อสินค้า', p.product_name, 'text', 'required')}<div class="two"><label>ประเภท<select name="product_type">${Object.entries(TYPES).map(([k, l]) => `<option value="${k}" ${p.product_type === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>${fld('retail_price_thb', 'ราคาขาย (บาท)', p.retail_price_thb ?? 0, 'number', 'min="0" required')}${fld('sku', 'SKU', p.sku)}<label>แบรนด์<input name="brand" value="${esc(p.brand)}" list="brandlist" placeholder="พิมพ์หรือเลือกจากรายการเดิม"></label>${mgr() ? fld('cost_thb', 'ต้นทุน (บาท)', p.cost_thb, 'number', 'min="0"') : ''}${fld('stock_qty', 'จำนวนคงเหลือ (เว้นว่าง = ไม่ติดตาม)', p.stock_qty, 'number', 'step="1"')}</div><label>รายละเอียดสั้น ๆ<input name="description" value="${esc(p.description)}" list="speclist" placeholder="เช่น ชนิดเลนส์, Index, ประเภทคอนแทคเลนส์"></label>${fld('features', 'แท็กการใช้งาน: general, screen, drive, outdoor, progressive (คั่นด้วยคอมมา)', (p.features || []).join(', '))}<label class="chk"><input type="checkbox" name="active" ${p.active === false ? '' : 'checked'}> เปิดขาย (แสดงใน Sales Studio)</label>${foot('บันทึกสินค้า')}</form><datalist id="brandlist">${opts(brandList)}</datalist><datalist id="speclist">${opts(specList)}</datalist>`);
+  dialog(`<form data-form="prod" data-id="${p.id || ''}"><h2>${p.id ? 'แก้ไขสินค้า' : 'เพิ่มสินค้า'}</h2>${fld('product_name', 'ชื่อสินค้า', p.product_name, 'text', 'required')}<div class="two"><label>ประเภท<select name="product_type" data-bind="newprodtype">${Object.entries(TYPES).map(([k, l]) => `<option value="${k}" ${p.product_type === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>${fld('retail_price_thb', 'ราคาขาย (บาท)', p.retail_price_thb ?? 0, 'number', 'min="0" required')}${fld('sku', 'SKU', p.sku)}<label>แบรนด์<input name="brand" value="${esc(p.brand)}" list="brandlist" placeholder="พิมพ์หรือเลือกจากรายการเดิม"></label>${mgr() ? fld('cost_thb', 'ต้นทุน (บาท)', p.cost_thb, 'number', 'min="0"') : ''}${fld('stock_qty', 'จำนวนคงเหลือ (เว้นว่าง = ไม่ติดตาม)', p.stock_qty, 'number', 'step="1"')}</div><label>รายละเอียดสั้น ๆ<input name="description" value="${esc(p.description)}" list="speclist" placeholder="เช่น ชนิดเลนส์, Index, ประเภทคอนแทคเลนส์"></label>${fld('features', 'แท็กการใช้งาน: general, screen, drive, outdoor, progressive (คั่นด้วยคอมมา)', (p.features || []).join(', '))}<label class="chk"><input type="checkbox" name="active" ${p.active === false ? '' : 'checked'}> เปิดขาย (แสดงใน Sales Studio)</label>${lensFields(p)}${foot('บันทึกสินค้า')}</form><datalist id="brandlist">${opts(brandList)}</datalist><datalist id="speclist">${opts(specList)}</datalist>`);
 }
 /* ---------- หน้าอินโทร / หน้าเลือกหมวด / กิออสบริการลูกค้า ---------- */
 const SILVER_BG = 'linear-gradient(150deg,#f3f4f6 0%,#d6dadf 28%,#aab0b8 58%,#80858d 100%)';
@@ -722,6 +758,7 @@ document.addEventListener('change', e => {
   else if (k === 'notes') S.notes = e.target.value;
   else if (k === 'qstatus') { save('quotes', { ...find('quotes', e.target.dataset.id), status: e.target.value }); commit(); }
   else if (k === 'url' || k === 'key') { ls.set(k, e.target.value.trim()); toast('บันทึกการตั้งค่าแล้ว'); setStatus(); }
+  else if (k === 'newprodtype') { const draft = readProdDraft(e.target.closest('form')); draft.product_type = e.target.value; prodForm(draft); }
   else if (k === 'claimphoto') { const f = e.target.files[0]; if (f) fileToThumb(f).then(du => { K.photo = du; render(); }); }
   else if (k === 'ccother') K.ccOther = e.target.value;
   else if (k === 'custfrom') { S.custFrom = e.target.value; render(); }
@@ -747,7 +784,9 @@ document.addEventListener('submit', async e => {
       commit(); custView(f.dataset.cid); toast('บันทึกค่าสายตาแล้ว');
     } else if (k === 'prod') {
       const o = id ? find('products', id) : {};
-      save('products', { ...o, id: id || uid(), product_name: d.product_name.trim(), product_type: d.product_type, retail_price_thb: Math.round(+d.retail_price_thb) || 0, sku: d.sku.trim() || null, brand: d.brand.trim() || null, cost_thb: mgr() ? num(d.cost_thb) : (o.cost_thb ?? null), stock_qty: num(d.stock_qty), description: d.description.trim() || null, features: d.features.split(',').map(s => s.trim()).filter(Boolean), active: !!d.active, deleted_at: null });
+      const coatings = [...f.querySelectorAll('[name="ls_coat"]:checked')].map(x => x.value);
+      const lens_spec = d.product_type === 'lens' ? { design: d.ls_design || null, index: d.ls_index || null, surface: d.ls_surface || null, coatings, target: (d.ls_target || '').trim() || null, highlight: (d.ls_highlight || '').trim() || null, power_range: (d.ls_power || '').trim() || null, warranty: (d.ls_warranty || '').trim() || null } : (o.lens_spec || null);
+      save('products', { ...o, id: id || uid(), product_name: d.product_name.trim(), product_type: d.product_type, retail_price_thb: Math.round(+d.retail_price_thb) || 0, sku: d.sku.trim() || null, brand: d.brand.trim() || null, cost_thb: mgr() ? num(d.cost_thb) : (o.cost_thb ?? null), stock_qty: num(d.stock_qty), description: d.description.trim() || null, features: d.features.split(',').map(s => s.trim()).filter(Boolean), active: !!d.active, lens_spec, deleted_at: null });
       closeDlg(); commit(); toast('บันทึกสินค้าแล้ว');
     } else if (k === 'quote') {
       save('quotes', { ...find('quotes', id), status: d.status, valid_until: d.valid_until || null, notes: d.notes.trim() || null }); closeDlg(); commit(); toast('บันทึกใบเสนอราคาแล้ว');
