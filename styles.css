@@ -51,8 +51,9 @@ dialog::backdrop{background:rgba(10,25,17,.55)}.two{display:grid;grid-template-c
  nav button{flex-direction:column;gap:2px;font-size:11px;padding:6px 4px;flex:1;text-align:center;align-items:center}nav button::before{display:none}
  nav button.on{color:var(--gold)}.two{grid-template-columns:1fr}
 }
-@media print{body{display:block;background:#fff}.side,main,#toast,.noprint{display:none!important}
- dialog{position:static;border:0;width:100%;padding:0;color:#000;background:#fff}dialog::backdrop{display:none}}
+@media print{body{display:block;background:#fff}.side,main,#toast,#kioskOv,.noprint{display:none!important}
+ dialog{position:static;border:0;width:100%;padding:0;color:#000;background:#fff}dialog::backdrop{display:none}
+ dialog#lightboxDlg,dialog#sigDlg{display:none!important}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 /* v2 */
 .tools{display:flex;gap:8px;flex-wrap:wrap}.gap{margin-top:26px}
