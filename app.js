@@ -160,8 +160,8 @@ const QST = { draft: 'ร่าง', presented: 'เสนอแล้ว', acce
 const NAV = [['studio', 'Sales Studio'], ['customers', 'ลูกค้า'], ['products', 'สินค้า'], ['quotes', 'ใบเสนอราคา'], ['insights', 'ภาพรวม'], ['settings', 'ตั้งค่า']];
 const S = { v: 'studio', need: 'general', cart: [], cust: '', disc: 0, notes: '', q: '', pq: '', ptype: 'all', staff: null, mode: 'splash', custView: 'all', custFrom: '', custTo: '' };
 const freshLR = () => ({ purpose: [], other: '', vision: [], lenstype: [], age: '', budget: '', occupation: '', notes: '' });
-let K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR() };
-const kioskReset = () => { K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR() }; };
+let K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null };
+const kioskReset = () => { K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null }; };
 const empty = (m, a = '') => `<div class="empty">${m}${a ? `<br><br>${a}` : ''}</div>`;
 const fmtP = v => v == null || v === '' ? '-' : (+v > 0 ? '+' : '') + (+v).toFixed(2);
 const day = d => d ? new Date(d).toLocaleDateString('th-TH') : '-';
@@ -531,12 +531,26 @@ const svcBtn = (id, label) => `<button data-act="svc" data-id="${id}" class="btn
 function kioskLookup() {
   return `<div class="panel" style="padding:26px;text-align:center">
     <h2 style="margin-top:0">ค้นหาลูกค้า</h2>
-    <p class="tag">กรอกเบอร์โทรศัพท์เพื่อดึงประวัติเดิม หรือเพิ่มลูกค้าใหม่</p>
+    <p class="tag">กรอกชื่อ หรือเบอร์โทรศัพท์ เพื่อดึงประวัติเดิม หรือเพิ่มลูกค้าใหม่</p>
     <form data-form="kiosklookup" style="display:flex;gap:10px;margin-top:16px">
-      <input name="phone" placeholder="เบอร์โทรศัพท์" style="flex:1" autofocus>
+      <input name="phone" placeholder="ชื่อลูกค้า หรือ เบอร์โทรศัพท์" style="flex:1" autofocus>
       <button class="btn" type="submit">ค้นหา</button>
     </form>
     <button data-act="kioskstep" data-id="newcust" class="btn line" style="margin-top:14px;width:100%">ลูกค้าใหม่</button>
+  </div>`;
+}
+function kioskLookupResults() {
+  const rows = K.lookupResults || [];
+  return `<div class="panel" style="padding:26px">
+    <h2 style="margin-top:0">พบลูกค้าตรงกันหลายคน</h2>
+    <p class="tag" style="margin-top:-6px">เลือกลูกค้าที่ต้องการ</p>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px;max-height:50vh;overflow:auto;padding-right:2px">
+      ${rows.map(c => `<button data-act="kiosklookuppick" data-id="${c.id}" style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border:1px solid rgba(0,0,0,.12);border-radius:12px;background:#fff;cursor:pointer;text-align:left;font:inherit;color:#23262a">
+        <span><span style="font-weight:600">${esc(c.full_name)}</span><br><span class="tag">${esc(c.customer_code || '')}${c.phone ? ' · ' + esc(c.phone) : ''}</span></span>
+        <span class="tag">เลือก ›</span>
+      </button>`).join('')}
+    </div>
+    <div class="foot" style="margin-top:18px"><button class="btn line" data-act="kioskback">ย้อนกลับ</button></div>
   </div>`;
 }
 function kioskNewCust() {
@@ -605,7 +619,7 @@ function kioskClaimForm() {
         <label>รูปถ่ายแว่นลูกค้า<input type="file" accept="image/*" data-bind="claimphoto"></label>
       </div>
       ${K.photo ? `<img src="${K.photo}" style="max-width:160px;border-radius:10px;margin-top:8px;display:block">` : ''}
-      <label class="chk" style="margin-top:14px"><input type="checkbox" name="signed" required> ลูกค้ารับทราบรายการและค่าใช้จ่ายข้างต้นแล้ว (เซ็นยินยอม)</label>
+      <p class="tag" style="margin-top:14px">หมายเหตุ: ระยะเวลาการเคลมสินค้าอาจมีระยะนานกว่าที่นัด เนื่องจากอะไหล่บางประเภทต้องรอสั่งนอก และอาจไม่ตรงรุ่น เนื่องจากไม่มีผลิต หากมีปัญหาดังกล่าวทางร้านจะมีการแจ้งให้ลูกค้าทราบอีกครั้ง</p>
       <div class="foot"><button type="button" class="btn line" data-act="kioskback">ย้อนกลับ</button><button class="btn" type="submit">บันทึกรายการ</button></div>
     </form>
   </div>`;
@@ -697,8 +711,7 @@ function kioskProductBrowse() {
       <button data-act="kioskaddprod" data-id="${type}" class="btn line sm" style="white-space:nowrap">+ เพิ่มสินค้าใหม่</button>
     </div>
     <div style="display:flex;flex-direction:column;gap:10px;max-height:48vh;overflow:auto;padding-right:2px">${rows.length ? rows.map(card).join('') : '<p class="tag">ยังไม่มีสินค้าในหมวดนี้ — กด "เพิ่มสินค้าใหม่" เพื่อเพิ่มเลย</p>'}</div>
-    <div class="foot" style="margin-top:18px">
-      <button class="btn line" data-act="kioskback">ย้อนกลับ</button>
+    <div class="foot" style="margin-top:18px;justify-content:flex-end">
       <button class="btn" data-act="kioskstep" data-id="cart">ถัดไป (${S.cart.length} รายการ)</button>
     </div>
   </div>`;
@@ -745,12 +758,15 @@ function kioskHistory() {
 function kioskDone() {
   return `<div class="panel" style="padding:40px 26px;text-align:center">
     <div style="font-size:18px;margin-bottom:16px">บันทึกข้อมูลเรียบร้อยแล้ว ขอบคุณค่ะ/ครับ</div>
-    <button data-act="kioskstep" data-id="menu" class="btn">กลับเมนูบริการ</button>
+    <div style="display:flex;flex-direction:column;gap:10px;max-width:260px;margin:0 auto">
+      ${K.lastQuoteId ? `<button data-act="kioskprintreceipt" class="btn line">สั่งพิมพ์ใบเสร็จ</button>` : ''}
+      <button data-act="kioskstep" data-id="menu" class="btn">กลับเมนูบริการ</button>
+    </div>
   </div>`;
 }
 function kioskView() {
   setThemeColor('#aab0b8');
-  const steps = { lookup: kioskLookup, newcust: kioskNewCust, menu: kioskMenu, history: kioskHistory, examintake: kioskExamIntake, claimform: kioskClaimForm, lensreq: kioskLensReq, pick: kioskProductBrowse, cart: kioskCart, done: kioskDone };
+  const steps = { lookup: kioskLookup, lookupresults: kioskLookupResults, newcust: kioskNewCust, menu: kioskMenu, history: kioskHistory, examintake: kioskExamIntake, claimform: kioskClaimForm, lensreq: kioskLensReq, pick: kioskProductBrowse, cart: kioskCart, done: kioskDone };
   const inner = (steps[K.step] || kioskLookup)();
   const wide = ['pick', 'cart', 'lensreq'].includes(K.step) ? '680px' : '560px';
   const backBtn = 'padding:8px 14px;border-radius:999px;border:1px solid rgba(255,255,255,.8);background:rgba(255,255,255,.65);box-shadow:0 6px 16px rgba(20,22,26,.18);color:#23262a;font-size:12.5px;cursor:pointer;display:inline-flex;align-items:center;gap:4px';
@@ -839,6 +855,7 @@ document.addEventListener('click', e => {
     else { if (id === 'exam') { K.cc = []; K.ccOther = ''; K.ccNew = ''; } K.step = id === 'exam' ? 'examintake' : 'claimform'; render(); }
   }
   else if (a === 'lrtoggle') { const group = b.dataset.group, arr = K.lr[group]; K.lr[group] = arr.includes(id) ? arr.filter(x => x !== id) : [...arr, id]; render(); }
+  else if (a === 'kiosklookuppick') { K.custId = id; K.hist.push(K.step); K.step = 'menu'; render(); }
   else if (a === 'histopen') {
     const kind = b.dataset.kind;
     if (kind === 'quote') quoteSheet(id);
@@ -862,8 +879,9 @@ document.addEventListener('click', e => {
     const lrNote = lrSummary();
     save('quotes', { id: qid, customer_id: S.cust || null, quote_number: null, status: 'converted', subtotal_thb: sub, discount_thb: 0, total_thb: sub, notes: lrNote ? `ความต้องการลูกค้า: ${lrNote}` : null, valid_until: null, deleted_at: null });
     S.cart.forEach(i => save('quote_items', { id: uid(), quote_id: qid, product_id: i.id, item_name_snapshot: i.name, product_type: i.type, quantity: i.qty, unit_price_thb: i.price, line_total_thb: i.price * i.qty, deleted_at: null }));
-    S.cart = []; K.step = 'done'; K.hist = []; K.lr = freshLR(); commit(); render(); toast('บันทึกการสั่งซื้อแล้ว');
+    S.cart = []; K.step = 'done'; K.hist = []; K.lr = freshLR(); K.lastQuoteId = qid; commit(); render(); toast('บันทึกการสั่งซื้อแล้ว');
   }
+  else if (a === 'kioskprintreceipt') { if (K.lastQuoteId) quoteSheet(K.lastQuoteId); }
 });
 document.addEventListener('change', e => {
   const k = e.target.dataset.bind; if (!k) return;
@@ -913,9 +931,13 @@ document.addEventListener('submit', async e => {
     } else if (k === 'staff') {
       await api('/rest/v1/rpc/add_staff', { method: 'POST', body: JSON.stringify({ p_shop: shop.id, p_email: d.email.trim(), p_role: d.role }) }); f.reset(); toast('เพิ่มพนักงานแล้ว'); loadStaff();
     } else if (k === 'kiosklookup') {
-      const ph = digits(d.phone), found = ph.length >= 8 ? live('customer_profiles').find(c => digits(c.phone) === ph) : null;
-      if (found) { K.custId = found.id; K.step = 'menu'; render(); }
-      else { K.phone = d.phone.trim(); K.step = 'newcust'; render(); toast('ไม่พบเบอร์นี้ กรอกข้อมูลลูกค้าใหม่'); }
+      const qstr = d.phone.trim(), ph = digits(qstr);
+      let matches = ph.length >= 8 ? live('customer_profiles').filter(c => digits(c.phone) === ph) : [];
+      if (!matches.length && qstr) matches = live('customer_profiles').filter(c => (c.full_name || '').toLowerCase().includes(qstr.toLowerCase()));
+      K.hist.push(K.step);
+      if (matches.length === 1) { K.custId = matches[0].id; K.step = 'menu'; render(); }
+      else if (matches.length > 1) { K.lookupResults = matches; K.step = 'lookupresults'; render(); }
+      else { K.phone = ph.length >= 8 ? qstr : ''; K.step = 'newcust'; render(); toast('ไม่พบข้อมูล กรอกข้อมูลลูกค้าใหม่'); }
     } else if (k === 'kiosknewcust') {
       const nid = uid();
       save('customer_profiles', { id: nid, customer_code: nextCode(), full_name: d.full_name.trim(), phone: d.phone.trim() || null, budget_thb: null, lifestyle: null, notes: d.age ? `อายุ ${d.age} ปี` : null, consent_recorded_at: null, deleted_at: null });
@@ -928,8 +950,9 @@ document.addEventListener('submit', async e => {
       K.lr.age = d.age || ''; K.lr.budget = d.budget || ''; K.lr.occupation = (d.occupation || '').trim(); K.lr.notes = (d.notes || '').trim();
       S.cust = K.custId; K.pq = ''; K.pcat = 'lens'; K.hist.push(K.step); K.step = 'pick'; render();
     } else if (k === 'claimform') {
-      save('claims', { id: uid(), customer_id: K.custId, kind: d.kind, frame_model: d.frame_model.trim() || null, frame_code: d.frame_code.trim() || null, issue: d.issue.trim() || null, repair_items: d.repair_items.trim() || null, cost_thb: num(d.cost_thb), pickup_date: d.pickup_date || null, photo: K.photo || null, status: 'pending', signed_at: d.signed ? now() : null, notes: null, deleted_at: null });
-      commit(); K.photo = null; K.step = 'done'; K.hist = []; render(); toast('บันทึกรายการซ่อม/เคลมแล้ว');
+      const claimNote = 'หมายเหตุ: ระยะเวลาการเคลมสินค้าอาจมีระยะนานกว่าที่นัด เนื่องจากอะไหล่บางประเภทต้องรอสั่งนอก และอาจไม่ตรงรุ่น เนื่องจากไม่มีผลิต หากมีปัญหาดังกล่าวทางร้านจะมีการแจ้งให้ลูกค้าทราบอีกครั้ง';
+      save('claims', { id: uid(), customer_id: K.custId, kind: d.kind, frame_model: d.frame_model.trim() || null, frame_code: d.frame_code.trim() || null, issue: d.issue.trim() || null, repair_items: d.repair_items.trim() || null, cost_thb: num(d.cost_thb), pickup_date: d.pickup_date || null, photo: K.photo || null, status: 'pending', signed_at: null, notes: claimNote, deleted_at: null });
+      commit(); K.photo = null; K.step = 'done'; K.hist = []; K.lastQuoteId = null; render(); toast('บันทึกรายการซ่อม/เคลมแล้ว');
     } else if (k === 'kioskprod') {
       save('products', { id: uid(), product_type: f.dataset.type, product_name: d.product_name.trim(), retail_price_thb: Math.round(+d.retail_price_thb) || 0, brand: d.brand.trim() || null, sku: null, cost_thb: null, stock_qty: null, description: null, features: [], active: true, deleted_at: null });
       closeDlg(); commit(); toast('เพิ่มสินค้าแล้ว ไปใส่ต้นทุน/สต็อกเพิ่มได้ที่หลังบ้าน');
