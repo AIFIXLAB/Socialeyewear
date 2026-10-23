@@ -401,13 +401,14 @@ const views = {
 
 function lensCatalogCard(p, selected) {
   const ls = p.lens_spec || {};
+  const photos = lensPhotos(ls);
   const designLabel = (LENS_DESIGN.find(d => d[0] === ls.design) || [])[1];
   const surfaceLabel = (LENS_SURFACE.find(d => d[0] === ls.surface) || [])[1];
   const coatBadges = (ls.coatings || []).map(k => (LENS_COATINGS.find(x => x[0] === k) || [])[1]).filter(Boolean)
     .map(l => `<span style="background:#eef1f4;border-radius:999px;padding:3px 10px;font-size:12px;display:inline-block;margin:2px 4px 0 0">${esc(l)}</span>`).join('');
   const isMain = selected && p.id === S.catMain;
   return `<div class="panel" style="padding:20px;display:flex;flex-direction:column;gap:8px;${isMain ? 'outline:2px solid #16294a' : selected ? 'outline:2px solid #ab8a5e' : ''}">
-    ${ls.photo_url ? `<img src="${esc(ls.photo_url)}" style="width:100%;height:140px;object-fit:cover;border-radius:10px;margin-bottom:4px" onerror="this.style.display='none'">` : ''}
+    ${photos[0] ? `<div style="position:relative;cursor:zoom-in" data-act="openlightbox" data-id="${p.id}" data-idx="0"><img src="${esc(photos[0])}" style="width:100%;height:140px;object-fit:cover;border-radius:10px;margin-bottom:4px;display:block" onerror="this.closest('div').style.display='none'">${photos.length > 1 ? `<span class="tag" style="position:absolute;bottom:10px;right:6px;background:rgba(0,0,0,.55);color:#fff;border-radius:999px;padding:2px 8px">${photos.length} ภาพ</span>` : ''}</div>` : ''}
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
       <div>${p.brand ? `<div class="tag">${esc(p.brand)}</div>` : ''}<div style="font-size:17px;font-weight:700">${esc(p.product_name)}</div>${isMain ? `<span class="tag" style="background:#16294a;color:#fff;border-radius:999px;padding:2px 10px;display:inline-block;margin-top:4px">★ ตัวหลักที่ใช้เทียบ</span>` : ''}</div>
       <div style="font-size:19px;font-weight:700;white-space:nowrap">${baht(p.retail_price_thb)}</div>
@@ -433,6 +434,7 @@ function lensCatalogCard(p, selected) {
 }
 function lensPresentView(p) {
   const ls = p.lens_spec || {};
+  const photos = lensPhotos(ls);
   const designLabel = (LENS_DESIGN.find(d => d[0] === ls.design) || [])[1];
   const surfaceLabel = (LENS_SURFACE.find(d => d[0] === ls.surface) || [])[1];
   const coatLabels = (ls.coatings || []).map(k => (LENS_COATINGS.find(x => x[0] === k) || [])[1]).filter(Boolean).join(', ');
@@ -453,11 +455,12 @@ function lensPresentView(p) {
         ${p.brand ? `<div class="tag" style="margin-bottom:4px">${esc(p.brand)}</div>` : ''}
         <h1 style="margin:0 0 4px">${esc(p.product_name)}</h1>
         ${ls.tier ? `<span class="tag" style="margin-bottom:16px;display:inline-block">ระดับ: ${esc(ls.tier)}</span>` : '<div style="margin-bottom:16px"></div>'}
-        <div style="position:relative;background:#f3f0e9;border-radius:16px;height:260px;overflow:hidden;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;margin-bottom:26px">
-          <div style="width:64px;height:64px;border-radius:50%;background:#fff;border:6px solid #16294a"></div>
-          <span class="tag">พื้นที่แสดงภาพสินค้า / เทคโนโลยีเลนส์</span>
-          ${ls.photo_url ? `<img src="${esc(ls.photo_url)}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover" onerror="this.remove()">` : ''}
+        <div style="position:relative;background:#f3f0e9;border-radius:16px;height:260px;overflow:hidden;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;margin-bottom:${photos.length ? '10px' : '26px'};cursor:${photos.length ? 'zoom-in' : 'default'}" ${photos.length ? `data-act="openlightbox" data-id="${p.id}" data-idx="0"` : ''}>
+          ${photos.length ? '' : `<div style="width:64px;height:64px;border-radius:50%;background:#fff;border:6px solid #16294a"></div><span class="tag">พื้นที่แสดงภาพสินค้า / เทคโนโลยีเลนส์</span>`}
+          ${photos[0] ? `<img src="${esc(photos[0])}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover" onerror="this.remove()">` : ''}
+          ${photos.length ? `<span class="tag" style="position:absolute;bottom:10px;right:10px;background:rgba(0,0,0,.55);color:#fff;border-radius:999px;padding:3px 10px">🔍 ดูเต็มจอ${photos.length > 1 ? ` · ${photos.length} ภาพ` : ''}</span>` : ''}
         </div>
+        ${photos.length > 1 ? `<div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:26px">${photos.map((src, i) => `<img src="${esc(src)}" data-act="openlightbox" data-id="${p.id}" data-idx="${i}" style="width:64px;height:64px;object-fit:cover;border-radius:8px;flex-shrink:0;cursor:pointer;border:1px solid #d7dde6">`).join('')}</div>` : ''}
         ${kicker('DESIGNED FOR YOUR LIFE · ออกแบบมาเพื่อชีวิตคุณ')}
         <p style="margin:0 0 10px">${esc(p.description || 'เลนส์คุณภาพที่เลือกใช้เทคโนโลยีเหมาะกับการใช้ชีวิตประจำวัน')}</p>
         ${ls.target ? `<p style="margin:0 0 20px"><b>เหมาะกับลูกค้า:</b> ${esc(ls.target)}</p>` : ''}
@@ -567,11 +570,12 @@ function openLensCompare() {
   };
   const col = (p, isMain) => {
     const ls = p.lens_spec || {};
+    const photos = lensPhotos(ls);
     const pts = lensHighlights(ls).filter(h => h.title);
     const cheapest = prods.length > 1 && p.retail_price_thb === minPrice;
     const ev = isMain ? null : evalVs(p, main);
     return `<div style="min-width:240px;max-width:280px;flex:1;background:#fff;border:1px solid #d7dde6;border-radius:14px;overflow:hidden;${isMain ? 'outline:3px solid #16294a' : cheapest ? 'outline:2px solid #ab8a5e' : ''}">
-      <div style="height:110px;background:#f3f0e9;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative">${ls.photo_url ? `<img src="${esc(ls.photo_url)}" style="width:100%;height:100%;object-fit:cover">` : `<span class="tag">ไม่มีรูป</span>`}${isMain ? `<span style="position:absolute;top:8px;left:8px;background:#16294a;color:#fff;font-size:11px;font-weight:700;border-radius:999px;padding:3px 10px">★ ตัวหลัก</span>` : ''}</div>
+      <div style="height:110px;background:#f3f0e9;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;${photos.length ? 'cursor:zoom-in' : ''}" ${photos.length ? `data-act="openlightbox" data-id="${p.id}" data-idx="0"` : ''}>${photos[0] ? `<img src="${esc(photos[0])}" style="width:100%;height:100%;object-fit:cover">` : `<span class="tag">ไม่มีรูป</span>`}${isMain ? `<span style="position:absolute;top:8px;left:8px;background:#16294a;color:#fff;font-size:11px;font-weight:700;border-radius:999px;padding:3px 10px">★ ตัวหลัก</span>` : ''}</div>
       <div style="padding:14px">
         ${p.brand ? `<div class="tag">${esc(p.brand)}</div>` : ''}
         <div style="font-weight:700;font-size:15px;margin-bottom:6px">${esc(p.product_name)}</div>
@@ -607,6 +611,42 @@ function overlay(html) {
   ov.innerHTML = html;
 }
 const closeOverlay = () => { const ov = document.getElementById('kioskOv'); if (ov) ov.remove(); };
+let LB = null;
+function lightboxView() {
+  const { photos, idx } = LB;
+  const i = Math.max(0, Math.min(idx, photos.length - 1));
+  return `<div style="position:fixed;inset:0;background:rgba(10,14,20,.94);z-index:9999999;display:flex;align-items:center;justify-content:center;flex-direction:column;padding:20px" data-act="lightboxclose">
+    <div style="position:absolute;top:16px;right:16px;display:flex;gap:8px;align-items:center;z-index:1">
+      <span class="tag" style="color:#fff;background:rgba(255,255,255,.15);border-radius:999px;padding:4px 12px">${i + 1} / ${photos.length}</span>
+      <button data-act="lightboxclose" style="background:rgba(255,255,255,.15);border:0;color:#fff;width:34px;height:34px;border-radius:50%;font-size:16px;cursor:pointer">✕</button>
+    </div>
+    <img src="${esc(photos[i])}" data-act="lightboxnoop" style="max-width:92vw;max-height:78vh;object-fit:contain;border-radius:8px;box-shadow:0 10px 40px rgba(0,0,0,.5)">
+    ${photos.length > 1 ? `<div style="display:flex;align-items:center;gap:22px;margin-top:18px" data-act="lightboxnoop">
+      <button data-act="lightboxprev" style="background:rgba(255,255,255,.15);border:0;color:#fff;width:46px;height:46px;border-radius:50%;font-size:22px;cursor:pointer">‹</button>
+      <div style="display:flex;gap:6px">${photos.map((_, n) => `<span style="width:7px;height:7px;border-radius:50%;background:${n === i ? '#fff' : 'rgba(255,255,255,.35)'}"></span>`).join('')}</div>
+      <button data-act="lightboxnext" style="background:rgba(255,255,255,.15);border:0;color:#fff;width:46px;height:46px;border-radius:50%;font-size:22px;cursor:pointer">›</button>
+    </div>` : ''}
+  </div>`;
+}
+function ensureLightboxDlg() {
+  let d = document.getElementById('lightboxDlg');
+  if (!d) {
+    d = document.createElement('dialog');
+    d.id = 'lightboxDlg';
+    d.style.cssText = 'padding:0;border:0;border-radius:0;background:transparent;max-width:100vw;max-height:100vh;width:100vw;height:100vh;overflow:hidden';
+    document.body.appendChild(d);
+    d.addEventListener('close', () => { LB = null; });
+  }
+  return d;
+}
+function renderLightbox() {
+  const d = ensureLightboxDlg();
+  if (!LB) { if (d.open) d.close(); return; }
+  d.innerHTML = lightboxView();
+  if (!d.open) d.showModal();
+}
+function openLightbox(photos, idx) { if (!photos || !photos.length) return; LB = { photos, idx: idx || 0 }; renderLightbox(); }
+function closeLightbox() { const d = document.getElementById('lightboxDlg'); LB = null; if (d && d.open) d.close(); }
 function render() {
   if (S.mode === 'splash') return overlay(splashView());
   if (S.mode === 'hub') return overlay(hubView());
@@ -681,15 +721,24 @@ function lensHighlights(ls) {
     : (ls.highlight || '').split(',').map(s => s.trim()).filter(Boolean).map(t => ({ title: t, desc: '' }));
   return [0, 1, 2].map(i => src[i] || { title: '', desc: '' });
 }
+function lensPhotos(ls) {
+  if (Array.isArray(ls.photos) && ls.photos.length) return ls.photos.filter(Boolean);
+  return ls.photo_url ? [ls.photo_url] : [];
+}
 function lensPhotoField(p) {
   const ls = p.lens_spec || {};
   const show = (p.product_type || 'lens') === 'lens';
+  const photos = lensPhotos(ls);
+  const thumb = (src, i) => `<div style="position:relative;width:84px;height:84px;flex-shrink:0">
+      <img src="${esc(src)}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;border:1px solid #d7dde6">
+      <button type="button" data-act="lsphotoremove" data-idx="${i}" style="position:absolute;top:-6px;right:-6px;width:22px;height:22px;padding:0;border-radius:50%;line-height:20px;background:#fff;border:1px solid #d7dde6;color:#a23b2a;font-size:13px;cursor:pointer;text-align:center">✕</button>
+    </div>`;
   return `<label id="lensPhoto" style="${show ? '' : 'display:none'}">
-    <span class="lbl">รูปภาพสินค้า</span>
-    <input type="hidden" name="ls_photo" value="${esc(ls.photo_url)}">
-    ${ls.photo_url ? `<img id="lsPhotoPreview" src="${esc(ls.photo_url)}" style="display:block;width:100%;max-width:220px;height:140px;object-fit:cover;border-radius:10px;margin-bottom:8px;border:1px solid #d7dde6">` : `<img id="lsPhotoPreview" style="display:none;width:100%;max-width:220px;height:140px;object-fit:cover;border-radius:10px;margin-bottom:8px;border:1px solid #d7dde6">`}
-    <input type="file" accept="image/*" data-bind="lsphoto">
-    <span style="display:block;font-size:11.5px;color:#69756d;margin-top:4px">ถ่ายรูปหรือเลือกรูปจากอุปกรณ์ หากยังไม่มีรูป ระบบจะแสดงภาพตัวอย่างแทน</span>
+    <span class="lbl">รูปภาพสินค้า / หน้าแคตตาล็อกเลนส์ (ใส่ได้หลายภาพ)</span>
+    <input type="hidden" name="ls_photos" value="${esc(JSON.stringify(photos))}">
+    <div id="lsPhotosGrid" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;${photos.length ? '' : 'display:none'}">${photos.map(thumb).join('')}</div>
+    <input type="file" accept="image/*" multiple data-bind="lsphotos">
+    <span style="display:block;font-size:11.5px;color:#69756d;margin-top:4px">เลือกได้ทีละหลายภาพ เช่น ถ่าย/แสกนหน้าแคตตาล็อกของแบรนด์ทีละหน้า — หน้าร้านกดที่ภาพแล้วจะเปิดดูเต็มจอ เลื่อนดูทีละภาพได้</span>
   </label>`;
 }
 function lensFields(p) {
@@ -721,6 +770,7 @@ function readProdDraft(form) {
   const g = n => form.elements[n]?.value ?? '';
   const coatings = [...form.querySelectorAll('[name="ls_coat"]:checked')].map(x => x.value);
   const highlights = [1, 2, 3].map(i => ({ title: g(`ls_hlt${i}`).trim(), desc: g(`ls_hld${i}`).trim() })).filter(h => h.title || h.desc);
+  let photos = []; try { photos = JSON.parse(g('ls_photos') || '[]'); } catch { photos = []; }
   return {
     id: form.dataset.id || '', product_name: g('product_name'), product_type: g('product_type'), retail_price_thb: g('retail_price_thb'),
     sku: g('sku'), brand: g('brand'), cost_thb: g('cost_thb'), stock_qty: g('stock_qty'), description: g('description'),
@@ -728,7 +778,7 @@ function readProdDraft(form) {
     active: form.elements['active'] ? form.elements['active'].checked : true,
     lens_spec: {
       design: g('ls_design'), index: g('ls_index'), surface: g('ls_surface'), coatings,
-      photo_url: g('ls_photo').trim(), highlights, tech_notes: g('ls_technotes').trim(),
+      photos, highlights, tech_notes: g('ls_technotes').trim(),
       power_range: g('ls_power'), warranty: g('ls_warranty'), tier: g('ls_tier'),
       target: g('ls_target').trim(), staff_note: g('ls_staffnote').trim()
     }
@@ -1187,6 +1237,20 @@ document.addEventListener('click', e => {
   }
   else if (a === 'catdetail') { S.catDetail = id || null; render(); }
   else if (a === 'catcomparego') openLensCompare();
+  else if (a === 'openlightbox') { const prod = find('products', id); if (prod) openLightbox(lensPhotos(prod.lens_spec || {}), +b.dataset.idx || 0); }
+  else if (a === 'lightboxclose') closeLightbox();
+  else if (a === 'lightboxprev') { if (LB) { LB.idx = (LB.idx - 1 + LB.photos.length) % LB.photos.length; renderLightbox(); } }
+  else if (a === 'lightboxnext') { if (LB) { LB.idx = (LB.idx + 1) % LB.photos.length; renderLightbox(); } }
+  else if (a === 'lsphotoremove') {
+    const form = b.closest('form'); if (!form) return;
+    const input = form.querySelector('[name="ls_photos"]');
+    let arr = []; try { arr = JSON.parse(input.value || '[]'); } catch { arr = []; }
+    arr.splice(+b.dataset.idx, 1);
+    input.value = JSON.stringify(arr);
+    const grid = form.querySelector('#lsPhotosGrid');
+    grid.innerHTML = arr.map((src, i) => `<div style="position:relative;width:84px;height:84px;flex-shrink:0"><img src="${esc(src)}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;border:1px solid #d7dde6"><button type="button" data-act="lsphotoremove" data-idx="${i}" style="position:absolute;top:-6px;right:-6px;width:22px;height:22px;padding:0;border-radius:50%;line-height:20px;background:#fff;border:1px solid #d7dde6;color:#a23b2a;font-size:13px;cursor:pointer;text-align:center">✕</button></div>`).join('');
+    grid.style.display = arr.length ? 'flex' : 'none';
+  }
 });
 document.addEventListener('change', e => {
   const k = e.target.dataset.bind; if (!k) return;
@@ -1198,14 +1262,22 @@ document.addEventListener('change', e => {
   else if (k === 'url' || k === 'key') { ls.set(k, e.target.value.trim()); toast('บันทึกการตั้งค่าแล้ว'); setStatus(); }
   else if (k === 'newprodtype') { const draft = readProdDraft(e.target.closest('form')); draft.product_type = e.target.value; prodForm(draft); }
   else if (k === 'claimphoto') { const f = e.target.files[0]; if (f) fileToThumb(f).then(du => { K.photo = du; render(); }); }
-  else if (k === 'lsphoto') {
-    const f = e.target.files[0]; if (!f) return;
-    fileToThumb(f).then(du => {
-      if (!du) return toast('อ่านไฟล์รูปไม่สำเร็จ ลองใหม่อีกครั้ง');
-      const form = e.target.closest('form');
-      form.querySelector('[name="ls_photo"]').value = du;
-      const prev = form.querySelector('#lsPhotoPreview');
-      if (prev) { prev.src = du; prev.style.display = 'block'; }
+  else if (k === 'lsphotos') {
+    const files = [...e.target.files]; if (!files.length) return;
+    const form = e.target.closest('form');
+    const input = form.querySelector('[name="ls_photos"]');
+    let arr = []; try { arr = JSON.parse(input.value || '[]'); } catch { arr = []; }
+    toast(`กำลังโหลดรูป ${files.length} ภาพ...`);
+    Promise.all(files.map(f => fileToThumb(f, 1400))).then(results => {
+      const ok = results.filter(Boolean);
+      if (ok.length < results.length) toast('บางไฟล์อ่านไม่สำเร็จ ข้ามไปแล้ว');
+      arr = [...arr, ...ok];
+      input.value = JSON.stringify(arr);
+      const grid = form.querySelector('#lsPhotosGrid');
+      grid.innerHTML = arr.map((src, i) => `<div style="position:relative;width:84px;height:84px;flex-shrink:0"><img src="${esc(src)}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;border:1px solid #d7dde6"><button type="button" data-act="lsphotoremove" data-idx="${i}" style="position:absolute;top:-6px;right:-6px;width:22px;height:22px;padding:0;border-radius:50%;line-height:20px;background:#fff;border:1px solid #d7dde6;color:#a23b2a;font-size:13px;cursor:pointer;text-align:center">✕</button></div>`).join('');
+      grid.style.display = arr.length ? 'flex' : 'none';
+      if (ok.length) toast('เพิ่มรูปแล้ว');
+      e.target.value = '';
     });
   }
   else if (k === 'ccother') K.ccOther = e.target.value;
@@ -1236,9 +1308,10 @@ document.addEventListener('submit', async e => {
       const o = id ? find('products', id) : {};
       const coatings = [...f.querySelectorAll('[name="ls_coat"]:checked')].map(x => x.value);
       const highlights = [1, 2, 3].map(i => ({ title: (d[`ls_hlt${i}`] || '').trim(), desc: (d[`ls_hld${i}`] || '').trim() })).filter(h => h.title || h.desc);
+      let photos = []; try { photos = JSON.parse(d.ls_photos || '[]'); } catch { photos = []; }
       const lens_spec = d.product_type === 'lens' ? {
         design: d.ls_design || null, index: d.ls_index || null, surface: d.ls_surface || null, coatings,
-        photo_url: (d.ls_photo || '').trim() || null, highlights, tech_notes: (d.ls_technotes || '').trim() || null,
+        photos, photo_url: photos[0] || null, highlights, tech_notes: (d.ls_technotes || '').trim() || null,
         target: (d.ls_target || '').trim() || null, power_range: (d.ls_power || '').trim() || null, warranty: (d.ls_warranty || '').trim() || null,
         tier: d.ls_tier || null, staff_note: (d.ls_staffnote || '').trim() || null
       } : (o.lens_spec || null);
