@@ -138,7 +138,7 @@ const LENS_INDEX_OPTS = [['1.50', '1.50'], ['1.59', '1.59 (Polycarbonate)'], ['1
 const LENS_COATING_OPTS = [['uncoat', 'Uncoat'], ['sft', 'SFT'], ['hard', 'Hard Coat'], ['multi', 'Multi Coat'], ['hvp', 'HVP'], ['hvp_blue', 'HVP + Blue'], ['meiryo', 'Meiryo'], ['meiryo_blue', 'Meiryo Blue'], ['blue_full', 'Blue Coat (Full Control)']];
 const LENS_COATINGS = [['blue', 'กรองแสงสีฟ้า (Blue Block)'], ['photo', 'เปลี่ยนสีอัตโนมัติ (Photochromic)'], ['uv400', 'กัน UV400'], ['polarized', 'ตัดแสงสะท้อน (Polarized)'], ['ar', 'เคลือบกันแสงสะท้อน (Anti-Reflective)'], ['hard', 'กันรอยขีดข่วน (Hard Coat)'], ['hydro', 'กันน้ำ/คราบมัน (Hydrophobic/Oleophobic)'], ['fog', 'กันฝ้า (Anti-Fog)']];
 const LENS_TIER_OPTS = ['Entry', 'Standard', 'Premium', 'Flagship'];
-const LENS_TIER_LABELS = { Entry: 'Entry / เริ่มต้น (ประหยัด)', Standard: 'Standard / มาตรฐาน (ระดับกลาง)', Premium: 'Premium / พรีเมียม (คุณภาพสูง)', Flagship: 'Flagship / เรือธง (ท็อปสุด ปรับแต่งเฉพาะบุคคล)' };
+const LENS_TIER_LABELS = { Entry: 'Entry / เริ่มต้น (ประหยัด)', Standard: 'Standard / มาตรฐาน (ระดับกลาง)', Premium: 'Premium / พรีเมียม (คุณภาพสูง)', Flagship: 'Individual (ปรับแต่งเฉพาะบุคคล)' };
 const LENS_AVAIL_OPTS = [['stock', 'มีสต็อก (รอรับ 1-3 วัน)'], ['lab', 'สั่ง Lab ผลิต (รอ 7-14 วัน ไม่รวมวันหยุดนักขัตฤกษ์)']];
 /* ---------- แบบสอบถามความต้องการก่อนแนะนำเลนส์ (หน้ากิออส) ---------- */
 const PURPOSE_OPTS = [['screen', 'ทำงานหน้าจอ', '🖥️'], ['mobile', 'มือถือ/แท็บเล็ต', '📱'], ['read', 'อ่านหนังสือ', '📖'], ['drive', 'ขับรถ', '🚗'], ['daily', 'ใช้ชีวิตประจำวัน', '🏠'], ['outdoor', 'กิจกรรมกลางแจ้ง', '🏔️'], ['fashion', 'แฟชั่น/ใส่ทั่วไป', '🕶️'], ['general', 'ใช้งานทั่วไป', '🕐']];
@@ -689,12 +689,20 @@ function starCompareTableHTML(prods) {
     ['สารเคลือบผิว (ตัวเลือกที่เทียบ)', p => { const v = compareVariantFor(p); return v ? coatRank(v.coating) : null; }, true, p => { const v = compareVariantFor(p); return (v && (LENS_COATING_OPTS.find(c => c[0] === v.coating) || [])[1]) || '—'; }],
     ['เปลี่ยนสี (ตัวเลือกที่เทียบ)', p => { const v = compareVariantFor(p); return v ? (v.color_change && v.color_change !== 'none' ? 1 : 0) : null; }, true, p => { const v = compareVariantFor(p); return (v && v.color_change && v.color_change !== 'none') ? ((LENS_COLOR_OPTS.find(c => c[0] === v.color_change) || [])[1] || v.color_change) : 'ไม่มี'; }],
   ];
+  const highlightsRow = `<tr style="border-top:2px solid var(--line,#e2dac3)"><td style="padding:8px 10px;color:var(--mute,#69756d);white-space:nowrap;vertical-align:top">จุดเด่น/เทคโนโลยี<br>(ตามแคตตาล็อก)</td>${prods.map(p => {
+    const hs = lensHighlights(p.lens_spec || {}).filter(h => h && (h.title || h.desc));
+    const body = hs.length
+      ? `<ul style="margin:0;padding-left:16px;text-align:left">${hs.map(h => `<li style="margin-bottom:4px"><b>${esc(h.title || '')}</b>${h.desc ? `<div class="tag" style="margin-top:1px">${esc(h.desc)}</div>` : ''}</li>`).join('')}</ul>`
+      : `<span class="tag">—</span>`;
+    return `<td style="padding:8px 10px;text-align:left;vertical-align:top">${body}</td>`;
+  }).join('')}</tr>`;
   return `<table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:${Math.max(560, n * 150)}px">
     <tr><td style="padding:8px 10px"></td>${prods.map(p => `<td style="padding:8px 10px;font-weight:700;text-align:center;border-bottom:2px solid var(--line,#e2dac3)">${esc(p.product_name)}</td>`).join('')}</tr>
     ${rowsDef.map(([label, valFn, higher, dispFn]) => {
       const ranked = starRankRow(prods, valFn, higher);
       return `<tr style="border-top:1px solid var(--line,#e2dac3)"><td style="padding:8px 10px;color:var(--mute,#69756d);white-space:nowrap">${esc(label)}</td>${prods.map((p, i) => `<td style="padding:8px 10px;text-align:center"><div>${starsHTML(ranked[i].stars, n)}</div><div class="tag" style="margin-top:2px">${esc(dispFn(p))}</div></td>`).join('')}</tr>`;
     }).join('')}
+    ${highlightsRow}
   </table>`;
 }
 function openLensCompare() {
@@ -1324,15 +1332,19 @@ function levelTechBlock(types) {
   const blocks = [];
   const hasProg = types.includes('progressive') || types.includes('office') || types.includes('anti_fatigue') || types.includes('bifocal');
   const hasSingle = types.includes('single') || types.includes('kids') || !types.length || !hasProg;
-  if (hasProg) blocks.push(`<div style="margin-top:14px"><b style="font-size:13.5px">เทคโนโลยีการออกแบบผิวเลนส์ (โปรเกรสซีฟ/ออฟฟิศ)</b>
+  if (hasSingle) blocks.push(`<div style="margin-top:14px"><b style="font-size:13.5px">ระดับเลนส์ชั้นเดียว (Single Vision) — ความโค้งผิวเลนส์</b>
     <table style="width:100%;margin-top:8px;font-size:12.5px;border-collapse:collapse">
-      <tr><td style="padding:6px 8px;width:110px;vertical-align:top"><b>Conventional</b></td><td style="padding:6px 8px;color:var(--mute,#69756d)">ออกแบบสำเร็จมาตรฐาน พื้นที่มองเห็นแคบกว่า มีจุดบิดเบี้ยว/เบลอบริเวณขอบมากกว่า เหมาะงบประหยัด</td></tr>
-      <tr style="border-top:1px solid var(--line,#e2dac3)"><td style="padding:6px 8px;vertical-align:top"><b>Freeform</b></td><td style="padding:6px 8px;color:var(--mute,#69756d)">คำนวณผิวเลนส์เฉพาะบุคคลด้วยคอมพิวเตอร์ พื้นที่มองเห็นกว้างและคมชัดกว่าชัดเจน ลดอาการเวียนตา</td></tr>
+      <tr><td style="padding:6px 8px;width:118px;vertical-align:top"><b>Entry / เริ่มต้น</b></td><td style="padding:6px 8px;color:var(--mute,#69756d)"><b>Spherical</b> — เลนส์โค้งหน้าเลนส์แบบมาตรฐาน ไม่เหมาะกับคนสายตาสั้นหรือยาวมาก แนะนำสำหรับค่าสายตาไม่เกิน ±3.50 D</td></tr>
+      <tr style="border-top:1px solid var(--line,#e2dac3)"><td style="padding:6px 8px;vertical-align:top"><b>Standard / มาตรฐาน</b></td><td style="padding:6px 8px;color:var(--mute,#69756d)"><b>Aspherical</b> — ด้านหน้าเลนส์แบนกว่า ภาพกว้างกว่าเลนส์โค้ง เหมาะกับค่าสายตาตั้งแต่ 2.00 D ขึ้นไป ได้เลนส์บางและเบาขึ้น</td></tr>
+      <tr style="border-top:1px solid var(--line,#e2dac3)"><td style="padding:6px 8px;vertical-align:top"><b>Premium / พรีเมียม</b></td><td style="padding:6px 8px;color:var(--mute,#69756d)"><b>Double Aspherical</b> — แบนทั้ง 2 ด้าน บางเบาที่สุด สนามภาพกว้างที่สุด เหมาะกับค่าสายตาตั้งแต่ 5.00 D ขึ้นไป</td></tr>
+      <tr style="border-top:1px solid var(--line,#e2dac3)"><td style="padding:6px 8px;vertical-align:top"><b>Individual</b></td><td style="padding:6px 8px;color:var(--mute,#69756d)">ปรับแต่งเฉพาะบุคคลตามค่าสายตา พารามิเตอร์ และขนาดกรอบของลูกค้าแต่ละคนโดยเฉพาะ</td></tr>
     </table></div>`);
-  if (hasSingle) blocks.push(`<div style="margin-top:14px"><b style="font-size:13.5px">เทคโนโลยีผิวเลนส์ (สายตาเดี่ยว)</b>
+  if (hasProg) blocks.push(`<div style="margin-top:14px"><b style="font-size:13.5px">ระดับเลนส์โปรเกรสซีฟ/ออฟฟิศ — เทคโนโลยีการขัดผิวเลนส์</b>
     <table style="width:100%;margin-top:8px;font-size:12.5px;border-collapse:collapse">
-      <tr><td style="padding:6px 8px;width:110px;vertical-align:top"><b>Spherical</b></td><td style="padding:6px 8px;color:var(--mute,#69756d)">เลนส์โค้งทรงกลมมาตรฐาน ขอบเลนส์หนากว่า ภาพบริเวณขอบอาจบิดเบี้ยวเล็กน้อยในค่าสายตาสูง</td></tr>
-      <tr style="border-top:1px solid var(--line,#e2dac3)"><td style="padding:6px 8px;vertical-align:top"><b>Aspherical</b></td><td style="padding:6px 8px;color:var(--mute,#69756d)">ผิวเลนส์แบนเรียบกว่า บางและเบากว่า ภาพคมชัดกว่าโดยเฉพาะค่าสายตาสูง</td></tr>
+      <tr><td style="padding:6px 8px;width:118px;vertical-align:top"><b>Entry / เริ่มต้น</b></td><td style="padding:6px 8px;color:var(--mute,#69756d)">ไม่มีเทคโนโลยีการขัดพิเศษ (ขัดแบบธรรมดา) ไม่เหมาะกับคนสายตามองไกล 0.00 และมองใกล้ (Addition) เกิน 1.00 D ต้องใช้เวลาปรับตัวมากกว่า</td></tr>
+      <tr style="border-top:1px solid var(--line,#e2dac3)"><td style="padding:6px 8px;vertical-align:top"><b>Standard / มาตรฐาน</b></td><td style="padding:6px 8px;color:var(--mute,#69756d)">ขัดผิวด้านหลังเลนส์ (Freeform Backside) ภาพนิ่งขึ้น เหมาะกับคนสายตามองไกลไม่มากและ Addition ไม่เกิน 1.50 D</td></tr>
+      <tr style="border-top:1px solid var(--line,#e2dac3)"><td style="padding:6px 8px;vertical-align:top"><b>Premium / พรีเมียม</b></td><td style="padding:6px 8px;color:var(--mute,#69756d)">ขัดผิว 2 ด้าน (Double-Sided Freeform) ภาพนิ่งทั้ง 2 แนวกวาดตา เลนส์กว้างใส่สบาย แนะนำสำหรับทุกค่าสายตา โดยเฉพาะคนกังวลเรื่องการปรับตัว</td></tr>
+      <tr style="border-top:1px solid var(--line,#e2dac3)"><td style="padding:6px 8px;vertical-align:top"><b>Individual</b></td><td style="padding:6px 8px;color:var(--mute,#69756d)">นำค่าทุกค่ามาออกแบบเฉพาะบุคคล ทั้งความต้องการใช้งาน ค่าสายตา ค่าพารามิเตอร์ และขนาดกรอบ คำนวณใส่ในเลนส์คู่นั้นโดยเฉพาะ จึงใส่ง่ายแทบไม่ต้องปรับตัว</td></tr>
     </table></div>`);
   return blocks.join('');
 }
@@ -1387,11 +1399,13 @@ function lensTutorialHTML(cat, lenstypes) {
   const titles = { level: 'ระดับเลนส์ (Level) คืออะไร?', index: 'ค่าดัชนีหักเหแสง (Index) คืออะไร?', coating: 'สารเคลือบผิวเลนส์ (Coating) คืออะไร?', photochromic: 'เลนส์เปลี่ยนสี (Photochromic) คืออะไร?' };
   let body = '';
   if (cat === 'level') {
-    body = `<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:6px">
-      ${fovIcon(30, 22, 'Basic / Standard', 'มุมมองชัดแคบ มีขอบเบลอมากกว่า')}
-      ${fovIcon(56, 40, 'Premium / Flagship', 'มุมมองชัดกว้าง เกือบทั้งเลนส์')}
+    body = `<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:6px">
+      ${fovIcon(26, 18, 'Entry', 'ภาพแคบสุด ขอบเบลอมากที่สุด')}
+      ${fovIcon(38, 28, 'Standard', 'ภาพกว้างขึ้น ขอบเบลอน้อยลง')}
+      ${fovIcon(50, 36, 'Premium', 'ภาพกว้าง คมชัดเกือบทั้งเลนส์')}
+      ${fovIcon(60, 44, 'Individual', 'ออกแบบเฉพาะบุคคล กว้างและนิ่งที่สุด')}
     </div>
-    <p class="tag" style="margin:0 0 4px">พื้นที่สีขาว = บริเวณที่มองเห็นคมชัด · พื้นที่สีเทา = บริเวณที่ภาพเบลอ/บิดเบี้ยว</p>
+    <p class="tag" style="margin:0 0 4px">พื้นที่สีขาว = บริเวณที่มองเห็นคมชัด · พื้นที่สีเทา = บริเวณที่ภาพเบลอ/บิดเบี้ยว · ยิ่งระดับสูง พื้นที่คมชัดยิ่งกว้างขึ้น</p>
     ${levelTechBlock(types)}`;
   } else if (cat === 'index') body = indexTutorialBody();
   else if (cat === 'coating') body = coatingTutorialBody();
