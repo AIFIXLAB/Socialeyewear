@@ -1784,10 +1784,25 @@ const HOYA_LENSES = [
 // เพิ่มตัวเลขท้ายนี้ทุกครั้งที่แก้ข้อมูล HOYA_LENSES (ราคา/โค้ตติ้ง/รูปภาพ ฯลฯ) เพื่อให้ร้านได้ข้อมูลล่าสุดอัตโนมัติโดยไม่ต้องกดปุ่มเอง
 const HOYA_DATA_VERSION = 'fy26-v4-highlights';
 // ซิงก์แคตตาล็อก HOYA เข้าในรายการสินค้าให้เป็นปัจจุบันเสมอ (เทียบด้วย HOYA_DATA_VERSION) — ไม่ทับสต็อก/ต้นทุนที่ร้านกรอกไว้เอง จับคู่ชุดตัวเลือกเดิมด้วย Index+Coating+เปลี่ยนสี
+// กันรายการซ้ำ: ถ้าเครื่อง/แท็บมากกว่า 1 ตัวซิงก์พร้อมกันก่อนจะเห็นข้อมูลของกันและกัน อาจเผลอสร้างสินค้าชื่อเดียวกันซ้ำ 2 แถวขึ้นไปได้
+// ฟังก์ชันนี้ไล่เช็คทุกครั้งที่ซิงก์ ถ้าเจอชื่อซ้ำกันในกลุ่ม HOYA จะเก็บไว้แถวเดียว (แถวที่สร้างก่อน) แล้วลบแถวที่ซ้ำออก
+function dedupeHoyaProducts(hoyaNames) {
+  const groups = {};
+  live('products').forEach(p => { if (hoyaNames.has(p.product_name)) (groups[p.product_name] = groups[p.product_name] || []).push(p); });
+  let removed = 0;
+  Object.values(groups).forEach(list => {
+    if (list.length <= 1) return;
+    list.sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    list.slice(1).forEach(p => { save('products', { ...p, deleted_at: now() }); removed++; });
+  });
+  if (removed) persist();
+  return removed;
+}
 function syncHoyaCatalog(opts) {
   const force = opts && opts.force;
-  if (!force && ls.get('hoyaSyncVer', '') === HOYA_DATA_VERSION) return null;
   const newNames = new Set(HOYA_LENSES.map(o => o.product_name));
+  dedupeHoyaProducts(newNames);
+  if (!force && ls.get('hoyaSyncVer', '') === HOYA_DATA_VERSION) return null;
   const byName = {}; live('products').forEach(p => { byName[p.product_name] = p; });
   const vkey = v => [v.index || '', v.coating || '', v.color_change || 'none'].join('|');
   let added = 0, updated = 0, removed = 0;
