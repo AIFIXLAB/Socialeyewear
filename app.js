@@ -139,6 +139,12 @@ const LENS_COATING_OPTS = [['uncoat', 'Uncoat'], ['sft', 'SFT'], ['hard', 'Hard 
 const LENS_COATINGS = [['blue', 'กรองแสงสีฟ้า (Blue Block)'], ['photo', 'เปลี่ยนสีอัตโนมัติ (Photochromic)'], ['uv400', 'กัน UV400'], ['polarized', 'ตัดแสงสะท้อน (Polarized)'], ['ar', 'เคลือบกันแสงสะท้อน (Anti-Reflective)'], ['hard', 'กันรอยขีดข่วน (Hard Coat)'], ['hydro', 'กันน้ำ/คราบมัน (Hydrophobic/Oleophobic)'], ['fog', 'กันฝ้า (Anti-Fog)']];
 const LENS_TIER_OPTS = ['Entry', 'Standard', 'Premium', 'Flagship'];
 const LENS_TIER_LABELS = { Entry: 'Entry / เริ่มต้น (ประหยัด)', Standard: 'Standard / มาตรฐาน (ระดับกลาง)', Premium: 'Premium / พรีเมียม (คุณภาพสูง)', Flagship: 'Individual (ปรับแต่งเฉพาะบุคคล)' };
+const LENS_TIER_DESC = {
+  Entry: 'ขัดเฉพาะค่าสายตาที่ผิวด้านหลัง บนโครงสร้าง+ค่า Addition ที่ผิวหน้าสำเร็จรูปอยู่แล้ว ไม่เหมาะกับคนเวียนหัวง่าย/ปรับตัวยาก',
+  Standard: 'ขัดแบบฟรีฟอร์มทั้งโครงสร้าง ค่าสายตา และ Addition ที่ผิวด้านหลังเลนส์ ภาพนิ่งใส่สบาย เหมาะกับคนสายตายาวไม่เกิน 1.50 D',
+  Premium: 'ขัดแบบฟรีฟอร์มทั้ง 2 ด้าน — ผิวหน้าขัดโครงสร้าง+Addition ผิวหลังขัดโครงสร้าง+ค่าสายตา ภาพกว้าง นิ่ง ใส่สบายที่สุด',
+  Flagship: 'ใช้ค่าทุกค่า (การใช้งาน สายตา พารามิเตอร์ ขนาดกรอบ) ออกแบบเฉพาะบุคคล ใส่ง่ายแทบไม่ต้องปรับตัว',
+};
 const LENS_AVAIL_OPTS = [['stock', 'มีสต็อก (รอรับ 1-3 วัน)'], ['lab', 'สั่ง Lab ผลิต (รอ 7-14 วัน ไม่รวมวันหยุดนักขัตฤกษ์)']];
 /* ---------- แบบสอบถามความต้องการก่อนแนะนำเลนส์ (หน้ากิออส) ---------- */
 const PURPOSE_OPTS = [['screen', 'ทำงานหน้าจอ', '🖥️'], ['mobile', 'มือถือ/แท็บเล็ต', '📱'], ['read', 'อ่านหนังสือ', '📖'], ['drive', 'ขับรถ', '🚗'], ['daily', 'ใช้ชีวิตประจำวัน', '🏠'], ['outdoor', 'กิจกรรมกลางแจ้ง', '🏔️'], ['fashion', 'แฟชั่น/ใส่ทั่วไป', '🕶️'], ['general', 'ใช้งานทั่วไป', '🕐']];
@@ -1357,9 +1363,9 @@ function levelTechBlock(types) {
     </table></div>`);
   if (hasProg) blocks.push(`<div style="margin-top:14px"><b style="font-size:13.5px">ระดับเลนส์โปรเกรสซีฟ/ออฟฟิศ — เทคโนโลยีการขัดผิวเลนส์</b>
     <table style="width:100%;margin-top:8px;font-size:12.5px;border-collapse:collapse">
-      <tr><td style="padding:6px 8px;width:118px;vertical-align:top"><b>Entry / เริ่มต้น</b></td><td style="padding:6px 8px;color:var(--mute,#69756d)">ไม่มีเทคโนโลยีการขัดพิเศษ (ขัดแบบธรรมดา) ไม่เหมาะกับคนสายตามองไกล 0.00 และมองใกล้ (Addition) เกิน 1.00 D ต้องใช้เวลาปรับตัวมากกว่า</td></tr>
-      <tr style="border-top:1px solid var(--line,#e2dac3)"><td style="padding:6px 8px;vertical-align:top"><b>Standard / มาตรฐาน</b></td><td style="padding:6px 8px;color:var(--mute,#69756d)">ขัดผิวด้านหลังเลนส์ (Freeform Backside) ภาพนิ่งขึ้น เหมาะกับคนสายตามองไกลไม่มากและ Addition ไม่เกิน 1.50 D</td></tr>
-      <tr style="border-top:1px solid var(--line,#e2dac3)"><td style="padding:6px 8px;vertical-align:top"><b>Premium / พรีเมียม</b></td><td style="padding:6px 8px;color:var(--mute,#69756d)">ขัดผิว 2 ด้าน (Double-Sided Freeform) ภาพนิ่งทั้ง 2 แนวกวาดตา เลนส์กว้างใส่สบาย แนะนำสำหรับทุกค่าสายตา โดยเฉพาะคนกังวลเรื่องการปรับตัว</td></tr>
+      <tr><td style="padding:6px 8px;width:118px;vertical-align:top"><b>Entry / เริ่มต้น</b></td><td style="padding:6px 8px;color:var(--mute,#69756d)">ขัดเฉพาะค่าสายตาที่ผิวด้านหลัง บนชิ้นเลนส์ที่มีโครงสร้างและค่า Addition สำเร็จรูปจากผิวหน้าอยู่แล้ว ไม่เหมาะกับคนมีปัญหาเวียนหัว/ปรับตัวยาก</td></tr>
+      <tr style="border-top:1px solid var(--line,#e2dac3)"><td style="padding:6px 8px;vertical-align:top"><b>Standard / มาตรฐาน</b></td><td style="padding:6px 8px;color:var(--mute,#69756d)">ขัดแบบฟรีฟอร์มทั้งโครงสร้าง ค่าสายตา และ Addition ที่ผิวด้านหลังเลนส์ ภาพนิ่งใส่สบาย เหมาะกับคนสายตายาวไม่เกิน 1.50 D</td></tr>
+      <tr style="border-top:1px solid var(--line,#e2dac3)"><td style="padding:6px 8px;vertical-align:top"><b>Premium / พรีเมียม</b></td><td style="padding:6px 8px;color:var(--mute,#69756d)">ขัดแบบฟรีฟอร์มทั้ง 2 ด้าน — ผิวหน้าขัดโครงสร้าง+Addition ผิวหลังขัดโครงสร้าง+ค่าสายตา ภาพกว้าง นิ่ง ใส่สบายที่สุด แนะนำสำหรับทุกค่าสายตา โดยเฉพาะคนกังวลเรื่องการปรับตัว</td></tr>
       <tr style="border-top:1px solid var(--line,#e2dac3)"><td style="padding:6px 8px;vertical-align:top"><b>Individual</b></td><td style="padding:6px 8px;color:var(--mute,#69756d)">นำค่าทุกค่ามาออกแบบเฉพาะบุคคล ทั้งความต้องการใช้งาน ค่าสายตา ค่าพารามิเตอร์ และขนาดกรอบ คำนวณใส่ในเลนส์คู่นั้นโดยเฉพาะ จึงใส่ง่ายแทบไม่ต้องปรับตัว</td></tr>
     </table></div>`);
   return blocks.join('');
@@ -1436,10 +1442,14 @@ function kioskLensReq() {
     <span style="display:block;font-size:12px;line-height:1.3;color:#23262a">${esc(label)}</span>
   </button>`; };
   const mchip = (group, k, label) => `<button type="button" data-act="lrtoggle" data-group="${group}" data-id="${esc(String(k))}" class="chip ${(lr[group] || []).includes(k) ? 'on' : ''}">${esc(label)}</button>`;
+  const levelCard = k => { const on = (lr.level || []).includes(k); return `<button type="button" data-act="lrtoggle" data-group="level" data-id="${esc(k)}" style="text-align:left;border:1.5px solid ${on ? '#4a8f6b' : 'rgba(0,0,0,.12)'};background:${on ? '#4a8f6b14' : '#fff'};border-radius:12px;padding:12px 14px;cursor:pointer;font:inherit;display:flex;flex-direction:column;gap:4px">
+    <span style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:13px;color:#23262a"><span style="width:15px;height:15px;flex-shrink:0;border-radius:4px;border:1.5px solid ${on ? '#4a8f6b' : 'rgba(0,0,0,.25)'};background:${on ? '#4a8f6b' : '#fff'};color:#fff;font-size:10px;line-height:13px;text-align:center">${on ? '✓' : ''}</span>${esc(LENS_TIER_LABELS[k] || k)}</span>
+    <span style="font-size:11.5px;line-height:1.45;color:var(--mute,#69756d);padding-left:23px">${esc(LENS_TIER_DESC[k] || '')}</span>
+  </button>`; };
   const tutBtn = cat => `<button type="button" data-act="lenstut" data-id="${cat}" class="btn line sm" style="padding:2px 11px;border-radius:999px;font-size:12px;line-height:1.5">?</button>`;
-  const catSec = (title, cat, body) => `<div class="panel" style="padding:18px 20px;margin-bottom:14px">
+  const catSec = (title, cat, body, grid) => `<div class="panel" style="padding:18px 20px;margin-bottom:14px">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap"><h2 style="margin:0;font-size:15px">${esc(title)}</h2>${cat ? tutBtn(cat) : ''}</div>
-    <div class="chips" style="margin-bottom:0">${body || '<p class="tag">ยังไม่มีตัวเลือกในระบบ</p>'}</div>
+    ${grid ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">${body || '<p class="tag">ยังไม่มีตัวเลือกในระบบ</p>'}</div>` : `<div class="chips" style="margin-bottom:0">${body || '<p class="tag">ยังไม่มีตัวเลือกในระบบ</p>'}</div>`}
   </div>`;
   const brandOpts = knownBrands('lens');
   return `
@@ -1451,7 +1461,7 @@ function kioskLensReq() {
     </div>
     <h2 style="margin:4px 0 2px;font-size:14.5px;color:var(--mute,#69756d);font-weight:600">ตัวเลือกคุณสมบัติเลนส์ (เลือกได้มากกว่า 1 ข้อในแต่ละหัวข้อ)</h2>
     ${catSec('แบรนด์ (Brand)', '', brandOpts.map(b => mchip('brand', b, b)).join(''))}
-    ${catSec('ระดับเลนส์ (Level)', 'level', LENS_TIER_OPTS.map(k => mchip('level', k, LENS_TIER_LABELS[k] || k)).join(''))}
+    ${catSec('ระดับเลนส์ (Level)', 'level', LENS_TIER_OPTS.map(levelCard).join(''), true)}
     <div class="foot" style="margin-top:4px">
       <button type="button" class="btn line" data-act="kioskback">ย้อนกลับ</button>
     </div>
