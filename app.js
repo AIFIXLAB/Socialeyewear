@@ -1411,10 +1411,9 @@ function kioskLensReq() {
     <div class="chips" style="margin-bottom:0">${body || '<p class="tag">ยังไม่มีตัวเลือกในระบบ</p>'}</div>
   </div>`;
   const brandOpts = knownBrands('lens');
-  const photoOpts = LENS_COLOR_OPTS.filter(([k]) => k !== 'none');
   return `
     <h1 style="font-size:21px;margin:0 0 4px">เลือกเลนส์ที่ใช่สำหรับคุณ...</h1>
-    <p class="tag" style="margin:0 0 18px">เลือกประเภทเลนส์และคุณสมบัติที่ต้องการ เพื่อเปรียบเทียบราคาและสเปคเลนส์จากแต่ละแบรนด์</p>
+    <p class="tag" style="margin:0 0 18px">เลือกประเภทเลนส์ แบรนด์ และระดับที่ต้องการ เพื่อดูรายการเลนส์ที่ตรงกัน — ส่วน Index/Coating/เปลี่ยนสี ไปเลือกเทียบราคาได้ละเอียดอีกทีตอนเปิดหน้าเปรียบเทียบเลนส์</p>
     <div class="panel" style="padding:18px 20px;margin-bottom:14px">
       <h2 style="margin:0 0 12px;font-size:15px">ประเภทเลนส์</h2>
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:10px">${LENSTYPE_OPTS.map(([k, l, bg]) => lcard(k, l, bg, '#4a8f6b')).join('')}</div>
@@ -1422,9 +1421,6 @@ function kioskLensReq() {
     <h2 style="margin:4px 0 2px;font-size:14.5px;color:var(--mute,#69756d);font-weight:600">ตัวเลือกคุณสมบัติเลนส์ (เลือกได้มากกว่า 1 ข้อในแต่ละหัวข้อ)</h2>
     ${catSec('แบรนด์ (Brand)', '', brandOpts.map(b => mchip('brand', b, b)).join(''))}
     ${catSec('ระดับเลนส์ (Level)', 'level', LENS_TIER_OPTS.map(k => mchip('level', k, LENS_TIER_LABELS[k] || k)).join(''))}
-    ${catSec('ค่าดัชนีหักเหแสง (Index)', 'index', LENS_INDEX_OPTS.map(([k, l]) => mchip('lensIndex', k, l)).join(''))}
-    ${catSec('สารเคลือบผิวเลนส์ (Coating)', 'coating', LENS_COATING_OPTS.map(([k, l]) => mchip('coating', k, l)).join(''))}
-    ${catSec('เลนส์เปลี่ยนสี (Photochromic)', 'photochromic', photoOpts.map(([k, l]) => mchip('photochromic', k, l)).join(''))}
     <div class="foot" style="margin-top:4px">
       <button type="button" class="btn line" data-act="kioskback">ย้อนกลับ</button>
     </div>
