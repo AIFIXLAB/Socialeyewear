@@ -624,14 +624,82 @@ function lensCatalogView() {
   </div>`;
 }
 
+// ชุดตัวเลือก (Index/Coating/เปลี่ยนสี) ที่ "เลือกไว้เทียบราคาจริง" ต่อรุ่น — ดีฟอลต์เป็นชุดที่ถูกสุดของรุ่นนั้น ปรับได้จาก dropdown ในหน้าเทียบ
+function compareVariantFor(p) {
+  const variants = lensVariants(p);
+  if (!variants.length) return null;
+  S.catCompareVariant = S.catCompareVariant || {};
+  let sel = S.catCompareVariant[p.id];
+  if (!sel) {
+    const cheapest = [...variants].sort((a, b) => (a.price || 0) - (b.price || 0))[0];
+    sel = { index: cheapest.index || '', coating: cheapest.coating || '', color: cheapest.color_change || 'none' };
+    S.catCompareVariant[p.id] = sel;
+  }
+  return variants.find(v => (v.index || '') === sel.index && (v.coating || '') === sel.coating && (v.color_change || 'none') === sel.color) || variants[0];
+}
+const realPriceFor = p => { const v = compareVariantFor(p); return v ? v.price : lensPriceRange(p).min; };
+const coatRank = key => { const i = LENS_COATING_OPTS.findIndex(c => c[0] === key); return i < 0 ? null : i; };
+// จัดลำดับดาว 1 แถวข้อมูล (ราคายิ่งถูกยิ่งดี ค่าอื่นยิ่งมากยิ่งดี) — คืนจำนวนดาวของแต่ละรุ่น (เท่ากัน = ดาวเท่ากัน, ไม่มีข้อมูล = null)
+function starRankRow(prods, valFn, higherIsBetter) {
+  const vals = prods.map(p => ({ id: p.id, v: valFn(p) }));
+  const present = vals.filter(x => x.v != null);
+  if (!present.length) return vals.map(x => ({ ...x, stars: null }));
+  const uniq = [...new Set(present.map(x => x.v))].sort((a, b) => higherIsBetter ? b - a : a - b);
+  return vals.map(x => ({ ...x, stars: x.v == null ? null : Math.max(1, prods.length - uniq.indexOf(x.v)) }));
+}
+const starsHTML = (stars, total) => stars == null ? '<span class="tag">—</span>' : `<span style="letter-spacing:1px;color:var(--gold-d,#8f7330);font-size:13px">${'★'.repeat(stars)}${'☆'.repeat(Math.max(0, total - stars))}</span>`;
+function priceBarChartHTML(prods, mainId) {
+  const vals = prods.map(p => ({ p, price: realPriceFor(p) || 0 }));
+  const maxP = Math.max(...vals.map(v => v.price), 1);
+  return vals.map(({ p, price }) => {
+    const w = Math.max(5, Math.round((price / maxP) * 100));
+    return `<div style="display:flex;align-items:center;gap:10px;margin:9px 0">
+      <span style="width:150px;font-size:12px;flex-shrink:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(p.product_name)}">${esc(p.product_name)}</span>
+      <div style="flex:1;background:#e9e4d4;border-radius:7px;overflow:hidden;height:22px"><div style="height:100%;width:${w}%;background:${p.id === mainId ? 'var(--forest,#16294a)' : 'var(--gold,#c9a961)'};border-radius:7px"></div></div>
+      <b style="width:100px;text-align:right;flex-shrink:0;font-size:13px">${baht(price)}</b>
+    </div>`;
+  }).join('');
+}
+function variantSelectorHTML(p) {
+  const variants = lensVariants(p);
+  if (variants.length <= 1) return `<div style="min-width:170px;flex:1"><div style="font-weight:600;font-size:12px;margin-bottom:6px">${esc(p.product_name)}</div><p class="tag" style="margin:0">มีตัวเลือกเดียว</p></div>`;
+  const idxVals = [...new Set(variants.map(v => v.index).filter(Boolean))];
+  const coatVals = [...new Set(variants.map(v => v.coating).filter(Boolean))];
+  const colorVals = [...new Set(variants.map(v => v.color_change || 'none'))];
+  const sel = (S.catCompareVariant && S.catCompareVariant[p.id]) || {};
+  const opt = (v, l, cur) => `<option value="${esc(v)}" ${cur === v ? 'selected' : ''}>${esc(l)}</option>`;
+  return `<div style="min-width:170px;flex:1">
+    <div style="font-weight:600;font-size:12px;margin-bottom:6px">${esc(p.product_name)}</div>
+    ${idxVals.length > 1 ? `<label style="display:block;margin-bottom:6px"><span class="lbl" style="font-size:11px">Index</span><select data-bind="cmpvar:${p.id}:index" style="width:100%;font-size:12px;padding:5px 7px">${idxVals.map(v => opt(v, v, sel.index)).join('')}</select></label>` : ''}
+    ${coatVals.length > 1 ? `<label style="display:block;margin-bottom:6px"><span class="lbl" style="font-size:11px">Coating</span><select data-bind="cmpvar:${p.id}:coating" style="width:100%;font-size:12px;padding:5px 7px">${coatVals.map(v => opt(v, (LENS_COATING_OPTS.find(c => c[0] === v) || [])[1] || v, sel.coating)).join('')}</select></label>` : ''}
+    ${colorVals.length > 1 ? `<label style="display:block;margin-bottom:0"><span class="lbl" style="font-size:11px">เปลี่ยนสี</span><select data-bind="cmpvar:${p.id}:color" style="width:100%;font-size:12px;padding:5px 7px">${colorVals.map(v => opt(v, (LENS_COLOR_OPTS.find(c => c[0] === v) || [])[1] || v, sel.color)).join('')}</select></label>` : ''}
+  </div>`;
+}
+function starCompareTableHTML(prods) {
+  const n = prods.length;
+  const rowsDef = [
+    ['ราคา (ตามตัวเลือกที่เลือก)', p => realPriceFor(p), false, p => baht(realPriceFor(p))],
+    ['ระดับสินค้า', p => { const i = LENS_TIER_OPTS.indexOf((p.lens_spec || {}).tier || ''); return i < 0 ? null : i; }, true, p => LENS_TIER_LABELS[(p.lens_spec || {}).tier] || (p.lens_spec || {}).tier || '—'],
+    ['ดัชนีหักเหแสง (ตัวเลือกที่เทียบ)', p => { const v = compareVariantFor(p); const f = v ? parseFloat(v.index) : NaN; return isNaN(f) ? null : f; }, true, p => { const v = compareVariantFor(p); return (v && v.index) || '—'; }],
+    ['สารเคลือบผิว (ตัวเลือกที่เทียบ)', p => { const v = compareVariantFor(p); return v ? coatRank(v.coating) : null; }, true, p => { const v = compareVariantFor(p); return (v && (LENS_COATING_OPTS.find(c => c[0] === v.coating) || [])[1]) || '—'; }],
+    ['เปลี่ยนสี (ตัวเลือกที่เทียบ)', p => { const v = compareVariantFor(p); return v ? (v.color_change && v.color_change !== 'none' ? 1 : 0) : null; }, true, p => { const v = compareVariantFor(p); return (v && v.color_change && v.color_change !== 'none') ? ((LENS_COLOR_OPTS.find(c => c[0] === v.color_change) || [])[1] || v.color_change) : 'ไม่มี'; }],
+  ];
+  return `<table style="width:100%;border-collapse:collapse;font-size:12.5px;min-width:${Math.max(560, n * 150)}px">
+    <tr><td style="padding:8px 10px"></td>${prods.map(p => `<td style="padding:8px 10px;font-weight:700;text-align:center;border-bottom:2px solid var(--line,#e2dac3)">${esc(p.product_name)}</td>`).join('')}</tr>
+    ${rowsDef.map(([label, valFn, higher, dispFn]) => {
+      const ranked = starRankRow(prods, valFn, higher);
+      return `<tr style="border-top:1px solid var(--line,#e2dac3)"><td style="padding:8px 10px;color:var(--mute,#69756d);white-space:nowrap">${esc(label)}</td>${prods.map((p, i) => `<td style="padding:8px 10px;text-align:center"><div>${starsHTML(ranked[i].stars, n)}</div><div class="tag" style="margin-top:2px">${esc(dispFn(p))}</div></td>`).join('')}</tr>`;
+    }).join('')}
+  </table>`;
+}
 function openLensCompare() {
-  let prods = (S.catCompare || []).map(pid => find('products', pid)).filter(Boolean);
+  let prods = (S.catCompare || []).map(pid => find('products', pid)).filter(Boolean).slice(0, 4);
   if (!prods.length) return;
   if (!S.catMain || !prods.find(p => p.id === S.catMain)) S.catMain = prods[0].id;
   const main = prods.find(p => p.id === S.catMain);
   const others = prods.filter(p => p.id !== S.catMain);
   prods = [main, ...others];
-  const minPrice = Math.min(...prods.map(p => lensPriceRange(p).min || Infinity));
+  const minPrice = Math.min(...prods.map(p => realPriceFor(p) ?? Infinity));
   const specVal = (p, fn) => { const v = fn(p); return v || '—'; };
   const rows = [
     ['โครงสร้าง/ประเภท', p => (LENS_DESIGN.find(d => d[0] === (p.lens_spec || {}).design) || [])[1]],
@@ -649,16 +717,17 @@ function openLensCompare() {
   const evalVs = (p, main) => {
     const pros = [], cons = [];
     const pls = p.lens_spec || {}, mls = main.lens_spec || {};
-    const pPrice = lensPriceRange(p).min, mPrice = lensPriceRange(main).min;
+    const pPrice = realPriceFor(p), mPrice = realPriceFor(main);
     if (pPrice != null && mPrice != null && pPrice !== mPrice) {
       const diff = Math.abs(pPrice - mPrice);
-      if (pPrice < mPrice) pros.push(`ราคาเริ่มต้นถูกกว่าตัวหลัก ${baht(diff)}`);
-      else cons.push(`ราคาเริ่มต้นแพงกว่าตัวหลัก ${baht(diff)}`);
+      if (pPrice < mPrice) pros.push(`ราคา (ตามตัวเลือกที่เลือก) ถูกกว่าตัวหลัก ${baht(diff)}`);
+      else cons.push(`ราคา (ตามตัวเลือกที่เลือก) แพงกว่าตัวหลัก ${baht(diff)}`);
     }
-    const pIdx = parseFloat(lensIndexSummary(p)), mIdx = parseFloat(lensIndexSummary(main));
+    const pVar = compareVariantFor(p), mVar = compareVariantFor(main);
+    const pIdx = parseFloat(pVar && pVar.index), mIdx = parseFloat(mVar && mVar.index);
     if (!isNaN(pIdx) && !isNaN(mIdx) && pIdx !== mIdx) {
-      if (pIdx > mIdx) pros.push(`Index สูงกว่า (${lensIndexSummary(p)}) — เลนส์บางและเบากว่าตัวหลัก`);
-      else cons.push(`Index ต่ำกว่า (${lensIndexSummary(p)}) — เลนส์หนา/หนักกว่าตัวหลัก`);
+      if (pIdx > mIdx) pros.push(`Index สูงกว่า (${pVar.index}) — เลนส์บางและเบากว่าตัวหลัก`);
+      else cons.push(`Index ต่ำกว่า (${pVar.index}) — เลนส์หนา/หนักกว่าตัวหลัก`);
     }
     const pTier = tierRank(pls.tier), mTier = tierRank(mls.tier);
     if (pTier != null && mTier != null && pTier !== mTier) {
@@ -683,14 +752,17 @@ function openLensCompare() {
     const ls = p.lens_spec || {};
     const photos = lensPhotos(ls);
     const pts = lensHighlights(ls).filter(h => h.title);
-    const cheapest = prods.length > 1 && lensPriceRange(p).min === minPrice;
+    const cheapest = prods.length > 1 && realPriceFor(p) === minPrice;
     const ev = isMain ? null : evalVs(p, main);
+    const selVar = compareVariantFor(p);
+    const multiVar = lensVariants(p).length > 1;
     return `<div style="min-width:240px;max-width:280px;flex:1;background:#fff;border:1px solid #d7dde6;border-radius:14px;overflow:hidden;${isMain ? 'outline:3px solid #16294a' : cheapest ? 'outline:2px solid #ab8a5e' : ''}">
       <div style="height:110px;background:#f3f0e9;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;${photos.length ? 'cursor:zoom-in' : ''}" ${photos.length ? `data-act="openlightbox" data-id="${p.id}" data-idx="0"` : ''}>${photos[0] ? `<img src="${esc(photos[0])}" style="width:100%;height:100%;object-fit:cover">` : `<span class="tag">ไม่มีรูป</span>`}${isMain ? `<span style="position:absolute;top:8px;left:8px;background:#16294a;color:#fff;font-size:11px;font-weight:700;border-radius:999px;padding:3px 10px">★ ตัวหลัก</span>` : ''}</div>
       <div style="padding:14px">
         ${p.brand ? `<div class="tag">${esc(p.brand)}</div>` : ''}
         <div style="font-weight:700;font-size:15px;margin-bottom:6px">${esc(p.product_name)}</div>
-        <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;flex-wrap:wrap"><span style="font-size:19px;font-weight:700">${lensPriceLabel(p)}</span>${cheapest && prods.length > 1 ? `<span class="tag" style="background:#ab8a5e22;color:#8a6a3f;border-radius:999px;padding:2px 8px">ถูกสุด</span>` : ''}</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;flex-wrap:wrap"><span style="font-size:19px;font-weight:700">${baht(realPriceFor(p))}</span>${cheapest && prods.length > 1 ? `<span class="tag" style="background:#ab8a5e22;color:#8a6a3f;border-radius:999px;padding:2px 8px">ถูกสุด</span>` : ''}</div>
+        ${multiVar ? `<div class="tag" style="margin-bottom:10px">ตัวเลือกที่เทียบ: ${esc(lensVariantLabel(selVar) || '—')} · ช่วงราคาเต็มของรุ่นนี้ ${lensPriceLabel(p)}</div>` : `<div style="margin-bottom:10px"></div>`}
         ${pts.length ? `<div style="margin-bottom:10px"><div style="font-size:11.5px;font-weight:700;color:#16294a;margin-bottom:4px">จุดเด่น</div><ul style="margin:0;padding-left:18px;font-size:12.5px;color:#444">${pts.map(h => `<li>${esc(h.title)}${h.desc ? ' — ' + esc(h.desc) : ''}</li>`).join('')}</ul></div>` : ''}
         ${ev ? `<div style="margin-bottom:10px;background:#f7faf5;border-radius:10px;padding:10px">
           <div style="font-size:11.5px;font-weight:700;color:#1a6b3a;margin-bottom:4px">ข้อดีเทียบกับตัวหลัก</div>
@@ -703,10 +775,25 @@ function openLensCompare() {
       </div>
     </div>`;
   };
+  const hasMultiVar = prods.some(p => lensVariants(p).length > 1);
   dialog(`<style>#dlg{width:min(1120px,95vw)!important;max-width:95vw!important}</style>
     <h2 style="margin:0 0 4px">เปรียบเทียบเลนส์</h2>
-    <p class="tag" style="margin:0 0 14px">เทียบ ${prods.length} รุ่น โดยใช้ <b>${esc(main.product_name)}</b> เป็นตัวหลัก (กรอบสีกรมท่า) — รุ่นอื่นจะแสดงข้อดี/ข้อสังเกตเทียบกับตัวหลัก · ราคาต่ำสุดมีกรอบไฮไลท์สีแทน</p>
+    <p class="tag" style="margin:0 0 14px">เทียบ ${prods.length} รุ่น (สูงสุด 4 รุ่น: 1 ตัวหลัก + ${prods.length - 1} รุ่นเทียบ) โดยใช้ <b>${esc(main.product_name)}</b> เป็นตัวหลัก (กรอบสีกรมท่า) — รุ่นอื่นจะแสดงข้อดี/ข้อสังเกตเทียบกับตัวหลัก · ราคาต่ำสุดมีกรอบไฮไลท์สีแทน</p>
     <div style="display:flex;gap:14px;overflow-x:auto;padding-bottom:4px">${prods.map(p => col(p, p.id === main.id)).join('')}</div>
+    ${hasMultiVar ? `<div class="panel" style="margin-top:16px;padding:16px 18px">
+      <h3 style="margin:0 0 3px;font-size:14.5px">เลือกตัวเลือกเทียบราคาให้ตรงกัน (Index / Coating / เปลี่ยนสี)</h3>
+      <p class="tag" style="margin:0 0 12px">ปรับตัวเลือกของแต่ละรุ่นให้ใกล้เคียงกัน เพื่อเทียบ "ราคาจริง" ของสเปคที่ใกล้เคียงกันที่สุด — ราคาและดาวด้านล่างจะอัปเดตตามนี้</p>
+      <div style="display:flex;gap:16px;flex-wrap:wrap">${prods.map(p => variantSelectorHTML(p)).join('')}</div>
+    </div>` : ''}
+    <div class="panel" style="margin-top:14px;padding:16px 18px">
+      <h3 style="margin:0 0 10px;font-size:14.5px">เทียบราคาจริง (ตามตัวเลือกที่เลือกไว้ด้านบน)</h3>
+      ${priceBarChartHTML(prods, main.id)}
+    </div>
+    <div class="panel" style="margin-top:14px;padding:16px 18px;overflow-x:auto">
+      <h3 style="margin:0 0 4px;font-size:14.5px">ตารางเทียบคุณสมบัติ</h3>
+      <p class="tag" style="margin:0 0 10px">★ ยิ่งเยอะยิ่งดีในหัวข้อนั้นเทียบกับรุ่นอื่นที่เลือกไว้ (เทียบกันเฉพาะในกลุ่มที่เลือกเท่านั้น)</p>
+      ${starCompareTableHTML(prods)}
+    </div>
     <div class="foot"><button class="btn line" data-act="close">ปิด</button></div>`);
 }
 // ใส่สินค้าลงตะกร้า — ถ้าเลนส์รุ่นนั้นมีมากกว่า 1 ชุดตัวเลือก ให้ใช้ id รวม "รหัสสินค้า::รหัสชุด" กันชุดต่างราคาของรุ่นเดียวกันมาปนกัน
@@ -1819,6 +1906,7 @@ document.addEventListener('click', e => {
   }
   else if (a === 'catcompare') {
     const arr = S.catCompare || []; const on = arr.includes(id);
+    if (!on && arr.length >= 4) { toast('เทียบได้สูงสุด 4 รุ่น (1 ตัวหลัก + 3 รุ่นเทียบ) — เอารุ่นอื่นออกก่อนนะ'); return; }
     S.catCompare = on ? arr.filter(x => x !== id) : [...arr, id];
     if (on && S.catMain === id) S.catMain = S.catCompare[0] || '';
     if (!on && !S.catMain) S.catMain = id;
@@ -1833,7 +1921,10 @@ document.addEventListener('click', e => {
     const p = find('products', id);
     if (!p) return;
     S.catMain = id;
-    if (!(S.catCompare || []).includes(id)) S.catCompare = [...(S.catCompare || []), id];
+    if (!(S.catCompare || []).includes(id)) {
+      if ((S.catCompare || []).length >= 4) toast('เทียบได้สูงสุด 4 รุ่น — เอารุ่นอื่นออกก่อนนะ');
+      else S.catCompare = [...(S.catCompare || []), id];
+    }
     S.catDesign = (p.lens_spec || {}).design || '';
     S.catDetail = null;
     render();
@@ -1893,6 +1984,13 @@ document.addEventListener('change', e => {
   else if (k === 'vpidx') { S.varPick.index = e.target.value; renderVariantPicker(); }
   else if (k === 'vpcoat') { S.varPick.coating = e.target.value; renderVariantPicker(); }
   else if (k === 'vpcolor') { S.varPick.color = e.target.value; renderVariantPicker(); }
+  else if (k.startsWith('cmpvar:')) {
+    const [, pid, field] = k.split(':');
+    S.catCompareVariant = S.catCompareVariant || {};
+    S.catCompareVariant[pid] = S.catCompareVariant[pid] || {};
+    S.catCompareVariant[pid][field] = e.target.value;
+    openLensCompare();
+  }
 });
 document.addEventListener('input', e => {
   const k = e.target.dataset.bind; if (!k) return;
