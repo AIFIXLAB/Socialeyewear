@@ -503,7 +503,7 @@ const views = {
 
 function lensCatalogCard(p, selected) {
   const ls = p.lens_spec || {};
-  const photos = lensPhotos(ls);
+  const photos = lensPhotos(ls, p);
   const designLabel = (LENS_DESIGN.find(d => d[0] === ls.design) || [])[1];
   const surfaceLabel = (LENS_SURFACE.find(d => d[0] === ls.surface) || [])[1];
   const coatBadges = (ls.coatings || []).map(k => (LENS_COATINGS.find(x => x[0] === k) || [])[1]).filter(Boolean)
@@ -536,7 +536,7 @@ function lensCatalogCard(p, selected) {
 }
 function lensPresentView(p) {
   const ls = p.lens_spec || {};
-  const photos = lensPhotos(ls);
+  const photos = lensPhotos(ls, p);
   const designLabel = (LENS_DESIGN.find(d => d[0] === ls.design) || [])[1];
   const surfaceLabel = (LENS_SURFACE.find(d => d[0] === ls.surface) || [])[1];
   const coatLabels = (ls.coatings || []).map(k => (LENS_COATINGS.find(x => x[0] === k) || [])[1]).filter(Boolean).join(', ');
@@ -769,7 +769,7 @@ function openLensCompare() {
   };
   const col = (p, isMain) => {
     const ls = p.lens_spec || {};
-    const photos = lensPhotos(ls);
+    const photos = lensPhotos(ls, p);
     const pts = lensHighlights(ls).filter(h => h.title);
     const cheapest = prods.length > 1 && realPriceFor(p) === minPrice;
     const ev = isMain ? null : evalVs(p, main);
@@ -977,14 +977,24 @@ function lensHighlights(ls) {
   if (Array.isArray(ls.highlights) && ls.highlights.length) return ls.highlights;
   return (ls.highlight || '').split(',').map(s => s.trim()).filter(Boolean).map(t => ({ title: t, desc: '' }));
 }
-function lensPhotos(ls) {
+function lensPhotos(ls, p) {
   if (Array.isArray(ls.photos) && ls.photos.length) return ls.photos.filter(Boolean);
-  return ls.photo_url ? [ls.photo_url] : [];
+  if (ls.photo_url) return [ls.photo_url];
+  // สินค้าเลนส์ HOYA ที่ซิงก์อัตโนมัติ: ไม่เก็บรูปในฐานข้อมูล/เครื่อง (รูปหนักเกินไป ทำให้พื้นที่เก็บข้อมูลในเครื่องเต็ม)
+  // ดึงรูปสดจากแคตตาล็อกที่ฝังมากับตัวแอปแทน โดยจับคู่ด้วยชื่อสินค้า
+  if (p && p.product_name) {
+    const src = HOYA_LENSES.find(o => o.product_name === p.product_name);
+    if (src && src.lens_spec) {
+      if (Array.isArray(src.lens_spec.photos) && src.lens_spec.photos.length) return src.lens_spec.photos.filter(Boolean);
+      if (src.lens_spec.photo_url) return [src.lens_spec.photo_url];
+    }
+  }
+  return [];
 }
 function lensPhotoField(p) {
   const ls = p.lens_spec || {};
   const show = (p.product_type || 'lens') === 'lens';
-  const photos = lensPhotos(ls);
+  const photos = lensPhotos(ls, p);
   const thumb = (src, i) => `<div style="position:relative;width:84px;height:84px;flex-shrink:0">
       <img src="${esc(src)}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;border:1px solid #d7dde6">
       <button type="button" data-act="lsphotoremove" data-idx="${i}" style="position:absolute;top:-6px;right:-6px;width:22px;height:22px;padding:0;border-radius:50%;line-height:20px;background:#fff;border:1px solid #d7dde6;color:#a23b2a;font-size:13px;cursor:pointer;text-align:center">✕</button>
@@ -1780,11 +1790,14 @@ function syncHoyaCatalog(opts) {
       return { ...v, id: match ? match.id : uid(), stock_qty: match && match.stock_qty != null ? match.stock_qty : (v.stock_qty ?? null), cost: match && match.cost != null ? match.cost : (v.cost ?? null) };
     });
     const prices = variants.map(v => v.price);
+    // ไม่เก็บรูปภาพ (photos/photo_url) ลงฐานข้อมูล/เครื่อง — รูปแคตตาล็อกหนักมาก เก็บซ้ำทุกเครื่อง/ทุกครั้งที่ซิงก์ทำให้พื้นที่เก็บข้อมูลในเครื่องเต็มจนบันทึกอะไรไม่ได้เลย
+    // (แอปจะดึงรูปสดจาก HOYA_LENSES ในโค้ดแทนตอนแสดงผล ผ่าน lensPhotos())
+    const { photos, photo_url, ...specRest } = o.lens_spec;
     save('products', {
       id: old ? old.id : uid(), product_type: 'lens', product_name: o.product_name, brand: o.brand, description: o.description,
       retail_price_thb: Math.min(...prices), cost_thb: old ? (old.cost_thb ?? null) : null, stock_qty: old ? (old.stock_qty ?? null) : null,
       features: old ? (old.features || []) : [], active: old ? old.active !== false : true, sku: old ? (old.sku || null) : null,
-      lens_spec: { ...o.lens_spec, variants }, deleted_at: null,
+      lens_spec: { ...specRest, variants }, deleted_at: null,
     });
     old ? updated++ : added++;
   });
@@ -1988,7 +2001,7 @@ document.addEventListener('click', e => {
   }
   else if (a === 'catdetail') { S.catDetail = id || null; render(); }
   else if (a === 'catcomparego') openLensCompare();
-  else if (a === 'openlightbox') { const prod = find('products', id); if (prod) openLightbox(lensPhotos(prod.lens_spec || {}), +b.dataset.idx || 0); }
+  else if (a === 'openlightbox') { const prod = find('products', id); if (prod) openLightbox(lensPhotos(prod.lens_spec || {}, prod), +b.dataset.idx || 0); }
   else if (a === 'lightboxclose') closeLightbox();
   else if (a === 'lightboxprev') { if (LB) { LB.idx = (LB.idx - 1 + LB.photos.length) % LB.photos.length; renderLightbox(); } }
   else if (a === 'lightboxnext') { if (LB) { LB.idx = (LB.idx + 1) % LB.photos.length; renderLightbox(); } }
