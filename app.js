@@ -454,12 +454,15 @@ const views = {
     const hoyaNames = new Set(HOYA_LENSES.map(o => o.product_name));
     const hoyaHave = live('products').filter(p => hoyaNames.has(p.product_name)).length;
     const hoyaLegacy = live('products').filter(p => p.product_name.startsWith('HOYA ') && !hoyaNames.has(p.product_name)).length;
-    const hoyaUpToDate = ls.get('hoyaSyncVer', '') === HOYA_DATA_VERSION;
+    const hoyaDeleted = db.products.filter(p => p.deleted_at && p.product_name.startsWith('HOYA ')).length;
+    // ต้องนับจำนวนจริงให้ครบ 29 ด้วย ไม่ใช่เช็คแค่เวอร์ชันธงในเครื่อง — กันปัญหาธงบอกว่า "เสร็จแล้ว" ทั้งที่สินค้าจริงไม่ครบ/หายไป
+    const hoyaUpToDate = ls.get('hoyaSyncVer', '') === HOYA_DATA_VERSION && hoyaHave === HOYA_LENSES.length;
     const hoyaStatus = hoyaUpToDate
       ? `<span class="tag" style="align-self:center;white-space:nowrap">เลนส์ HOYA เป็นปัจจุบันแล้ว (${hoyaHave}/${HOYA_LENSES.length}) ✓</span>`
-      : `<button class="btn line" data-act="hoyaimport">${hoyaHave === 0 ? `นำเข้าเลนส์ HOYA ${HOYA_LENSES.length} รายการ` : `ซิงก์เลนส์ HOYA เดี๋ยวนี้ (${hoyaHave}/${HOYA_LENSES.length})`}</button>`;
-    const hoyaCleanBtn = hoyaLegacy ? `<button class="btn line bad" data-act="hoyacleanlegacy">ลบรายการ HOYA เก่าซ้ำซ้อน ${hoyaLegacy} รายการ</button>` : '';
-    return `<div class="bar"><div><h1>สินค้า</h1><p class="sub" style="margin:0">ราคา สต็อก และแท็กการใช้งานสำหรับ Sales Studio · ข้อมูลเลนส์ HOYA ซิงก์ให้อัตโนมัติทุกครั้งที่เข้าแอป ไม่ต้องกดอัปเดตเอง</p></div><div class="tools"><input placeholder="ค้นหาชื่อ SKU แบรนด์" value="${esc(S.pq)}" data-bind="pq" style="width:220px">${missingOther.length ? `<button class="btn line" data-act="impother">นำเข้ารายการบริการเดิม ${missingOther.length} รายการ</button>` : ''}${hoyaStatus}${hoyaCleanBtn}${lensCount ? `<button class="btn line" data-act="gomode" data-id="lenscat">เปิดแคตตาล็อกเลนส์</button>` : ''}<button class="btn line" data-act="newframe">เพิ่มกรอบแว่น</button><button class="btn" data-act="newprod">เพิ่มสินค้า (เลนส์/อื่นๆ)</button></div></div>
+      : `<button class="btn line bad" data-act="hoyaimport">${hoyaHave === 0 ? `นำเข้าเลนส์ HOYA ${HOYA_LENSES.length} รายการ` : `ซิงก์เลนส์ HOYA ใหม่ — ข้อมูลไม่ครบ (${hoyaHave}/${HOYA_LENSES.length})`}</button>`;
+    const hoyaRestoreBtn = hoyaDeleted ? `<button class="btn line" data-act="hoyarestore">กู้คืนสินค้า HOYA ที่ลบไป ${hoyaDeleted} รายการ</button>` : '';
+    const hoyaCleanBtn = (hoyaLegacy && hoyaUpToDate) ? `<button class="btn line bad" data-act="hoyacleanlegacy">ลบรายการ HOYA เก่าซ้ำซ้อน ${hoyaLegacy} รายการ</button>` : '';
+    return `<div class="bar"><div><h1>สินค้า</h1><p class="sub" style="margin:0">ราคา สต็อก และแท็กการใช้งานสำหรับ Sales Studio · ข้อมูลเลนส์ HOYA ซิงก์ให้อัตโนมัติทุกครั้งที่เข้าแอป ไม่ต้องกดอัปเดตเอง</p></div><div class="tools"><input placeholder="ค้นหาชื่อ SKU แบรนด์" value="${esc(S.pq)}" data-bind="pq" style="width:220px">${missingOther.length ? `<button class="btn line" data-act="impother">นำเข้ารายการบริการเดิม ${missingOther.length} รายการ</button>` : ''}${hoyaStatus}${hoyaRestoreBtn}${hoyaCleanBtn}${lensCount ? `<button class="btn line" data-act="gomode" data-id="lenscat">เปิดแคตตาล็อกเลนส์</button>` : ''}<button class="btn line" data-act="newframe">เพิ่มกรอบแว่น</button><button class="btn" data-act="newprod">เพิ่มสินค้า (เลนส์/อื่นๆ)</button></div></div>
     <div class="chips">${chips}</div>
     ${rows.length ? `<div class="panel wrap"><table><tr><th>สินค้า</th><th>ประเภท</th><th>ราคา</th>${mgr() ? '<th>ต้นทุน</th>' : ''}<th>สต็อก</th><th>สถานะ</th><th></th></tr>${rows.map(p => `<tr><td>${esc(p.product_name)}<br><span class="tag">${esc([p.sku, p.brand].filter(Boolean).join(' · '))}</span></td><td>${TYPES[p.product_type]}</td><td>${priceLabel(p)}</td>${mgr() ? `<td>${p.cost_thb != null ? baht(p.cost_thb) : '-'}</td>` : ''}<td>${p.stock_qty == null ? '-' : `<span class="${p.stock_qty <= 2 ? 'warn' : ''}">${p.stock_qty}</span>`}</td><td>${p.active === false ? '<span class="st">ปิดขาย</span>' : '<span class="st accepted">ขายอยู่</span>'}</td><td class="act"><button class="btn line sm" data-act="editprod" data-id="${p.id}">แก้ไข</button>${mgr() ? ` <button class="btn line sm bad" data-act="delprod" data-id="${p.id}">ลบ</button>` : ''}</td></tr>`).join('')}</table></div>`
       : empty('ยังไม่มีสินค้า', `<button class="btn" data-act="newprod">เพิ่มสินค้า</button> ${live('products').length ? '' : '<button class="btn line" data-act="sample">เพิ่มสินค้าตัวอย่าง 8 รายการ</button>'}`)}`;
@@ -1838,6 +1841,13 @@ document.addEventListener('click', e => {
   else if (a === 'rmvar') { const draft = readProdDraft(b.closest('form')); draft.lens_spec.variants.splice(+b.dataset.idx, 1); if (!draft.lens_spec.variants.length) draft.lens_spec.variants.push({ index: '', coating: '', color_change: 'none', price: '', stock_qty: '' }); prodForm(draft); }
   else if (a === 'editprod') { const p = find('products', id); p.product_type === 'frame' ? frameForm(p) : prodForm(p); }
   else if (a === 'delprod') { if (confirm('ลบสินค้านี้?')) softDelete('products', id); }
+  else if (a === 'hoyarestore') {
+    const deleted = db.products.filter(p => p.deleted_at && p.product_name.startsWith('HOYA '));
+    if (!deleted.length) return;
+    if (!confirm(`กู้คืนสินค้า HOYA ที่เคยถูกลบทั้งหมด ${deleted.length} รายการกลับมา?`)) return;
+    deleted.forEach(p => save('products', { ...p, deleted_at: null }));
+    commit(); toast(`กู้คืนแล้ว ${deleted.length} รายการ`);
+  }
   else if (a === 'hoyacleanlegacy') {
     const hoyaNames = new Set(HOYA_LENSES.map(o => o.product_name));
     const legacy = live('products').filter(p => p.product_name.startsWith('HOYA ') && !hoyaNames.has(p.product_name));
