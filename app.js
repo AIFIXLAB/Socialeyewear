@@ -182,8 +182,8 @@ const ROLE_LABEL = { owner: 'เจ้าของ', manager: 'ผู้จั�
 const SHOP_ADDR = 'วิคตอเรียการ์เด้น ห้องที่ N102-104 อาคารN เลขที่ 1869 ถ.เพชรเกษม แขวงหลักสอง เขตบางแค กรุงเทพฯ 10600';
 const SHOP_PHONE = '086-9885360 / 097-2382217';
 const SHOP_TAXID = '4101600006509';
-const NAV = [['customers', 'ลูกค้า'], ['products', 'สินค้า'], ['insights', 'ภาพรวม'], ['settings', 'ตั้งค่า']];
-const S = { v: 'customers', need: 'general', cart: [], cust: '', disc: 0, notes: '', q: '', pq: '', ptype: 'all', staff: null, mode: 'splash', custView: 'all', custFrom: '', custTo: '', catQ: '', catCompare: [], catDetail: null, catReturn: '', catDesign: '', catMain: '', activeSeller: null, varPick: null };
+const NAV = [['customers', 'ลูกค้า'], ['products', 'สินค้า'], ['keynote', 'คีย์โน้ตพรีเซนต์'], ['insights', 'ภาพรวม'], ['settings', 'ตั้งค่า']];
+const S = { v: 'customers', need: 'general', cart: [], cust: '', disc: 0, notes: '', q: '', pq: '', ptype: 'all', staff: null, mode: 'splash', custView: 'all', custFrom: '', custTo: '', catQ: '', catCompare: [], catDetail: null, catReturn: '', catDesign: '', catMain: '', activeSeller: null, varPick: null, knSel: [], knIdx: 0 };
 const freshLR = () => ({ purpose: [], other: '', vision: [], lenstype: [], brand: [], level: [], lensIndex: [], coating: [], photochromic: [], age: '', budget: '', occupation: '', notes: '' });
 const freshDisc = () => ({ type: 'amt', val: 0 });
 let K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, discFrame: freshDisc(), discLens: freshDisc(), lensFilterOn: true };
@@ -410,6 +410,203 @@ async function importFile(f) {
   } catch (e) { toast(errText(e)); }
 }
 
+/* ---------- คีย์โน้ตพรีเซนต์ (เลือกสไลด์รายรุ่น/หัวข้อ แล้วเปิดเต็มจอพรีเซนต์ลูกค้า) ---------- */
+function knBrandSlide() {
+  return { key: 'topic:brand', title: 'เทคโนโลยีเลนส์ HOYA', html: `
+    <div style="max-width:820px;text-align:center">
+      <p style="font-size:13px;letter-spacing:.08em;color:rgba(255,255,255,.55);text-transform:uppercase;margin:0 0 10px">HOYA LENS — JAPAN QUALITY</p>
+      <h1 style="font-size:clamp(28px,4vw,44px);margin:0 0 22px;line-height:1.25">เทคโนโลยีการออกแบบเลนส์<br>เพื่อการมองเห็นที่เป็นธรรมชาติที่สุด</h1>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;text-align:left;margin-top:10px">
+        ${[['Binocular Vision Design', 'ออกแบบโดยคำนึงถึงการทำงานร่วมกันของตาทั้งสองข้าง ไม่ใช่แค่ข้างใดข้างหนึ่ง ลดอาการเวียนตา ภาพลื่นไหลเป็นธรรมชาติ'],
+          ['Integrated Double Surface Design', 'คำนวณผิวเลนส์ทั้งสองด้านพร้อมกันเป็นระบบเดียว แทนที่จะคำนวณทีละด้าน ให้ภาพคมชัดและกว้างกว่าการออกแบบแบบเดิม'],
+          ['Freeform Surfacing', 'ขัดผิวเลนส์ด้วยคอมพิวเตอร์ความแม่นยำสูง ปรับตามค่าสายตาและโครงสร้างใบหน้าของลูกค้าแต่ละคนโดยเฉพาะ'],
+          ['3D Binocular Harmonization', 'ปรับภาพจากเลนส์ทั้งสองข้างให้ประสานกันเป็นภาพ 3 มิติที่เป็นธรรมชาติ ลดความเมื่อยล้าจากการใช้สายตา'],
+        ].map(([t, d]) => `<div style="background:rgba(255,255,255,.06);border-radius:14px;padding:16px 18px"><b style="display:block;font-size:14.5px;margin-bottom:6px">${esc(t)}</b><span style="font-size:12.5px;line-height:1.6;color:rgba(255,255,255,.72)">${esc(d)}</span></div>`).join('')}
+      </div>
+    </div>`};
+}
+function knLevelSlide() {
+  return { key: 'topic:level', title: 'เปรียบเทียบระดับเลนส์ (Level)', html: `
+    <div style="max-width:960px;width:100%">
+      <h1 style="font-size:clamp(24px,3.4vw,36px);margin:0 0 26px;text-align:center">ระดับเลนส์โปรเกรสซีฟ — เลือกให้เหมาะกับการใช้งาน</h1>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px">
+        ${LENS_TIER_OPTS.map((k, i) => `<div style="background:rgba(255,255,255,.06);border-radius:16px;padding:18px 20px;border-top:3px solid ${['#8a97a6', '#4a8f6b', '#2f6fed', '#caa23a'][i]}">
+          <b style="display:block;font-size:15px;margin-bottom:8px">${esc(LENS_TIER_LABELS[k] || k)}</b>
+          <span style="font-size:12.5px;line-height:1.65;color:rgba(255,255,255,.72)">${esc(LENS_TIER_DESC[k] || '')}</span>
+        </div>`).join('')}
+      </div>
+    </div>`};
+}
+function knModelSlide(o) {
+  const ls = o.lens_spec || {};
+  const photo = (Array.isArray(ls.photos) && ls.photos[0]) || ls.photo_url || null;
+  const pts = (Array.isArray(ls.highlights) ? ls.highlights : []).filter(h => h && h.title).slice(0, 4);
+  const prices = (ls.variants || []).map(v => v.price).filter(n => typeof n === 'number');
+  const priceTxt = prices.length ? (Math.min(...prices) === Math.max(...prices) ? baht(prices[0]) : `${baht(Math.min(...prices))} - ${baht(Math.max(...prices))}`) : '';
+  return { key: 'model:' + o.product_name, title: o.product_name, photo, html: `
+    <div style="max-width:1000px;width:100%;display:flex;gap:40px;align-items:center;flex-wrap:wrap;justify-content:center">
+      ${photo ? `<img src="${esc(photo)}" style="width:min(360px,42vw);border-radius:16px;object-fit:cover;box-shadow:0 20px 50px rgba(0,0,0,.4)">` : ''}
+      <div style="flex:1;min-width:280px;max-width:520px">
+        <p style="font-size:12.5px;letter-spacing:.06em;color:rgba(255,255,255,.55);text-transform:uppercase;margin:0 0 8px">${esc(LENS_TIER_LABELS[ls.tier] || '')}</p>
+        <h1 style="font-size:clamp(24px,3.2vw,34px);margin:0 0 14px;line-height:1.2">${esc(o.product_name)}</h1>
+        ${priceTxt ? `<p style="font-size:18px;color:#caa23a;margin:0 0 18px;font-weight:700">${esc(priceTxt)}</p>` : ''}
+        <div style="display:flex;flex-direction:column;gap:10px">
+          ${pts.length ? pts.map(h => `<div><b style="font-size:13.5px">${esc(h.title)}</b>${h.desc ? `<div style="font-size:12px;line-height:1.55;color:rgba(255,255,255,.65);margin-top:2px">${esc(h.desc)}</div>` : ''}</div>`).join('') : `<p style="font-size:12.5px;color:rgba(255,255,255,.55)">${esc(o.description || '')}</p>`}
+        </div>
+      </div>
+    </div>`};
+}
+// ข้อมูลโค้ทติ้ง/เลนส์เปลี่ยนสีของแต่ละแบรนด์ — เฉพาะแบรนด์ที่ตรวจสอบแหล่งที่มาจริงแล้วเท่านั้น (จากแคตตาล็อก HOYA และเว็บทางการของแต่ละแบรนด์)
+// แบรนด์อื่นที่ร้านขายอยู่ (เช่น Agate, Apollo, Crystal Lens ฯลฯ) ยังไม่มีข้อมูลยืนยันได้ — ให้ร้านเพิ่มเองผ่าน "เนื้อหาเสริม" ด้านล่างแทนการเดา
+const KN_COATINGS = {
+  HOYA: [
+    ['HVP (Hard Protect)', 'โค้ทติ้งเคลือบผิวมาตรฐาน กันรอยขีดข่วนพื้นฐาน'],
+    ['Multi Coat', 'เคลือบลดแสงสะท้อน (AR) เพิ่มความคมชัด ลดแสงจ้าตอนขับรถ/จอคอม'],
+    ['HVP + Blue / Blue Coat (Full Control)', 'เพิ่มชั้นกรองแสงสีฟ้าจากจอมือถือ/คอมพิวเตอร์ ลดอาการล้าตา'],
+  ],
+  ZEISS: [
+    ['DuraVision Chrome UV', 'โค้ทติ้งระดับเริ่มต้น คมชัด ทนทาน คุ้มราคา เงาสะท้อนโทนเขียว'],
+    ['DuraVision Silver UV', 'ทนรอยขีดข่วนสูงเป็นพิเศษ คมชัดสูง เงาสะท้อนโทนฟ้า'],
+    ['DuraVision Platinum UV', 'คมชัด ทนทาน ทำความสะอาดง่ายระดับสูง'],
+    ['DuraVision Gold UV', 'ระดับสูงสุด ลดแสงสะท้อนสีฟ้า คมชัดแม้ในที่แสงน้อย'],
+    ['DuraVision BlueProtect UV', 'กรองแสงสีฟ้าจากแดด/จอ LED/หน้าจอมือถือ-คอมพิวเตอร์'],
+    ['DuraVision DriveSafe UV', 'ออกแบบมาเพื่อลดแสงจ้า/แสงสะท้อนตอนขับรถกลางคืนหรือฝนตก'],
+  ],
+  Essilor: [
+    ['Crizal Easy', 'โค้ทติ้งเริ่มต้น กันลายนิ้วมือ กันรอยขีดข่วนพื้นฐาน'],
+    ['Crizal Alize', 'กันลื่น/สะท้อนน้ำได้ดีขึ้น ทำความสะอาดง่าย'],
+    ['Crizal Rock / Avance', 'ทนรอยขีดข่วนสูงขึ้น กันฝุ่นด้วยเทคโนโลยีป้องกันไฟฟ้าสถิต'],
+    ['Crizal Sapphire', 'ระดับสูงสุดของตระกูล Crizal ลดแสงสะท้อนดีที่สุด ทนทานและคมชัดสูงสุด'],
+    ['Crizal Prevencia', 'กรองแสงสีฟ้าที่เป็นอันตรายต่อดวงตา พร้อมคุณสมบัติกันรอย/สะท้อนน้ำ'],
+  ],
+  Nikon: [
+    ['SeeCoat Next', 'ทนรอยขีดข่วน กันคราบ กันฝุ่น กันน้ำ พร้อมเคลือบ AR และกัน UV'],
+    ['SeeCoat Plus', 'โค้ทติ้งคุณภาพดี คมชัด ใช้งานได้ดีในชีวิตประจำวัน'],
+    ['SeeCoat Blue UV', 'กรองแสงสีฟ้าจากหน้าจอดิจิทัล เหมาะกับคนทำงานหน้าคอมนาน ๆ'],
+    ['SeeCoat Bright', 'ช่วยให้มองเห็นสว่างชัดเจนขึ้นแม้ในที่แสงน้อย'],
+  ],
+  Rodenstock: [
+    ['Solitaire® LayR', 'เทคโนโลยีเคลือบผิวรุ่นใหม่ ลดแสงสะท้อนได้มากขึ้น ทนทานขึ้น ทำความสะอาดง่ายขึ้น'],
+    ['X-tra Clean', 'ชั้นเคลือบในกลุ่ม LayR ที่ช่วยให้เช็ดทำความสะอาดเลนส์ง่าย ไม่เป็นคราบ'],
+  ],
+};
+const KN_PHOTO = {
+  HOYA: { lines: ['Sensity', 'Sensity Shine', 'Sensity 2'], desc: 'เลนส์เปลี่ยนสีตระกูล Sensity ของ HOYA เปลี่ยนจากใสเป็นสีเข้มเมื่อโดนแสง UV กลับมาใสเมื่ออยู่ในร่ม/อาคาร มีหลายเฉดให้เลือกตามรุ่น', colors: [] },
+  ZEISS: { lines: ['PhotoFusion X'], desc: 'เลนส์เปลี่ยนสีรุ่นใหม่ของ ZEISS ปรับสีเร็วทั้งตอนเข้มขึ้นและจางลง มีให้เลือกหลายเฉดสี', colors: ['Grey', 'Extra Grey', 'Blue', 'Pioneer', 'Brown', 'Burgundy', 'Pro Grey', 'Pro Brown'] },
+  Essilor: { lines: ['Transitions Signature'], desc: 'เลนส์เปลี่ยนสีในเครือ Essilor (เทคโนโลยี Transitions) ปรับความเข้มตามปริมาณแสง UV มีให้เลือกหลายโทนสี', colors: ['Gray', 'Brown', 'Graphite Green'] },
+  Rodenstock: { lines: ['ColorMatic® X', 'ColorMatic® Dark'], desc: 'ColorMatic X เปลี่ยนสีเร็วที่สุดในตระกูล ส่วน ColorMatic Dark เข้มที่สุด เหมาะกับประเทศที่แดดจัด', colors: [] },
+};
+const KN_TINT_COLORS = [
+  ['น้ำตาล (Brown)', '#7a4a1e'], ['เทา (Grey / G15)', '#4a4f55'], ['เขียว (Green)', '#3f6b4a'],
+  ['ฟ้า (Blue)', '#3a6ea5'], ['ชมพู (Pink)', '#c97b92'], ['เหลือง/ส้ม (Amber)', '#c9821f'],
+];
+function knIndexSlide() {
+  const rows = [
+    ['1.50 (มาตรฐาน)', '0.00 ถึง ±2.00 D', 'เลนส์หนาสุดในกลุ่ม ราคาประหยัดที่สุด เหมาะกับสายตาน้อย'],
+    ['1.56', '±2.00 ถึง ±4.00 D', 'บางลงกว่า 1.50 เล็กน้อย คุ้มค่าสำหรับสายตาปานกลาง'],
+    ['1.60', '±4.00 ถึง ±6.00 D', 'บางและเบาขึ้นชัดเจน เหมาะกรอบแว่นทุกทรง'],
+    ['1.67', '±6.00 ถึง ±8.00 D', 'บางเบามาก เหมาะกับสายตาสูง ลดขอบเลนส์หนา'],
+    ['1.74', 'มากกว่า ±8.00 D', 'บางที่สุดในกลุ่มที่มีขายทั่วไป เหมาะสายตาสูงมาก'],
+  ];
+  const lensIcon = (w, label) => `<div style="text-align:center;flex:1;min-width:90px">
+    <svg viewBox="0 0 100 70" width="70" height="50" style="display:block;margin:0 auto">
+      <ellipse cx="50" cy="35" rx="${44 - w}" ry="28" fill="none" stroke="#caa23a" stroke-width="${w}"/>
+    </svg>
+    <span style="font-size:11px;color:rgba(255,255,255,.6);display:block;margin-top:4px">${esc(label)}</span>
+  </div>`;
+  return { key: 'topic:index', title: 'ความหนาบางของเลนส์ (Index)', html: `
+    <div style="max-width:900px;width:100%">
+      <h1 style="font-size:clamp(24px,3.2vw,34px);margin:0 0 10px;text-align:center">เลือกความบางของเลนส์ (Index) ให้เหมาะกับค่าสายตา</h1>
+      <p style="text-align:center;font-size:12.5px;color:rgba(255,255,255,.6);margin:0 0 22px">แนวทางทั่วไปของอุตสาหกรรมออปติคอล — ค่าที่แนะนำจริงอาจต่างกันเล็กน้อยตามยี่ห้อ/ทรงกรอบ ควรให้ร้านช่วยแนะนำอีกครั้ง</p>
+      <div style="display:flex;justify-content:center;gap:18px;margin-bottom:26px;flex-wrap:wrap">${['1.50', '1.56', '1.60', '1.67', '1.74'].map((v, i) => lensIcon(2 + i * 2.5, v)).join('')}</div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <tr style="color:rgba(255,255,255,.55)"><td style="padding:6px 10px">ดัชนี (Index)</td><td style="padding:6px 10px">ช่วงค่าสายตาที่แนะนำ</td><td style="padding:6px 10px">จุดเด่น</td></tr>
+        ${rows.map(([a, b, c]) => `<tr style="border-top:1px solid rgba(255,255,255,.12)"><td style="padding:8px 10px;font-weight:700">${esc(a)}</td><td style="padding:8px 10px;color:#caa23a">${esc(b)}</td><td style="padding:8px 10px;color:rgba(255,255,255,.75)">${esc(c)}</td></tr>`).join('')}
+      </table>
+    </div>`};
+}
+function knCoatingBrandSlide(brand) {
+  const items = KN_COATINGS[brand] || [];
+  return { key: 'coating:' + brand, title: 'โค้ทติ้งเลนส์ — ' + brand, html: `
+    <div style="max-width:880px;width:100%">
+      <p style="text-align:center;font-size:12.5px;letter-spacing:.08em;color:rgba(255,255,255,.5);text-transform:uppercase;margin:0 0 6px">โค้ทติ้งเลนส์ (Coating)</p>
+      <h1 style="font-size:clamp(26px,3.6vw,38px);margin:0 0 24px;text-align:center">${esc(brand)}</h1>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        ${items.map(([n, d]) => `<div style="background:rgba(255,255,255,.06);border-radius:12px;padding:14px 18px;border-left:3px solid #caa23a"><b style="font-size:14.5px;display:block;margin-bottom:4px">${esc(n)}</b><span style="font-size:12.5px;color:rgba(255,255,255,.72);line-height:1.6">${esc(d)}</span></div>`).join('') || '<p class="tag">ยังไม่มีข้อมูล</p>'}
+      </div>
+    </div>`};
+}
+function knPhotoBrandSlide(brand) {
+  const info = KN_PHOTO[brand] || { lines: [], desc: '', colors: [] };
+  return { key: 'photo:' + brand, title: 'เลนส์เปลี่ยนสี — ' + brand, html: `
+    <div style="max-width:820px;width:100%;text-align:center">
+      <p style="font-size:12.5px;letter-spacing:.08em;color:rgba(255,255,255,.5);text-transform:uppercase;margin:0 0 6px">เลนส์เปลี่ยนสี (Photochromic)</p>
+      <h1 style="font-size:clamp(26px,3.6vw,38px);margin:0 0 14px">${esc(brand)}</h1>
+      ${info.lines.length ? `<p style="font-size:14px;color:#caa23a;font-weight:700;margin:0 0 14px">${esc(info.lines.join(' · '))}</p>` : ''}
+      <p style="font-size:13px;color:rgba(255,255,255,.72);line-height:1.7;max-width:640px;margin:0 auto 20px">${esc(info.desc)}</p>
+      ${info.colors.length ? `<div style="display:flex;gap:14px;justify-content:center;flex-wrap:wrap">${info.colors.map(c => `<span style="background:rgba(255,255,255,.08);border-radius:999px;padding:7px 16px;font-size:12.5px">${esc(c)}</span>`).join('')}</div>` : ''}
+    </div>`};
+}
+function knTintSlide() {
+  return { key: 'topic:tint', title: 'เฉดสีย้อมเลนส์ (ตัวอย่างทั่วไป)', html: `
+    <div style="max-width:720px;width:100%;text-align:center">
+      <h1 style="font-size:clamp(24px,3.2vw,34px);margin:0 0 10px">เฉดสีย้อมเลนส์ — ตัวอย่างโทนสีทั่วไป</h1>
+      <p style="font-size:12.5px;color:rgba(255,255,255,.6);margin:0 0 26px;line-height:1.7">นี่คือโทนสีมาตรฐานที่ใช้กันทั่วไปในอุตสาหกรรม ไม่ใช่รหัสสั่งเลนส์ที่ยืนยันแล้วของแบรนด์ใดแบรนด์หนึ่ง<br>รหัสสีจริงที่ใช้สั่งเลนส์แต่ละแบรนด์ ให้เพิ่มเองผ่าน "เนื้อหาเสริม" ด้านล่าง เมื่อได้ใบราคา/ใบสั่งสีจากตัวแทนแล้ว</p>
+      <div style="display:flex;gap:20px;justify-content:center;flex-wrap:wrap">
+        ${KN_TINT_COLORS.map(([name, hex]) => `<div style="text-align:center;width:90px"><div style="width:56px;height:56px;border-radius:50%;background:${hex};margin:0 auto 8px;border:2px solid rgba(255,255,255,.25)"></div><span style="font-size:11.5px;color:rgba(255,255,255,.75)">${esc(name)}</span></div>`).join('')}
+      </div>
+    </div>`};
+}
+// เนื้อหาเสริมที่ร้านเพิ่ม/แก้ไขเอง — เก็บในตาราง products โดยใช้ product_type พิเศษ 'kn_custom' (ไม่โชว์ในหน้าสินค้าปกติ)
+// เก็บแบบนี้เพื่อให้ซิงก์ขึ้นคลาวด์ได้เหมือนข้อมูลอื่น ๆ โดยไม่ต้องสร้างตารางใหม่ในฐานข้อมูล
+const KN_CUSTOM_GROUPS = { index: 'ความหนาบางเลนส์', coating: 'โค้ทติ้ง', photochromic: 'เลนส์เปลี่ยนสี', tint: 'เฉดสีย้อม', other: 'อื่น ๆ' };
+function knCustomList() { return live('products').filter(p => p.product_type === 'kn_custom'); }
+function knCustomSlide(p) {
+  const ls = p.lens_spec || {};
+  const photo = (Array.isArray(ls.photos) && ls.photos[0]) || null;
+  return { key: 'custom:' + p.id, title: p.product_name, html: `
+    <div style="max-width:900px;width:100%;display:flex;gap:36px;align-items:center;flex-wrap:wrap;justify-content:center">
+      ${photo ? `<img src="${esc(photo)}" style="width:min(360px,42vw);border-radius:16px;object-fit:cover;box-shadow:0 20px 50px rgba(0,0,0,.4)">` : ''}
+      <div style="flex:1;min-width:260px;max-width:520px">
+        ${p.brand ? `<p style="font-size:12.5px;letter-spacing:.06em;color:rgba(255,255,255,.55);text-transform:uppercase;margin:0 0 8px">${esc(p.brand)}</p>` : ''}
+        <h1 style="font-size:clamp(22px,3vw,32px);margin:0 0 14px;line-height:1.25">${esc(p.product_name)}</h1>
+        ${ls.color_code ? `<p style="font-size:13px;color:#caa23a;margin:0 0 14px">รหัสสี/รหัสสั่งเลนส์: ${esc(ls.color_code)}</p>` : ''}
+        ${p.description ? `<p style="font-size:13px;line-height:1.75;color:rgba(255,255,255,.78);white-space:pre-wrap">${esc(p.description)}</p>` : ''}
+      </div>
+    </div>`};
+}
+function knSlideSources() {
+  const topics = [knBrandSlide(), knLevelSlide(), knIndexSlide(), knTintSlide()];
+  const coatingBrands = Object.keys(KN_COATINGS).map(knCoatingBrandSlide);
+  const photoBrands = Object.keys(KN_PHOTO).map(knPhotoBrandSlide);
+  const models = HOYA_LENSES.map(knModelSlide);
+  const custom = knCustomList().map(knCustomSlide);
+  return { topics, coatingBrands, photoBrands, models, custom };
+}
+function knSlideList() {
+  const { topics, coatingBrands, photoBrands, models, custom } = knSlideSources();
+  const byKey = {}; [...topics, ...coatingBrands, ...photoBrands, ...models, ...custom].forEach(s => { byKey[s.key] = s; });
+  return (S.knSel || []).map(k => byKey[k]).filter(Boolean);
+}
+function presentView() {
+  const slides = knSlideList();
+  if (!slides.length) { S.mode = ''; return views[S.v](); }
+  const i = Math.max(0, Math.min(S.knIdx || 0, slides.length - 1));
+  S.knIdx = i;
+  const s = slides[i];
+  const navBtn = (act, label, disabled) => `<button data-act="${act}" ${disabled ? 'disabled' : ''} style="background:${disabled ? 'rgba(255,255,255,.06)' : 'rgba(255,255,255,.14)'};border:0;color:${disabled ? 'rgba(255,255,255,.3)' : '#fff'};padding:12px 26px;border-radius:999px;cursor:${disabled ? 'default' : 'pointer'};font-size:14px">${label}</button>`;
+  return `<div style="position:fixed;inset:0;background:#12151a;color:#fff;display:flex;flex-direction:column;font-family:inherit" data-act="knkeyarea" tabindex="-1">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 24px">
+      <span class="tag" style="color:rgba(255,255,255,.55)">สไลด์ ${i + 1} / ${slides.length} · ${esc(s.title)}</span>
+      <button data-act="knexit" style="background:rgba(255,255,255,.12);border:0;color:#fff;padding:8px 18px;border-radius:999px;cursor:pointer;font-size:13px">ออกจากโหมดพรีเซนต์ ✕</button>
+    </div>
+    <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:10px 60px;overflow:auto">${s.html}</div>
+    <div style="display:flex;justify-content:center;gap:16px;padding:20px 24px">
+      ${navBtn('knprev', '‹ ก่อนหน้า', i === 0)}
+      ${navBtn('knnext', 'ถัดไป ›', i === slides.length - 1)}
+    </div>
+  </div>`;
+}
 const views = {
   studio() {
     const ps = live('products').filter(p => p.active !== false), tag = p => (p.features || []).includes(S.need);
@@ -452,8 +649,54 @@ const views = {
     <p class="tag" style="margin:-4px 0 12px">"ใช้บริการล่าสุด"/"ระบุช่วงเวลา" อิงจากวันที่มีรายการขาย ตรวจสายตา หรือซ่อม/เคลมล่าสุดของลูกค้า (ไม่ใช่วันที่นำเข้าข้อมูลเดิมเข้าระบบ)</p>
     ${rows.length ? `<div class="panel wrap"><table><tr><th>รหัส</th><th>ชื่อ</th><th>โทรศัพท์</th><th>ใช้บริการล่าสุด</th><th>ค่าสายตาล่าสุด</th><th></th></tr>${shown.map(c => `<tr><td>${esc(c.customer_code || '-')}</td><td>${esc(c.full_name)}</td><td>${esc(c.phone || '')}</td><td class="tag">${visit(c).text || '-'}</td><td class="tag">${esc(rxText(latestRx(c.id)))}</td><td class="act"><button class="btn line sm" data-act="viewcust" data-id="${c.id}">เปิด</button>${mgr() ? ` <button class="btn line sm bad" data-act="delcust" data-id="${c.id}">ลบ</button>` : ''}</td></tr>`).join('')}</table></div>${rows.length > shown.length ? `<p class="tag">แสดง ${shown.length} จาก ${rows.length} ราย พิมพ์ค้นหาเพื่อกรอง</p>` : ''}` : empty('ยังไม่มีลูกค้าที่ตรงกับการค้นหา', '<button class="btn" data-act="newcust">เพิ่มลูกค้าคนแรก</button> <button class="btn line" data-act="impcust">นำเข้าจาก CSV</button>')}`;
   },
+  keynote() {
+    const sel = S.knSel || (S.knSel = []);
+    const { topics, coatingBrands, photoBrands, models, custom } = knSlideSources();
+    const isSel = k => sel.includes(k);
+    const q = (S.knq || '').toLowerCase();
+    const shownModels = q ? models.filter(m => m.title.toLowerCase().includes(q)) : models;
+    const card = (k, title, photo) => `<label style="display:flex;align-items:center;gap:10px;border:1.5px solid ${isSel(k) ? '#16294a' : 'rgba(0,0,0,.12)'};border-radius:10px;padding:10px 12px;cursor:pointer;background:${isSel(k) ? '#16294a0d' : '#fff'}">
+      <input type="checkbox" data-act="kntoggle" data-id="${esc(k)}" ${isSel(k) ? 'checked' : ''} style="width:16px;height:16px;flex-shrink:0">
+      ${photo ? `<img src="${esc(photo)}" style="width:40px;height:40px;object-fit:cover;border-radius:6px;flex-shrink:0">` : ''}
+      <span style="font-size:12.5px;font-weight:600;line-height:1.3">${esc(title)}</span>
+    </label>`;
+    const sec = (title, body, extraHead) => `<div class="panel" style="padding:18px 20px;margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap"><h2 style="margin:0;font-size:15px">${esc(title)}</h2>${extraHead || ''}</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px">${body}</div>
+    </div>`;
+    return `<div class="bar"><div><h1>คีย์โน้ตพรีเซนต์</h1><p class="sub" style="margin:0">เลือกสไลด์หัวข้อ/รุ่นเลนส์ที่จะใช้พรีเซนต์ลูกค้า แล้วกด "เริ่มพรีเซนต์" เพื่อเข้าโหมดเต็มจอ</p></div>
+      <div class="tools"><span class="tag" style="align-self:center">เลือกแล้ว ${sel.length} สไลด์</span>${sel.length ? `<button class="btn line" data-act="knclearall">ล้างที่เลือก</button>` : ''}<button class="btn" data-act="kngo" ${sel.length ? '' : 'disabled'}>เริ่มพรีเซนต์ →</button></div></div>
+    <p class="tag" style="margin:-6px 0 14px">ข้อมูลโค้ทติ้ง/เลนส์เปลี่ยนสีมีให้เฉพาะแบรนด์ที่ตรวจสอบแหล่งที่มาจริงแล้ว (HOYA, ZEISS, Essilor, Nikon, Rodenstock) — แบรนด์อื่นที่ร้านขาย ให้เพิ่มเนื้อหาเองได้ในหัวข้อ "เนื้อหาเสริม" ด้านล่างสุด เมื่อมีข้อมูล/รูปจริงจากตัวแทนแล้ว</p>
+    ${sec('หัวข้อทั่วไป', topics.map(t => card(t.key, t.title, null)).join(''))}
+    ${sec('โค้ทติ้งแต่ละแบรนด์ (Coating)', coatingBrands.map(t => card(t.key, t.title, null)).join(''))}
+    ${sec('เลนส์เปลี่ยนสีแต่ละแบรนด์ (Photochromic)', photoBrands.map(t => card(t.key, t.title, null)).join(''))}
+    <div class="panel" style="padding:18px 20px;margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+        <h2 style="margin:0;font-size:15px">แคตตาล็อกเลนส์ HOYA (${models.length} รุ่น)</h2>
+        <input placeholder="ค้นหารุ่นเลนส์" value="${esc(S.knq || '')}" data-bind="knq" style="width:200px;margin-left:auto">
+        <button class="btn line sm" data-act="knselectallmodels">เลือกทั้งหมด</button>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;max-height:52vh;overflow:auto;padding-right:2px">${shownModels.length ? shownModels.map(m => card(m.key, m.title, m.photo)).join('') : '<p class="tag">ไม่พบรุ่นที่ตรงกับคำค้นหา</p>'}</div>
+    </div>
+    <div class="panel" style="padding:18px 20px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+        <h2 style="margin:0;font-size:15px">เนื้อหาเสริม (เพิ่ม/แก้ไขเอง — เช่น แบรนด์อื่นที่ร้านขาย)</h2>
+        <button class="btn line sm" data-act="kncustomnew" style="margin-left:auto">+ เพิ่มเนื้อหาเสริม</button>
+      </div>
+      ${custom.length ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px">${custom.map(s => {
+        const p = find('products', s.key.slice(7));
+        return `<div style="display:flex;align-items:center;gap:8px;border:1.5px solid ${isSel(s.key) ? '#16294a' : 'rgba(0,0,0,.12)'};border-radius:10px;padding:10px 12px;background:${isSel(s.key) ? '#16294a0d' : '#fff'}">
+          <label style="display:flex;align-items:center;gap:10px;flex:1;cursor:pointer;min-width:0">
+            <input type="checkbox" data-act="kntoggle" data-id="${esc(s.key)}" ${isSel(s.key) ? 'checked' : ''} style="width:16px;height:16px;flex-shrink:0">
+            <span style="font-size:12.5px;font-weight:600;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(s.title)}${p && p.brand ? ` <span class="tag">(${esc(p.brand)})</span>` : ''}</span>
+          </label>
+          <button type="button" class="btn line sm" data-act="kncustomedit" data-id="${p ? p.id : ''}">แก้ไข</button>
+        </div>`;
+      }).join('')}</div>` : '<p class="tag">ยังไม่มีเนื้อหาเสริม — กด "+ เพิ่มเนื้อหาเสริม" เพื่อเพิ่มแบรนด์/ข้อมูลของร้านเอง (ใส่รูปและรหัสสีได้)</p>'}
+    </div>`;
+  },
   products() {
-    const q = S.pq.toLowerCase(), rows = live('products').filter(p => (S.ptype === 'all' || p.product_type === S.ptype) && [p.product_name, p.sku, p.brand].join(' ').toLowerCase().includes(q));
+    const q = S.pq.toLowerCase(), rows = live('products').filter(p => p.product_type !== 'kn_custom' && (S.ptype === 'all' || p.product_type === S.ptype) && [p.product_name, p.sku, p.brand].join(' ').toLowerCase().includes(q));
     const chips = [['all', 'ทั้งหมด'], ...Object.entries(TYPES)].map(([k, l]) => `<button class="chip ${S.ptype === k ? 'on' : ''}" data-act="ptype" data-id="${k}">${l}</button>`).join('');
     const missingOther = OTHER_ITEMS.filter(n => !live('products').some(p => p.product_name === n));
     const lensCount = live('products').filter(p => p.product_type === 'lens' && p.active !== false).length;
@@ -914,6 +1157,7 @@ function render() {
   if (S.mode === 'hub') return overlay(hubView());
   if (S.mode === 'kiosk') return overlay(kioskView());
   if (S.mode === 'lenscat') return overlay(lensCatalogView());
+  if (S.mode === 'present') return overlay(presentView());
   if (ORIG_THEME_COLOR != null) setThemeColor(ORIG_THEME_COLOR);
   closeOverlay();
   $('#nav').innerHTML = `<button data-act="gomode" data-id="hub">‹ กลับหน้าหลัก</button><div style="height:1px;background:rgba(255,255,255,.14);margin:4px 2px"></div>` + NAV.map(([k, l]) => `<button data-act="go" data-id="${k}" class="${S.v === k ? 'on' : ''}">${l}</button>`).join('');
@@ -924,6 +1168,24 @@ const closeDlg = () => $('#dlg').close();
 const fld = (n, l, v = '', t = 'text', extra = '') => `<label>${l}<input name="${n}" type="${t}" value="${esc(v)}" ${extra}></label>`;
 const foot = ok => `<div class="foot"><button type="button" class="btn line" data-act="close">ยกเลิก</button><button class="btn" type="submit">${ok}</button></div>`;
 
+function kncustomForm(p = {}) {
+  const ls = p.lens_spec || {};
+  const group = ls.group || 'coating';
+  const photo = (Array.isArray(ls.photos) && ls.photos[0]) || '';
+  dialog(`<form data-form="knc" data-id="${p.id || ''}"><h2>${p.id ? 'แก้ไขเนื้อหาเสริม' : 'เพิ่มเนื้อหาเสริม'}</h2>
+    <div class="two">
+      <label>หัวข้อ<select name="group">${Object.entries(KN_CUSTOM_GROUPS).map(([k, l]) => `<option value="${k}" ${group === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+      ${fld('brand', 'แบรนด์/ยี่ห้อ', p.brand)}
+    </div>
+    ${fld('product_name', 'ชื่อสไลด์ (เช่น ชื่อรุ่น/ชื่อโค้ทติ้ง/ชื่อสี)', p.product_name, 'text', 'required')}
+    ${fld('color_code', 'รหัสสี/รหัสสั่งเลนส์ (ถ้ามี)', ls.color_code)}
+    <label>คำอธิบาย<textarea name="description" rows="4">${esc(p.description)}</textarea></label>
+    <label>รูปภาพประกอบ (ถ้ามี)<input type="file" accept="image/*" data-bind="kncphoto"></label>
+    <input type="hidden" name="photo_data" value="${esc(photo)}">
+    <div id="kncPhotoPreview">${photo ? `<img src="${esc(photo)}" style="width:100px;height:100px;object-fit:cover;border-radius:8px;margin-top:8px;border:1px solid #d7dde6">` : ''}</div>
+    ${foot('บันทึกเนื้อหาเสริม')}${p.id ? `<button type="button" class="btn line bad" data-act="kncustomdel" data-id="${p.id}" style="margin-top:10px;width:100%">ลบเนื้อหาเสริมนี้</button>` : ''}
+  </form>`);
+}
 function custForm(c = {}, from = '') {
   dialog(`<form data-form="cust" data-id="${c.id || ''}" data-from="${from}"><h2>${c.id ? 'แก้ไขลูกค้า' : 'เพิ่มลูกค้า'}</h2><div class="two">${fld('full_name', 'ชื่อ-นามสกุล', c.full_name, 'text', 'required')}${fld('customer_code', 'รหัสลูกค้า (รันต่อจากเลขล่าสุด)', c.id ? c.customer_code : nextCode())}${fld('phone', 'โทรศัพท์', c.phone, 'tel')}${fld('budget_thb', 'งบประมาณ (บาท)', c.budget_thb, 'number', 'min="0"')}</div>${fld('lifestyle', 'ไลฟ์สไตล์ / การใช้งาน', c.lifestyle)}<label>บันทึก<textarea name="notes" rows="2">${esc(c.notes)}</textarea></label><label class="chk"><input type="checkbox" name="consent" ${c.consent_recorded_at ? 'checked' : ''}> ลูกค้ายินยอมให้เก็บข้อมูลส่วนบุคคลและค่าสายตา${c.consent_recorded_at ? ` (บันทึกเมื่อ ${day(c.consent_recorded_at)})` : ''}</label>${foot('บันทึกลูกค้า')}</form>`);
 }
@@ -1879,6 +2141,30 @@ document.addEventListener('click', e => {
   else if (a === 'rmvar') { const draft = readProdDraft(b.closest('form')); draft.lens_spec.variants.splice(+b.dataset.idx, 1); if (!draft.lens_spec.variants.length) draft.lens_spec.variants.push({ index: '', coating: '', color_change: 'none', price: '', stock_qty: '' }); prodForm(draft); }
   else if (a === 'editprod') { const p = find('products', id); p.product_type === 'frame' ? frameForm(p) : prodForm(p); }
   else if (a === 'delprod') { if (confirm('ลบสินค้านี้?')) softDelete('products', id); }
+  else if (a === 'kntoggle') {
+    const k = b.dataset.id; S.knSel = S.knSel || [];
+    const i = S.knSel.indexOf(k);
+    if (i >= 0) S.knSel.splice(i, 1); else S.knSel.push(k);
+    render();
+  }
+  else if (a === 'knclearall') { S.knSel = []; render(); }
+  else if (a === 'knselectallmodels') {
+    const { models } = knSlideSources();
+    S.knSel = S.knSel || [];
+    models.forEach(m => { if (!S.knSel.includes(m.key)) S.knSel.push(m.key); });
+    render();
+  }
+  else if (a === 'kngo') { if (!(S.knSel || []).length) return; S.knIdx = 0; S.mode = 'present'; render(); }
+  else if (a === 'knexit') { S.mode = ''; render(); }
+  else if (a === 'knprev') { S.knIdx = Math.max(0, (S.knIdx || 0) - 1); render(); }
+  else if (a === 'knnext') { const n = knSlideList().length; S.knIdx = Math.min(n - 1, (S.knIdx || 0) + 1); render(); }
+  else if (a === 'kncustomnew') kncustomForm();
+  else if (a === 'kncustomedit') { const p = find('products', id); if (p) kncustomForm(p); }
+  else if (a === 'kncustomdel') {
+    if (!confirm('ลบเนื้อหาเสริมนี้?')) return;
+    S.knSel = (S.knSel || []).filter(k => k !== 'custom:' + id);
+    softDelete('products', id); closeDlg();
+  }
   else if (a === 'hoyarestore') {
     const deleted = db.products.filter(p => p.deleted_at && p.product_name.startsWith('HOYA '));
     if (!deleted.length) return;
@@ -2053,6 +2339,15 @@ document.addEventListener('change', e => {
   else if (k === 'url' || k === 'key') { ls.set(k, e.target.value.trim()); toast('บันทึกการตั้งค่าแล้ว'); setStatus(); }
   else if (k === 'newprodtype') { const draft = readProdDraft(e.target.closest('form')); draft.product_type = e.target.value; prodForm(draft); }
   else if (k === 'claimphoto') { const f = e.target.files[0]; if (f) fileToThumb(f).then(du => { K.photo = du; render(); }); }
+  else if (k === 'kncphoto') {
+    const f = e.target.files[0]; if (!f) return;
+    fileToThumb(f, 1000).then(du => {
+      if (!du) return toast('อ่านไฟล์รูปไม่สำเร็จ');
+      const form = e.target.closest('form');
+      form.querySelector('[name="photo_data"]').value = du;
+      form.querySelector('#kncPhotoPreview').innerHTML = `<img src="${esc(du)}" style="width:100px;height:100px;object-fit:cover;border-radius:8px;margin-top:8px;border:1px solid #d7dde6">`;
+    });
+  }
   else if (k === 'lsphotos') {
     const files = [...e.target.files]; if (!files.length) return;
     const form = e.target.closest('form');
@@ -2092,9 +2387,17 @@ document.addEventListener('input', e => {
   if (k === 'q' || k === 'pq') { S[k] = e.target.value; refocus(); }
   else if (k === 'catq') { S.catQ = e.target.value; refocus(); }
   else if (k === 'kpq') { K.pq = e.target.value; refocus(); }
+  else if (k === 'knq') { S.knq = e.target.value; refocus(); }
   else if (k === 'ccnew') K.ccNew = e.target.value;
   else if (k.startsWith('cartcode:')) { const x = S.cart.find(i => i.id === k.slice(9)); if (x) x.code = e.target.value; }
   else if (k.startsWith('cartcolor:')) { const x = S.cart.find(i => i.id === k.slice(10)); if (x) x.color = e.target.value; }
+});
+document.addEventListener('keydown', e => {
+  if (S.mode !== 'present') return;
+  if (e.target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
+  if (e.key === 'ArrowRight') { const n = knSlideList().length; S.knIdx = Math.min(n - 1, (S.knIdx || 0) + 1); render(); }
+  else if (e.key === 'ArrowLeft') { S.knIdx = Math.max(0, (S.knIdx || 0) - 1); render(); }
+  else if (e.key === 'Escape') { S.mode = ''; render(); }
 });
 document.addEventListener('submit', async e => {
   const f = e.target.closest('[data-form]'); if (!f) return; e.preventDefault();
@@ -2104,6 +2407,12 @@ document.addEventListener('submit', async e => {
       const o = id ? find('customer_profiles', id) : {}, nid = id || uid();
       save('customer_profiles', { ...o, id: nid, full_name: d.full_name.trim(), customer_code: d.customer_code.trim() || null, phone: d.phone.trim() || null, budget_thb: num(d.budget_thb), lifestyle: d.lifestyle.trim() || null, notes: d.notes.trim() || null, consent_recorded_at: d.consent ? (o.consent_recorded_at || now()) : null, deleted_at: null });
       if (f.dataset.from === 'studio') S.cust = nid; closeDlg(); commit(); toast('บันทึกลูกค้าแล้ว');
+    } else if (k === 'knc') {
+      const o = id ? find('products', id) : {}, nid = id || uid();
+      const title = d.product_name.trim(); if (!title) return toast('ใส่ชื่อสไลด์ด้วย');
+      save('products', { ...o, id: nid, product_type: 'kn_custom', product_name: title, brand: (d.brand || '').trim() || null, description: (d.description || '').trim() || null,
+        lens_spec: { group: d.group, color_code: (d.color_code || '').trim() || null, photos: d.photo_data ? [d.photo_data] : [] }, active: true, deleted_at: null });
+      closeDlg(); commit(); toast('บันทึกเนื้อหาเสริมแล้ว');
     } else if (k === 'rx') {
       save('prescriptions', { id: uid(), customer_id: f.dataset.cid, exam_date: d.exam_date || null, examiner: (d.examiner || '').trim() || null, od_sph: num(d.od_sph), od_cyl: num(d.od_cyl), od_axis: num(d.od_axis), os_sph: num(d.os_sph), os_cyl: num(d.os_cyl), os_axis: num(d.os_axis), od_pd: num(d.od_pd), os_pd: num(d.os_pd), od_add: num(d.od_add), os_add: num(d.os_add), pd: null, add_power: null, notes: d.notes.trim() || null, deleted_at: null });
       commit(); custView(f.dataset.cid); toast('บันทึกค่าสายตาแล้ว');
