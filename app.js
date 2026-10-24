@@ -153,6 +153,11 @@ function lrSummary() {
   if (purp.length) parts.push('ใช้งาน: ' + purp.join(', '));
   const vis = names(VISION_OPTS, lr.vision); if (vis.length) parts.push('ต้องการ: ' + vis.join(', '));
   const lt = names(LENSTYPE_OPTS, lr.lenstype); if (lt.length) parts.push('ประเภทเลนส์: ' + lt.join(', '));
+  if ((lr.brand || []).length) parts.push('แบรนด์: ' + lr.brand.join(', '));
+  const lvl = (lr.level || []).map(k => LENS_TIER_LABELS[k] || k); if (lvl.length) parts.push('ระดับ: ' + lvl.join(', '));
+  if ((lr.lensIndex || []).length) parts.push('Index: ' + lr.lensIndex.join(', '));
+  const coat = names(LENS_COATING_OPTS, lr.coating); if (coat.length) parts.push('Coating: ' + coat.join(', '));
+  const photoSel = names(LENS_COLOR_OPTS, lr.photochromic); if (photoSel.length) parts.push('เปลี่ยนสี: ' + photoSel.join(', '));
   if (lr.budget) parts.push('งบ: ' + lr.budget);
   if (lr.occupation) parts.push('อาชีพ: ' + lr.occupation);
   if (lr.notes) parts.push('หมายเหตุ: ' + lr.notes);
@@ -172,7 +177,7 @@ const SHOP_PHONE = '086-9885360 / 097-2382217';
 const SHOP_TAXID = '4101600006509';
 const NAV = [['customers', 'ลูกค้า'], ['products', 'สินค้า'], ['insights', 'ภาพรวม'], ['settings', 'ตั้งค่า']];
 const S = { v: 'customers', need: 'general', cart: [], cust: '', disc: 0, notes: '', q: '', pq: '', ptype: 'all', staff: null, mode: 'splash', custView: 'all', custFrom: '', custTo: '', catQ: '', catCompare: [], catDetail: null, catReturn: '', catDesign: '', catMain: '', activeSeller: null, varPick: null };
-const freshLR = () => ({ purpose: [], other: '', vision: [], lenstype: [], age: '', budget: '', occupation: '', notes: '' });
+const freshLR = () => ({ purpose: [], other: '', vision: [], lenstype: [], brand: [], level: [], lensIndex: [], coating: [], photochromic: [], age: '', budget: '', occupation: '', notes: '' });
 const freshDisc = () => ({ type: 'amt', val: 0 });
 let K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, discFrame: freshDisc(), discLens: freshDisc(), lensFilterOn: true };
 const kioskReset = () => { K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, detailProdId: null, discFrame: freshDisc(), discLens: freshDisc(), lensFilterOn: true }; };
@@ -185,6 +190,14 @@ function lensTypeTest(p, key) { return (p.lens_spec || {}).design === key; }
 function lensPassesHardFilter(p, lr) {
   if (lr.lenstype.length) {
     if (!lr.lenstype.some(k => lensTypeTest(p, k))) return false;
+  }
+  if ((lr.brand || []).length && !lr.brand.includes(p.brand)) return false;
+  if ((lr.level || []).length && !lr.level.includes((p.lens_spec || {}).tier)) return false;
+  if ((lr.lensIndex || []).length || (lr.coating || []).length || (lr.photochromic || []).length) {
+    const vr = lensVariants(p);
+    if ((lr.lensIndex || []).length && !vr.some(v => lr.lensIndex.includes(v.index))) return false;
+    if ((lr.coating || []).length && !vr.some(v => lr.coating.includes(v.coating))) return false;
+    if ((lr.photochromic || []).length && !vr.some(v => lr.photochromic.includes(v.color_change))) return false;
   }
   return true;
 }
@@ -214,7 +227,7 @@ function lensMatchScore(p, lr) {
   (lr.purpose || []).forEach(k => { if (PURPOSE_MATCH[k]) { total++; if (PURPOSE_MATCH[k](p)) score++; } });
   return { score, total };
 }
-function lrHasCriteria(lr) { return !!(lr.lenstype.length || lr.vision.length || lr.purpose.length); }
+function lrHasCriteria(lr) { return !!(lr.lenstype.length || lr.vision.length || lr.purpose.length || (lr.brand || []).length || (lr.level || []).length || (lr.lensIndex || []).length || (lr.coating || []).length || (lr.photochromic || []).length); }
 const empty = (m, a = '') => `<div class="empty">${m}${a ? `<br><br>${a}` : ''}</div>`;
 const fmtP = v => v == null || v === '' ? '-' : (+v > 0 ? '+' : '') + (+v).toFixed(2);
 const day = d => d ? new Date(d).toLocaleDateString('th-TH') : '-';
@@ -1205,54 +1218,126 @@ function kioskQuickAddProd(type) {
     ${foot('เพิ่มสินค้า')}
   </form>`);
 }
+/* ---------- ป๊อปอัป "คำแนะนำ" (Tutorial) ของแต่ละหัวข้อในหน้าแนะนำเลนส์ — เนื้อหาเปลี่ยนตามประเภทเลนส์ที่เลือกไว้ ---------- */
+const fovIcon = (crx, cry, label, sub) => `<div style="text-align:center;flex:1;min-width:110px">
+  <svg viewBox="0 0 140 110" width="100%" height="100" style="max-width:150px;display:block;margin:0 auto">
+    <ellipse cx="70" cy="52" rx="64" ry="46" fill="#9aa6b3" opacity=".35"/>
+    <ellipse cx="70" cy="52" rx="${crx}" ry="${cry}" fill="#ffffff" stroke="#c7cfd8" stroke-width="1.5"/>
+    <ellipse cx="70" cy="52" rx="64" ry="46" fill="none" stroke="#8a97a6" stroke-width="2"/>
+  </svg>
+  <b style="font-size:13px;display:block;margin-top:4px">${esc(label)}</b>
+  <div class="tag" style="margin-top:2px">${esc(sub)}</div>
+</div>`;
+function levelTechBlock(types) {
+  const blocks = [];
+  const hasProg = types.includes('progressive') || types.includes('office') || types.includes('anti_fatigue') || types.includes('bifocal');
+  const hasSingle = types.includes('single') || types.includes('kids') || !types.length || !hasProg;
+  if (hasProg) blocks.push(`<div style="margin-top:14px"><b style="font-size:13.5px">เทคโนโลยีการออกแบบผิวเลนส์ (โปรเกรสซีฟ/ออฟฟิศ)</b>
+    <table style="width:100%;margin-top:8px;font-size:12.5px;border-collapse:collapse">
+      <tr><td style="padding:6px 8px;width:110px;vertical-align:top"><b>Conventional</b></td><td style="padding:6px 8px;color:var(--mute,#69756d)">ออกแบบสำเร็จมาตรฐาน พื้นที่มองเห็นแคบกว่า มีจุดบิดเบี้ยว/เบลอบริเวณขอบมากกว่า เหมาะงบประหยัด</td></tr>
+      <tr style="border-top:1px solid var(--line,#e2dac3)"><td style="padding:6px 8px;vertical-align:top"><b>Freeform</b></td><td style="padding:6px 8px;color:var(--mute,#69756d)">คำนวณผิวเลนส์เฉพาะบุคคลด้วยคอมพิวเตอร์ พื้นที่มองเห็นกว้างและคมชัดกว่าชัดเจน ลดอาการเวียนตา</td></tr>
+    </table></div>`);
+  if (hasSingle) blocks.push(`<div style="margin-top:14px"><b style="font-size:13.5px">เทคโนโลยีผิวเลนส์ (สายตาเดี่ยว)</b>
+    <table style="width:100%;margin-top:8px;font-size:12.5px;border-collapse:collapse">
+      <tr><td style="padding:6px 8px;width:110px;vertical-align:top"><b>Spherical</b></td><td style="padding:6px 8px;color:var(--mute,#69756d)">เลนส์โค้งทรงกลมมาตรฐาน ขอบเลนส์หนากว่า ภาพบริเวณขอบอาจบิดเบี้ยวเล็กน้อยในค่าสายตาสูง</td></tr>
+      <tr style="border-top:1px solid var(--line,#e2dac3)"><td style="padding:6px 8px;vertical-align:top"><b>Aspherical</b></td><td style="padding:6px 8px;color:var(--mute,#69756d)">ผิวเลนส์แบนเรียบกว่า บางและเบากว่า ภาพคมชัดกว่าโดยเฉพาะค่าสายตาสูง</td></tr>
+    </table></div>`);
+  return blocks.join('');
+}
+function indexTutorialBody() {
+  const n = LENS_INDEX_OPTS.length;
+  const rows = LENS_INDEX_OPTS.map(([k, l], i) => {
+    const w = Math.round(94 - (i * 70 / (n - 1)));
+    return `<div style="display:flex;align-items:center;gap:10px;margin:6px 0">
+      <span style="width:118px;font-size:12.5px;flex-shrink:0"><b>${esc(l)}</b></span>
+      <div style="flex:1;background:#e9e4d4;border-radius:6px;overflow:hidden;height:16px"><div style="height:100%;width:${w}%;background:var(--gold,#c9a961);border-radius:6px"></div></div>
+      <span class="tag" style="width:62px;text-align:right;flex-shrink:0">${i === 0 ? 'หนาสุด' : i === n - 1 ? 'บางสุด' : ''}</span>
+    </div>`;
+  }).join('');
+  return `<p style="font-size:13px;margin:0 0 10px">ค่า Index ยิ่งสูง เลนส์จะยิ่ง<b>บางและเบาลง</b> โดยเฉพาะกับค่าสายตาสูง (เช่น ค่าสายตา +4.00 หรือ -6.00 ขึ้นไป) — กราฟด้านล่างเทียบความหนาโดยประมาณที่ค่าสายตาเท่ากัน:</p>
+  ${rows}
+  <p class="tag" style="margin-top:10px">* เป็นการเปรียบเทียบโดยประมาณเพื่อให้เห็นภาพ ความหนาจริงขึ้นกับค่าสายตาและขนาดกรอบของลูกค้าแต่ละคน</p>`;
+}
+const COATING_DESC = {
+  uncoat: 'ไม่มีสารเคลือบผิว ราคาประหยัดที่สุด แต่เป็นรอยง่ายและมีแสงสะท้อนรบกวนสายตา',
+  sft: 'เคลือบกันรอยพื้นฐาน (Scratch-resistant) ช่วยให้เลนส์ทนทานขึ้นกว่าเลนส์ไม่เคลือบ ราคาประหยัด',
+  hard: 'Hard Coat เคลือบกันรอยขีดข่วนที่แข็งแรงกว่า SFT ใช้งานทนทานในชีวิตประจำวัน',
+  multi: 'Multi Coat เคลือบลดแสงสะท้อนหลายชั้น เลนส์ใสขึ้น มองเห็นดวงตาชัดเจน ลดแสงจ้ารบกวนตอนกลางคืน',
+  hvp: 'HVP (High Vacuum Protect) เคลือบผิวคุณภาพสูง กันรอย กันน้ำ กันฝุ่น ทำความสะอาดง่ายกว่า',
+  hvp_blue: 'คุณสมบัติ HVP รวมกับการกรองแสงสีฟ้าจากจอมือถือ/คอมพิวเตอร์ ช่วยลดอาการตาล้า',
+  meiryo: 'Meiryo เคลือบลดแสงสะท้อนระดับสูง เลนส์ใสคมชัดเป็นพิเศษ ทำความสะอาดง่าย',
+  meiryo_blue: 'คุณสมบัติ Meiryo รวมกับกรองแสงสีฟ้า เหมาะกับคนที่ใช้หน้าจอต่อเนื่องนาน ๆ',
+  blue_full: 'Blue Coat / Full Control ครบสูตร กันรอย+กันน้ำ+กรองแสงสีฟ้า+ลดแสงสะท้อน แต่เลนส์จะมีโทนสีอมเหลืองจางๆ จากการกรองแสงสีฟ้า',
+};
+function coatingTutorialBody() {
+  return `<table style="width:100%;border-collapse:collapse;font-size:12.5px">
+    ${LENS_COATING_OPTS.map(([k, l]) => `<tr style="border-top:1px solid var(--line,#e2dac3)"><td style="padding:7px 8px;width:130px;vertical-align:top"><b>${esc(l)}</b></td><td style="padding:7px 8px;color:var(--mute,#69756d)">${esc(COATING_DESC[k] || '')}</td></tr>`).join('')}
+  </table>`;
+}
+const colorSwatch = (bg, label, sub) => `<div style="text-align:center;flex:1;min-width:100px">
+  <div style="width:48px;height:32px;border-radius:8px;margin:0 auto 6px;background:${bg};border:1px solid rgba(0,0,0,.15)"></div>
+  <b style="font-size:12.5px">${esc(label)}</b><div class="tag" style="margin-top:2px">${esc(sub)}</div>
+</div>`;
+function photoTutorialBody() {
+  return `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px">
+    ${colorSwatch('linear-gradient(90deg,#f4f1e6,#b7905a)', 'Photochromic / Sensity', 'ใสในร่ม เข้มขึ้นอัตโนมัติกลางแจ้ง')}
+    ${colorSwatch('#8a6b45', 'Tinted (ย้อมสี)', 'สีเข้มคงที่ตลอดเวลา ไม่เปลี่ยนตามแสง')}
+    ${colorSwatch('#3a3f44', 'Polarized', 'ตัดแสงสะท้อนจ้า เห็นภาพคมชัดกลางแจ้ง')}
+  </div>
+  <table style="width:100%;border-collapse:collapse;font-size:12.5px">
+    <tr><td style="padding:7px 8px;width:140px;vertical-align:top"><b>เปลี่ยนสีอัตโนมัติ</b></td><td style="padding:7px 8px;color:var(--mute,#69756d)">เลนส์ใสเมื่ออยู่ในที่ร่ม/อาคาร และเข้มขึ้นอัตโนมัติเมื่อสัมผัสแสง UV กลางแจ้ง แล้วกลับมาใสเมื่อเข้าที่ร่มอีกครั้ง</td></tr>
+    <tr style="border-top:1px solid var(--line,#e2dac3)"><td style="padding:7px 8px;vertical-align:top"><b>ย้อมสี (Tinted)</b></td><td style="padding:7px 8px;color:var(--mute,#69756d)">เลนส์มีสีเข้มคงที่ตลอดเวลา ไม่เปลี่ยนตามแสง เน้นแฟชั่นหรือกันแดดแบบถาวร</td></tr>
+    <tr style="border-top:1px solid var(--line,#e2dac3)"><td style="padding:7px 8px;vertical-align:top"><b>โพลาไรซ์ (Polarized)</b></td><td style="padding:7px 8px;color:var(--mute,#69756d)">ตัดแสงสะท้อนจ้าจากพื้นถนน/ผิวน้ำ ช่วยให้มองเห็นคมชัดขึ้นกลางแจ้ง เหมาะขับรถหรือกิจกรรมกลางแจ้ง</td></tr>
+  </table>`;
+}
+function lensTutorialHTML(cat, lenstypes) {
+  const types = lenstypes || [];
+  const titles = { level: 'ระดับเลนส์ (Level) คืออะไร?', index: 'ค่าดัชนีหักเหแสง (Index) คืออะไร?', coating: 'สารเคลือบผิวเลนส์ (Coating) คืออะไร?', photochromic: 'เลนส์เปลี่ยนสี (Photochromic) คืออะไร?' };
+  let body = '';
+  if (cat === 'level') {
+    body = `<div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:6px">
+      ${fovIcon(30, 22, 'Basic / Standard', 'มุมมองชัดแคบ มีขอบเบลอมากกว่า')}
+      ${fovIcon(56, 40, 'Premium / Flagship', 'มุมมองชัดกว้าง เกือบทั้งเลนส์')}
+    </div>
+    <p class="tag" style="margin:0 0 4px">พื้นที่สีขาว = บริเวณที่มองเห็นคมชัด · พื้นที่สีเทา = บริเวณที่ภาพเบลอ/บิดเบี้ยว</p>
+    ${levelTechBlock(types)}`;
+  } else if (cat === 'index') body = indexTutorialBody();
+  else if (cat === 'coating') body = coatingTutorialBody();
+  else if (cat === 'photochromic') body = photoTutorialBody();
+  return `<h2 style="margin:0 0 12px">${esc(titles[cat] || '')}</h2>${body}<div class="foot"><button type="button" class="btn line" data-act="close">ปิด</button></div>`;
+}
 function kioskLensReq() {
   const lr = K.lr;
-  const sec = (n, accent, title, hint, body) => `<div class="panel" style="padding:22px 24px 24px;border-top:4px solid ${accent}">
-    <h2 style="margin:0 0 4px;display:flex;align-items:center;gap:10px;font-size:15.5px"><span style="width:24px;height:24px;border-radius:50%;background:${accent};color:#fff;font-size:12.5px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${n}</span> ${title}</h2>
-    <p class="tag" style="margin:0 0 14px">${hint}</p>
-    ${body}
-  </div>`;
-  const icard = (group, k, icon, label, accent) => { const on = lr[group].includes(k); return `<button type="button" data-act="lrtoggle" data-group="${group}" data-id="${k}" style="position:relative;padding:16px 8px 12px;text-align:center;border:1.5px solid ${on ? accent : 'rgba(0,0,0,.1)'};background:${on ? accent + '14' : '#fff'};border-radius:14px;cursor:pointer;font:inherit">
-    <span style="position:absolute;top:8px;left:8px;width:16px;height:16px;border-radius:5px;border:1.5px solid ${on ? accent : 'rgba(0,0,0,.25)'};background:${on ? accent : '#fff'};color:#fff;font-size:11px;line-height:15px;display:block">${on ? '✓' : ''}</span>
-    <span style="display:flex;align-items:center;justify-content:center;width:38px;height:38px;margin:2px auto 8px;border-radius:50%;background:${on ? accent : accent + '20'};font-size:18px">${icon}</span>
-    <span style="display:block;font-size:12px;line-height:1.3;color:#23262a">${esc(label)}</span>
-  </button>`; };
-  const chkrow = (group, k, label, accent) => { const on = lr[group].includes(k); return `<button type="button" data-act="lrtoggle" data-group="${group}" data-id="${k}" style="display:flex;align-items:center;gap:10px;border:1.5px solid ${on ? accent : 'rgba(0,0,0,.1)'};background:${on ? accent + '14' : '#fff'};border-radius:12px;padding:11px 13px;font-size:13px;cursor:pointer;text-align:left;font:inherit;color:#23262a">
-    <span style="width:17px;height:17px;border-radius:5px;border:1.5px solid ${on ? accent : 'rgba(0,0,0,.25)'};background:${on ? accent : '#fff'};color:#fff;font-size:11px;line-height:15px;flex-shrink:0;display:inline-block;text-align:center">${on ? '✓' : ''}</span>${esc(label)}
-  </button>`; };
   const lcard = (k, label, bg, accent) => { const on = lr.lenstype.includes(k); return `<button type="button" data-act="lrtoggle" data-group="lenstype" data-id="${k}" style="position:relative;border:1.5px solid ${on ? accent : 'rgba(0,0,0,.1)'};background:${on ? accent + '14' : '#fff'};border-radius:14px;padding:14px 10px;text-align:center;cursor:pointer;font:inherit">
     <span style="position:absolute;top:8px;left:8px;width:16px;height:16px;border-radius:5px;border:1.5px solid ${on ? accent : 'rgba(0,0,0,.25)'};background:${on ? accent : '#fff'};color:#fff;font-size:11px;line-height:15px;display:block">${on ? '✓' : ''}</span>
     <span style="display:block;width:38px;height:24px;margin:4px auto 9px;border-radius:50%/40%;background:${bg}"></span>
     <span style="display:block;font-size:12px;line-height:1.3;color:#23262a">${esc(label)}</span>
   </button>`; };
+  const mchip = (group, k, label) => `<button type="button" data-act="lrtoggle" data-group="${group}" data-id="${esc(String(k))}" class="chip ${(lr[group] || []).includes(k) ? 'on' : ''}">${esc(label)}</button>`;
+  const tutBtn = cat => `<button type="button" data-act="lenstut" data-id="${cat}" class="btn line sm" style="padding:2px 11px;border-radius:999px;font-size:12px;line-height:1.5">?</button>`;
+  const catSec = (title, cat, body) => `<div class="panel" style="padding:18px 20px;margin-bottom:14px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap"><h2 style="margin:0;font-size:15px">${esc(title)}</h2>${cat ? tutBtn(cat) : ''}</div>
+    <div class="chips" style="margin-bottom:0">${body || '<p class="tag">ยังไม่มีตัวเลือกในระบบ</p>'}</div>
+  </div>`;
+  const brandOpts = knownBrands('lens');
+  const photoOpts = LENS_COLOR_OPTS.filter(([k]) => k !== 'none');
   return `
-    ${sec(1, '#3f5586', 'วัตถุประสงค์การใช้งาน', 'คุณต้องการใช้แว่นทำอะไรบ้าง? (เลือกได้มากกว่า 1 ข้อ)', `
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
-        ${PURPOSE_OPTS.map(([k, l, ic]) => icard('purpose', k, ic, l, '#3f5586')).join('')}
-        <div style="grid-column:span 4;display:flex;align-items:center;gap:8px;border:1.5px dashed rgba(0,0,0,.2);border-radius:12px;padding:10px 13px;background:#fff">
-          <span style="font-size:13px">อื่นๆ</span><input data-bind="lrother" value="${esc(lr.other || '')}" placeholder="โปรดระบุ" style="flex:1;border:0;padding:2px;background:transparent">
-        </div>
-      </div>`)}
-    ${sec(2, '#b3577a', 'ความต้องการด้านการมองเห็น', 'มีปัญหาหรือความต้องการพิเศษอะไรบ้าง?', `
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">${VISION_OPTS.map(([k, l]) => chkrow('vision', k, l, '#b3577a')).join('')}</div>`)}
-    ${sec(3, '#4a8f6b', 'ประเภทเลนส์ที่ต้องการตัด', 'เลือกได้มากกว่า 1 ข้อ', `
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">${LENSTYPE_OPTS.map(([k, l, bg]) => lcard(k, l, bg, '#4a8f6b')).join('')}</div>`)}
-    ${sec(4, '#8a6bb8', 'ข้อมูลเพิ่มเติม', 'เพื่อการแนะนำที่ตรงกับความต้องการของลูกค้า', `
-      <form data-form="lensreq">
-        <div class="two">
-          <label>อายุ<input name="age" type="number" min="0" value="${esc(lr.age || '')}"></label>
-          <label>งบประมาณโดยประมาณ<select name="budget">
-            <option value="" ${!lr.budget ? 'selected' : ''}>— ไม่ระบุ —</option>
-            <option value="ไม่เกิน 5,000 บาท" ${lr.budget === 'ไม่เกิน 5,000 บาท' ? 'selected' : ''}>ไม่เกิน 5,000 บาท</option>
-            <option value="5,001–10,000 บาท" ${lr.budget === '5,001–10,000 บาท' ? 'selected' : ''}>5,001–10,000 บาท</option>
-            <option value="10,001–15,000 บาท" ${lr.budget === '10,001–15,000 บาท' ? 'selected' : ''}>10,001–15,000 บาท</option>
-            <option value="มากกว่า 15,000 บาท" ${lr.budget === 'มากกว่า 15,000 บาท' ? 'selected' : ''}>มากกว่า 15,000 บาท</option>
-          </select></label>
-        </div>
-        <label>อาชีพ / ลักษณะงาน<input name="occupation" value="${esc(lr.occupation || '')}" placeholder="เช่น งานออฟฟิศ, ขับรถส่งของ, ครู"></label>
-        <label>หมายเหตุเพิ่มเติม<textarea name="notes" rows="2" placeholder="เช่น เน้นสี/สไตล์, ความกังวลอื่นๆ">${esc(lr.notes || '')}</textarea></label>
-        <div class="foot"><button type="button" class="btn line" data-act="kioskback">ย้อนกลับ</button><button class="btn" type="submit">ถัดไป: ดูเลนส์ที่แนะนำ →</button></div>
-      </form>`)}
+    <h1 style="font-size:21px;margin:0 0 4px">เลือกเลนส์ที่ใช่สำหรับคุณ...</h1>
+    <p class="tag" style="margin:0 0 18px">เลือกประเภทเลนส์และคุณสมบัติที่ต้องการ เพื่อเปรียบเทียบราคาและสเปคเลนส์จากแต่ละแบรนด์</p>
+    <div class="panel" style="padding:18px 20px;margin-bottom:14px">
+      <h2 style="margin:0 0 12px;font-size:15px">ประเภทเลนส์</h2>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(100px,1fr));gap:10px">${LENSTYPE_OPTS.map(([k, l, bg]) => lcard(k, l, bg, '#4a8f6b')).join('')}</div>
+    </div>
+    <h2 style="margin:4px 0 2px;font-size:14.5px;color:var(--mute,#69756d);font-weight:600">ตัวเลือกคุณสมบัติเลนส์ (เลือกได้มากกว่า 1 ข้อในแต่ละหัวข้อ)</h2>
+    ${catSec('แบรนด์ (Brand)', '', brandOpts.map(b => mchip('brand', b, b)).join(''))}
+    ${catSec('ระดับเลนส์ (Level)', 'level', LENS_TIER_OPTS.map(k => mchip('level', k, LENS_TIER_LABELS[k] || k)).join(''))}
+    ${catSec('ค่าดัชนีหักเหแสง (Index)', 'index', LENS_INDEX_OPTS.map(([k, l]) => mchip('lensIndex', k, l)).join(''))}
+    ${catSec('สารเคลือบผิวเลนส์ (Coating)', 'coating', LENS_COATING_OPTS.map(([k, l]) => mchip('coating', k, l)).join(''))}
+    ${catSec('เลนส์เปลี่ยนสี (Photochromic)', 'photochromic', photoOpts.map(([k, l]) => mchip('photochromic', k, l)).join(''))}
+    <div class="foot" style="margin-top:4px">
+      <button type="button" class="btn line" data-act="kioskback">ย้อนกลับ</button>
+    </div>
+    <button type="button" class="btn" data-act="lensreqgo" style="width:100%;padding:16px;font-size:15.5px;border-radius:14px;margin-top:10px">แสดงผลลัพธ์ →</button>
   `;
 }
 function kioskProductBrowse() {
@@ -1679,7 +1764,9 @@ document.addEventListener('click', e => {
     else if (id === 'frame') { S.cust = K.custId; K.pq = ''; K.pcat = 'frame'; K.step = 'pick'; render(); }
     else { if (id === 'exam') { K.cc = []; K.ccOther = ''; K.ccNew = ''; } K.step = id === 'exam' ? 'examintake' : 'claimform'; render(); }
   }
-  else if (a === 'lrtoggle') { const group = b.dataset.group, arr = K.lr[group]; K.lr[group] = arr.includes(id) ? arr.filter(x => x !== id) : [...arr, id]; render(); }
+  else if (a === 'lrtoggle') { const group = b.dataset.group, arr = K.lr[group] || (K.lr[group] = []); K.lr[group] = arr.includes(id) ? arr.filter(x => x !== id) : [...arr, id]; render(); }
+  else if (a === 'lensreqgo') { S.cust = K.custId; K.pq = ''; K.pcat = 'lens'; K.hist.push(K.step); K.step = 'pick'; render(); }
+  else if (a === 'lenstut') { dialog(lensTutorialHTML(id, K.lr.lenstype)); }
   else if (a === 'lensfiltertoggle') { K.lensFilterOn = b.dataset.force === 'off' ? false : (b.tagName === 'INPUT' ? b.checked : true); render(); }
   else if (a === 'kiosklookuppick') { K.custId = id; K.hist.push(K.step); K.step = 'menu'; render(); }
   else if (a === 'histopen') {
@@ -1909,9 +1996,6 @@ document.addEventListener('submit', async e => {
       const ccText = [K.cc.join(', '), (K.ccOther || '').trim()].filter(Boolean).join(' / ');
       const pre = [ccText && `CC: ${ccText}`, d.disease && `โรคประจำตัว: ${d.disease}`, d.eye_history && `โรคตา/ประวัติ: ${d.eye_history}`, d.meds && `ประวัติการใช้ยา: ${d.meds}`].filter(Boolean).join(' · ');
       rxForm(K.custId, pre);
-    } else if (k === 'lensreq') {
-      K.lr.age = d.age || ''; K.lr.budget = d.budget || ''; K.lr.occupation = (d.occupation || '').trim(); K.lr.notes = (d.notes || '').trim();
-      S.cust = K.custId; K.pq = ''; K.pcat = 'lens'; K.hist.push(K.step); K.step = 'pick'; render();
     } else if (k === 'claimform') {
       const claimNote = 'หมายเหตุ: ระยะเวลาการเคลมสินค้าอาจมีระยะนานกว่าที่นัด เนื่องจากอะไหล่บางประเภทต้องรอสั่งนอก และอาจไม่ตรงรุ่น เนื่องจากไม่มีผลิต หากมีปัญหาดังกล่าวทางร้านจะมีการแจ้งให้ลูกค้าทราบอีกครั้ง';
       save('claims', { id: uid(), customer_id: K.custId, kind: d.kind, frame_model: d.frame_model.trim() || null, frame_code: d.frame_code.trim() || null, issue: d.issue.trim() || null, repair_items: d.repair_items.trim() || null, cost_thb: num(d.cost_thb), pickup_date: d.pickup_date || null, photo: K.photo || null, status: 'pending', signed_at: null, notes: claimNote, deleted_at: null });
