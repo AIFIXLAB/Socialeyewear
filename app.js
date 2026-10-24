@@ -829,21 +829,37 @@ function lensPresentView(p) {
         ${lensVariants(p).length > 1 ? `
         ${kicker('PRICE LIST · ตารางชุดตัวเลือกและราคา')}
         <div style="border:1px solid var(--line,#e4ddd2);border-radius:12px;overflow:hidden;margin-bottom:22px">
-          <table style="width:100%;border-collapse:collapse"><thead><tr>
-            <th style="text-align:left;padding:10px 16px;background:#f3f0e9;font-size:12.5px">Index</th>
-            <th style="text-align:left;padding:10px 16px;background:#f3f0e9;font-size:12.5px">Coating</th>
-            <th style="text-align:left;padding:10px 16px;background:#f3f0e9;font-size:12.5px">เปลี่ยนสี</th>
-            <th style="text-align:left;padding:10px 16px;background:#f3f0e9;font-size:12.5px">ย้อมสี</th>
-            <th style="text-align:right;padding:10px 16px;background:#f3f0e9;font-size:12.5px">ราคา</th>
-          </tr></thead><tbody>
-            ${lensVariants(p).sort((a, b) => a.price - b.price).map(v => `<tr>
-              <td style="padding:10px 16px;border-top:1px solid var(--line,#e4ddd2)">${esc(v.index) || '—'}</td>
-              <td style="padding:10px 16px;border-top:1px solid var(--line,#e4ddd2)">${esc((LENS_COATING_OPTS.find(c => c[0] === v.coating) || [])[1] || v.coating) || '—'}</td>
-              <td style="padding:10px 16px;border-top:1px solid var(--line,#e4ddd2)">${esc((LENS_COLOR_OPTS.find(c => c[0] === v.color_change) || [])[1] || 'ไม่มี')}</td>
-              <td style="padding:10px 16px;border-top:1px solid var(--line,#e4ddd2)">${esc(v.tint) || '—'}</td>
-              <td style="padding:10px 16px;border-top:1px solid var(--line,#e4ddd2);text-align:right;font-weight:700">${baht(v.price)}</td>
-            </tr>`).join('')}
-          </tbody></table>
+          ${(() => {
+            const groups = {};
+            lensVariants(p).forEach(v => { const k = v.index || '—ไม่ระบุ Index—'; (groups[k] = groups[k] || []).push(v); });
+            const idxKeys = Object.keys(groups).sort((a, b) => {
+              const na = parseFloat(a), nb = parseFloat(b);
+              if (isNaN(na) && isNaN(nb)) return 0;
+              if (isNaN(na)) return 1; if (isNaN(nb)) return -1;
+              return na - nb;
+            });
+            return idxKeys.map((idxKey, gi) => `
+              <table style="width:100%;border-collapse:collapse">
+                ${gi > 0 ? `<colgroup></colgroup>` : ''}
+                <thead>
+                  <tr><th colspan="4" style="text-align:left;padding:9px 16px;background:#e7e1d2;font-size:13px;font-weight:700;${gi > 0 ? 'border-top:2px solid var(--line,#e4ddd2)' : ''}">Index ${esc(idxKey)}</th></tr>
+                  <tr>
+                    <th style="text-align:left;padding:8px 16px;background:#f3f0e9;font-size:12px;color:var(--mute,#777);font-weight:600">Coating</th>
+                    <th style="text-align:left;padding:8px 16px;background:#f3f0e9;font-size:12px;color:var(--mute,#777);font-weight:600">เปลี่ยนสี</th>
+                    <th style="text-align:left;padding:8px 16px;background:#f3f0e9;font-size:12px;color:var(--mute,#777);font-weight:600">ย้อมสี</th>
+                    <th style="text-align:right;padding:8px 16px;background:#f3f0e9;font-size:12px;color:var(--mute,#777);font-weight:600">ราคา</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${groups[idxKey].sort((a, b) => a.price - b.price).map(v => `<tr>
+                    <td style="padding:9px 16px;border-top:1px solid var(--line,#e4ddd2)">${esc((LENS_COATING_OPTS.find(c => c[0] === v.coating) || [])[1] || v.coating) || '—'}</td>
+                    <td style="padding:9px 16px;border-top:1px solid var(--line,#e4ddd2)">${esc((LENS_COLOR_OPTS.find(c => c[0] === v.color_change) || [])[1] || 'ไม่มี')}</td>
+                    <td style="padding:9px 16px;border-top:1px solid var(--line,#e4ddd2)">${esc(v.tint) || '—'}</td>
+                    <td style="padding:9px 16px;border-top:1px solid var(--line,#e4ddd2);text-align:right;font-weight:700">${baht(v.price)}</td>
+                  </tr>`).join('')}
+                </tbody>
+              </table>`).join('');
+          })()}
         </div>` : ''}
         <div style="display:flex;align-items:center;justify-content:space-between;background:#f3f0e9;border-radius:14px;padding:18px 22px;gap:14px;flex-wrap:wrap">
           <div><div class="tag">${lensVariants(p).length > 1 ? 'ราคาเริ่มต้น (เลือกชุดตัวเลือกเพื่อดูราคาที่แน่นอน)' : 'ราคาแนะนำ'}</div><div style="font-size:12px;color:var(--mute,#777)">${ls.warranty ? 'รับประกัน: ' + esc(ls.warranty) : 'สอบถามเงื่อนไขเพิ่มเติมกับพนักงาน'}</div></div>
