@@ -451,10 +451,12 @@ const views = {
     const chips = [['all', 'ทั้งหมด'], ...Object.entries(TYPES)].map(([k, l]) => `<button class="chip ${S.ptype === k ? 'on' : ''}" data-act="ptype" data-id="${k}">${l}</button>`).join('');
     const missingOther = OTHER_ITEMS.filter(n => !live('products').some(p => p.product_name === n));
     const lensCount = live('products').filter(p => p.product_type === 'lens' && p.active !== false).length;
-    const hoyaHave = live('products').filter(p => p.product_name.startsWith('HOYA ')).length;
+    const hoyaNames = new Set(HOYA_LENSES.map(o => o.product_name));
+    const hoyaHave = live('products').filter(p => hoyaNames.has(p.product_name)).length;
+    const hoyaLegacy = live('products').filter(p => p.product_name.startsWith('HOYA ') && !hoyaNames.has(p.product_name)).length;
     const hoyaUpToDate = ls.get('hoyaSyncVer', '') === HOYA_DATA_VERSION;
     const hoyaStatus = hoyaUpToDate
-      ? `<span class="tag" style="align-self:center;white-space:nowrap">เลนส์ HOYA เป็นปัจจุบันแล้ว (${hoyaHave}/${HOYA_LENSES.length}) ✓</span>`
+      ? `<span class="tag" style="align-self:center;white-space:nowrap">เลนส์ HOYA เป็นปัจจุบันแล้ว (${hoyaHave}/${HOYA_LENSES.length}) ✓${hoyaLegacy ? ` · สินค้าเก่าแบบแยกรายตัวเลือกอีก ${hoyaLegacy} รายการ` : ''}</span>`
       : `<button class="btn line" data-act="hoyaimport">${hoyaHave === 0 ? `นำเข้าเลนส์ HOYA ${HOYA_LENSES.length} รายการ` : `ซิงก์เลนส์ HOYA เดี๋ยวนี้ (${hoyaHave}/${HOYA_LENSES.length})`}</button>`;
     return `<div class="bar"><div><h1>สินค้า</h1><p class="sub" style="margin:0">ราคา สต็อก และแท็กการใช้งานสำหรับ Sales Studio · ข้อมูลเลนส์ HOYA ซิงก์ให้อัตโนมัติทุกครั้งที่เข้าแอป ไม่ต้องกดอัปเดตเอง</p></div><div class="tools"><input placeholder="ค้นหาชื่อ SKU แบรนด์" value="${esc(S.pq)}" data-bind="pq" style="width:220px">${missingOther.length ? `<button class="btn line" data-act="impother">นำเข้ารายการบริการเดิม ${missingOther.length} รายการ</button>` : ''}${hoyaStatus}${lensCount ? `<button class="btn line" data-act="gomode" data-id="lenscat">เปิดแคตตาล็อกเลนส์</button>` : ''}<button class="btn line" data-act="newframe">เพิ่มกรอบแว่น</button><button class="btn" data-act="newprod">เพิ่มสินค้า (เลนส์/อื่นๆ)</button></div></div>
     <div class="chips">${chips}</div>
