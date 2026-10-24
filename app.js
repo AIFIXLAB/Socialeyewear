@@ -1489,6 +1489,10 @@ function hubView() {
       <div style="font-size:18px;font-weight:700;margin-bottom:6px">Admin</div>
       <div style="font-size:12.5px;color:#565b61;line-height:1.7">ประวัติลูกค้า สินค้า ใบเสนอราคา และภาพรวมร้าน</div>
     </button>
+    <button data-act="gokeynote" style="flex:1;min-width:240px;padding:30px 22px;border-radius:18px;border:1px solid rgba(255,255,255,.7);background:rgba(255,255,255,.55);backdrop-filter:blur(6px);box-shadow:0 14px 34px rgba(20,22,26,.2);color:#23262a;cursor:pointer;text-align:left">
+      <div style="font-size:18px;font-weight:700;margin-bottom:6px">คีย์โน้ตพรีเซนต์</div>
+      <div style="font-size:12.5px;color:#565b61;line-height:1.7">สไลด์แนะนำเลนส์ โค้ทติ้ง เปลี่ยนสี และย้อมสี เปิดพรีเซนต์เต็มจอให้ลูกค้าดูได้ทันที</div>
+    </button>
   </div>
   </div>`;
 }
@@ -2214,6 +2218,7 @@ document.addEventListener('click', e => {
   else if (a === 'custview') { S.custView = id; render(); }
   else if (a === 'splashgo') { S.activeSeller = null; S.mode = 'hub'; render(); }
   else if (a === 'gomode') { if (id === 'kiosk') kioskReset(); S.mode = id; render(); }
+  else if (a === 'gokeynote') { S.mode = 'admin'; S.v = 'keynote'; render(); }
   else if (a === 'kioskexit') { const viaPin = !!S.activeSeller; S.activeSeller = null; S.mode = viaPin ? 'splash' : 'hub'; render(); }
   else if (a === 'opencatalog') { S.catReturn = id || ''; S.catDetail = null; S.mode = 'lenscat'; render(); }
   else if (a === 'closecatalog') { S.mode = S.catReturn || ''; S.catReturn = ''; render(); }
