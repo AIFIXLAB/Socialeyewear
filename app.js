@@ -82,11 +82,19 @@ async function loadShop() {
 }
 const pendingCount = () => T.reduce((n, t) => n + db[t].filter(r => r._dirty && !r._err).length, 0);
 const errCount = () => T.reduce((n, t) => n + db[t].filter(r => r._err).length, 0);
+// รายการที่เคยซิงก์ไม่สำเร็จ (_err) จะไม่ถูกลองใหม่อัตโนมัติอีก (กันไม่ให้วนส่งรายการพังซ้ำๆ ไม่จบ) — ฟังก์ชันนี้ล้างสถานะผิดพลาดแล้วสั่งซิงก์ใหม่ทั้งหมด ให้กดได้เองตรงแถบสถานะ
+function retryFailedSync() {
+  let n = 0;
+  T.forEach(t => db[t].forEach(r => { if (r._err) { delete r._err; r._dirty = true; r.updated_at = now(); n++; } }));
+  if (n) { persist(); toast(`กำลังลองซิงก์ใหม่ ${n} รายการ`); sync(); }
+}
 function setStatus() {
   const el = $('#sync'); if (!el) return; const c = cfg();
   const s = !navigator.onLine ? ['off', 'ออฟไลน์ · บันทึกในเครื่อง'] : !sess ? ['off', 'ยังไม่ได้ล็อกอิน · บันทึกในเครื่อง'] : !c.url || !c.key ? ['off', 'ยังไม่ตั้งค่า Supabase'] : !shop ? ['off', 'ยังไม่มีร้าน'] : ['ok', status || 'เชื่อมต่อแล้ว'];
   const p = pendingCount(), e = errCount();
-  el.className = 'sync ' + s[0]; el.innerHTML = `<i></i><span>${esc(s[1])}${p ? ` · รอซิงก์ ${p}` : ''}${e ? ` · ผิดพลาด ${e}` : ''}</span>`;
+  el.className = 'sync ' + s[0]; el.innerHTML = `<i></i><span>${esc(s[1])}${p ? ` · รอซิงก์ ${p}` : ''}${e ? ` · ผิดพลาด ${e} (แตะเพื่อลองใหม่)` : ''}</span>`;
+  el.style.cursor = e ? 'pointer' : '';
+  el.onclick = e ? retryFailedSync : null;
 }
 // ดึงข้อมูลใหม่จากเซิร์ฟเวอร์ก่อน (แก้ล่าสุดชนะ) แล้วจึงส่งรายการที่แก้ในเครื่องขึ้นไป
 async function sync() {
@@ -2320,7 +2328,9 @@ function syncHoyaCatalog(opts) {
   const force = opts && opts.force;
   const newNames = new Set(HOYA_LENSES.map(o => o.product_name));
   dedupeHoyaProducts(newNames);
-  if (!force && ls.get('hoyaSyncVer', '') === HOYA_DATA_VERSION) return null;
+  // เช็คจำนวนจริงด้วย ไม่ใช่เช็คแค่ธงเวอร์ชัน — กันปัญหาธงบอกว่า "เสร็จแล้ว" ทั้งที่ข้อมูลจริงในเครื่องไม่ครบ (เช่น ตอนพื้นที่เก็บข้อมูลเคยเต็มแล้วบันทึกไม่สำเร็จ)
+  const curHave = live('products').filter(p => newNames.has(p.product_name)).length;
+  if (!force && ls.get('hoyaSyncVer', '') === HOYA_DATA_VERSION && curHave === newNames.size) return null;
   const byName = {}; live('products').forEach(p => { byName[p.product_name] = p; });
   const vkey = v => [v.index || '', v.coating || '', v.color_change || 'none'].join('|');
   let added = 0, updated = 0, removed = 0;
@@ -2368,7 +2378,9 @@ function syncApolloCatalog(opts) {
   const force = opts && opts.force;
   const newNames = new Set(APOLLO_LENSES.map(o => o.product_name));
   dedupeApolloProducts(newNames);
-  if (!force && ls.get('apolloSyncVer', '') === APOLLO_DATA_VERSION) return null;
+  // เช็คจำนวนจริงด้วย ไม่ใช่เช็คแค่ธงเวอร์ชัน — กันปัญหาธงบอกว่า "เสร็จแล้ว" ทั้งที่ข้อมูลจริงในเครื่องไม่ครบ (เช่น ตอนพื้นที่เก็บข้อมูลเคยเต็มแล้วบันทึกไม่สำเร็จ)
+  const curHave = live('products').filter(p => newNames.has(p.product_name)).length;
+  if (!force && ls.get('apolloSyncVer', '') === APOLLO_DATA_VERSION && curHave === newNames.size) return null;
   const byName = {}; live('products').forEach(p => { byName[p.product_name] = p; });
   const vkey = v => [v.index || '', v.coating || '', v.color_change || 'none'].join('|');
   let added = 0, updated = 0, removed = 0;
