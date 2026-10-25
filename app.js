@@ -23,7 +23,12 @@ const COLS = {
 };
 const T = Object.keys(COLS);
 const db = {}; T.forEach(t => db[t] = ls.get('db_' + t, []));
-const persist = () => { try { T.forEach(t => ls.set('db_' + t, db[t])); } catch { toast('พื้นที่เก็บข้อมูลในเครื่องเต็ม ข้อมูลที่ซิงก์แล้วยังปลอดภัยบนระบบ'); } };
+// เซฟแยกทีละตาราง — กันไม่ให้ตารางเดียวที่ข้อมูลใหญ่เกิน (เช่น สินค้า) ทำให้ตารางอื่น (ลูกค้า/ใบเสนอราคา) พลอยไม่ถูกบันทึกไปด้วยถ้าพื้นที่เก็บข้อมูลในเครื่องเต็ม
+const persist = () => {
+  let failed = [];
+  T.forEach(t => { try { ls.set('db_' + t, db[t]); } catch { failed.push(t); } });
+  if (failed.length) toast('พื้นที่เก็บข้อมูลในเครื่องเต็ม — บันทึกลงเครื่องไม่ได้บางส่วน (' + failed.join(', ') + ') ข้อมูลที่ซิงก์ขึ้นระบบไปแล้วยังปลอดภัย');
+};
 const live = t => db[t].filter(r => !r.deleted_at);
 const find = (t, id) => db[t].find(r => r.id === id);
 let shop = ls.get('shop', null), sess = ls.get('sess', null), syncing = false, status = '';
@@ -94,6 +99,10 @@ async function sync() {
         const filter = `or=(updated_at.gt.${encodeURIComponent(cur.ts)},and(updated_at.eq.${encodeURIComponent(cur.ts)},id.gt.${cur.id}))`;
         const rows = await api(`/rest/v1/${t}?${filter}&order=updated_at.asc,id.asc&limit=1000`) || [];
         for (const row of rows) {
+          // กันข้อมูลรูปภาพเก่า (ถ้ามีติดมาจากเซิร์ฟเวอร์จากเวอร์ชันก่อนหน้า) ไม่ให้มาเปลืองพื้นที่เก็บข้อมูลในเครื่องซ้ำ — แอปดึงรูปสดจาก HOYA_LENSES/APOLLO_LENSES ในโค้ดอยู่แล้ว ไม่ต้องเก็บในฐานข้อมูล
+          if (t === 'products' && row.lens_spec && (row.lens_spec.photos || row.lens_spec.photo_url)) {
+            const { photos, photo_url, ...rest } = row.lens_spec; row.lens_spec = rest;
+          }
           const i = db[t].findIndex(r => r.id === row.id), l = db[t][i];
           if (!(l && l._dirty && !l._err && l.updated_at > row.updated_at)) i < 0 ? db[t].push(row) : db[t][i] = row;
         }
