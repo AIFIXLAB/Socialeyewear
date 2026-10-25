@@ -184,7 +184,7 @@ const SHOP_ADDR = 'วิคตอเรียการ์เด้น ห้อ
 const SHOP_PHONE = '086-9885360 / 097-2382217';
 const SHOP_TAXID = '4101600006509';
 const NAV = [['customers', 'ลูกค้า'], ['products', 'สินค้า'], ['keynote', 'คีย์โน้ตพรีเซนต์'], ['insights', 'ภาพรวม'], ['settings', 'ตั้งค่า']];
-const S = { v: 'customers', need: 'general', cart: [], cust: '', disc: 0, notes: '', q: '', pq: '', ptype: 'all', staff: null, mode: 'splash', custView: 'all', custFrom: '', custTo: '', catQ: '', catCompare: [], catDetail: null, catReturn: '', catDesign: '', catMain: '', activeSeller: null, varPick: null, knSel: [], knIdx: 0 };
+const S = { v: 'customers', need: 'general', cart: [], cust: '', disc: 0, notes: '', q: '', pq: '', ptype: 'all', pbrand: '', staff: null, mode: 'splash', custView: 'all', custFrom: '', custTo: '', catQ: '', catCompare: [], catDetail: null, catReturn: '', catDesign: '', catMain: '', activeSeller: null, varPick: null, knSel: [], knIdx: 0 };
 const freshLR = () => ({ purpose: [], other: '', vision: [], lenstype: [], brand: [], level: [], lensIndex: [], coating: [], photochromic: [], age: '', budget: '', occupation: '', notes: '' });
 const freshDisc = () => ({ type: 'amt', val: 0 });
 let K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, discFrame: freshDisc(), discLens: freshDisc(), lensFilterOn: true };
@@ -784,19 +784,37 @@ const views = {
       : `<button class="btn line bad" data-act="apolloimport">${apolloHave === 0 ? `นำเข้าเลนส์ Apollo ${APOLLO_LENSES.length} รายการ` : `ซิงก์เลนส์ Apollo ใหม่ — ข้อมูลไม่ครบ (${apolloHave}/${APOLLO_LENSES.length})`}</button>`;
     const apolloRestoreBtn = apolloDeleted ? `<button class="btn line" data-act="apollorestore">กู้คืนสินค้า Apollo ที่ลบไป ${apolloDeleted} รายการ</button>` : '';
     const apolloCleanBtn = (apolloLegacy && apolloUpToDate) ? `<button class="btn line bad" data-act="apollocleanlegacy">ลบรายการ Apollo เก่าซ้ำซ้อน ${apolloLegacy} รายการ</button>` : '';
+    const rowHtml = p => `<tr><td>${esc(p.product_name)}<br><span class="tag">${esc([p.sku, p.brand].filter(Boolean).join(' · '))}</span></td><td>${TYPES[p.product_type]}</td><td>${priceLabel(p)}</td>${mgr() ? `<td>${p.cost_thb != null ? baht(p.cost_thb) : '-'}</td>` : ''}<td>${p.stock_qty == null ? '-' : `<span class="${p.stock_qty <= 2 ? 'warn' : ''}">${p.stock_qty}</span>`}</td><td>${p.active === false ? '<span class="st">ปิดขาย</span>' : '<span class="st accepted">ขายอยู่</span>'}</td><td class="act"><button class="btn line sm" data-act="editprod" data-id="${p.id}">แก้ไข</button>${mgr() ? ` <button class="btn line sm bad" data-act="delprod" data-id="${p.id}">ลบ</button>` : ''}</td></tr>`;
+    const colCount = 6 + (mgr() ? 1 : 0);
+    const brandNav = (S.ptype === 'lens' || S.ptype === 'frame');
+    let brandBarHtml = '', bodyHtml;
+    if (brandNav) {
+      const groups = new Map();
+      rows.forEach(p => { const b = p.brand || 'อื่นๆ'; if (!groups.has(b)) groups.set(b, []); groups.get(b).push(p); });
+      const keys = [...groups.keys()].sort((a, b) => { if (a === 'อื่นๆ') return 1; if (b === 'อื่นๆ') return -1; return a.localeCompare(b, 'th'); });
+      brandBarHtml = keys.length ? `<div class="chips" style="flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:6px">${keys.map(b => `<button class="chip ${S.pbrand === b ? 'on' : ''}" data-act="pbrand" data-id="${esc(b)}" style="white-space:nowrap">${esc(b)} <span class="tag" style="font-weight:400">(${groups.get(b).length})</span></button>`).join('')}</div>` : '';
+      const sel = S.pbrand && groups.has(S.pbrand) ? S.pbrand : '';
+      if (!sel) {
+        bodyHtml = keys.length ? `<div class="panel" style="text-align:center;padding:40px 20px"><p class="tag">เลือกแบรนด์ด้านบนเพื่อดูรายการสินค้า</p></div>` : empty('ยังไม่มีสินค้า', `<button class="btn" data-act="newprod">เพิ่มสินค้า</button> ${live('products').length ? '' : '<button class="btn line" data-act="sample">เพิ่มสินค้าตัวอย่าง 8 รายการ</button>'}`);
+      } else {
+        const brandRows = [...groups.get(sel)].sort((a, b) => (a.product_name || '').localeCompare(b.product_name || '', 'th'));
+        bodyHtml = `<div class="bar" style="margin:4px 0 10px"><button class="btn line sm" data-act="pbrand" data-id="">← กลับไปดูทุกแบรนด์</button><h2 style="margin:0">${esc(sel)} <span class="tag" style="font-weight:400">(${brandRows.length} รายการ)</span></h2></div><div class="panel wrap"><table><tr><th>สินค้า</th><th>ประเภท</th><th>ราคา</th>${mgr() ? '<th>ต้นทุน</th>' : ''}<th>สต็อก</th><th>สถานะ</th><th></th></tr>${brandRows.map(rowHtml).join('')}</table></div>`;
+      }
+    } else {
+      bodyHtml = rows.length ? (() => {
+        const rowsSorted = [...rows].sort((a, b) => (a.brand || '').localeCompare(b.brand || '', 'th') || (a.product_name || '').localeCompare(b.product_name || '', 'th'));
+        const prodGroups = new Map();
+        rowsSorted.forEach(p => { const b = p.brand || 'อื่นๆ'; if (!prodGroups.has(b)) prodGroups.set(b, []); prodGroups.get(b).push(p); });
+        const brandKeys = [...prodGroups.keys()];
+        const groupHtml = b => `<tr><td colspan="${colCount}" style="background:#f4f1ea;font-weight:700;font-size:12.5px;padding:8px 10px;letter-spacing:.2px">${esc(b)} <span class="tag" style="font-weight:400">(${prodGroups.get(b).length} รายการ)</span></td></tr>${prodGroups.get(b).map(rowHtml).join('')}`;
+        return `<div class="panel wrap"><table><tr><th>สินค้า</th><th>ประเภท</th><th>ราคา</th>${mgr() ? '<th>ต้นทุน</th>' : ''}<th>สต็อก</th><th>สถานะ</th><th></th></tr>${brandKeys.map(groupHtml).join('')}</table></div>`;
+      })()
+        : empty('ยังไม่มีสินค้า', `<button class="btn" data-act="newprod">เพิ่มสินค้า</button> ${live('products').length ? '' : '<button class="btn line" data-act="sample">เพิ่มสินค้าตัวอย่าง 8 รายการ</button>'}`);
+    }
     return `<div class="bar"><div><h1>สินค้า</h1><p class="sub" style="margin:0">ราคา สต็อก และแท็กการใช้งานสำหรับ Sales Studio · ข้อมูลเลนส์ HOYA/Apollo ซิงก์ให้อัตโนมัติทุกครั้งที่เข้าแอป ไม่ต้องกดอัปเดตเอง</p></div><div class="tools"><input placeholder="ค้นหาชื่อ SKU แบรนด์" value="${esc(S.pq)}" data-bind="pq" style="width:220px">${missingOther.length ? `<button class="btn line" data-act="impother">นำเข้ารายการบริการเดิม ${missingOther.length} รายการ</button>` : ''}${hoyaStatus}${hoyaRestoreBtn}${hoyaCleanBtn}${apolloStatus}${apolloRestoreBtn}${apolloCleanBtn}${lensCount ? `<button class="btn line" data-act="gomode" data-id="lenscat">เปิดแคตตาล็อกเลนส์</button>` : ''}${missingFrameHist.length ? `<button class="btn line" data-act="impframehist">นำเข้ากรอบแว่นจากประวัติการขาย ${missingFrameHist.length} รายการ</button>` : ''}<button class="btn line" data-act="newframe">เพิ่มกรอบแว่น</button><button class="btn" data-act="newprod">เพิ่มสินค้า (เลนส์/อื่นๆ)</button></div></div>
     <div class="chips">${chips}</div>
-    ${rows.length ? (() => {
-      const colCount = 6 + (mgr() ? 1 : 0);
-      const rowsSorted = [...rows].sort((a, b) => (a.brand || '').localeCompare(b.brand || '', 'th') || (a.product_name || '').localeCompare(b.product_name || '', 'th'));
-      const prodGroups = new Map();
-      rowsSorted.forEach(p => { const b = p.brand || 'อื่นๆ'; if (!prodGroups.has(b)) prodGroups.set(b, []); prodGroups.get(b).push(p); });
-      const brandKeys = [...prodGroups.keys()];
-      const rowHtml = p => `<tr><td>${esc(p.product_name)}<br><span class="tag">${esc([p.sku, p.brand].filter(Boolean).join(' · '))}</span></td><td>${TYPES[p.product_type]}</td><td>${priceLabel(p)}</td>${mgr() ? `<td>${p.cost_thb != null ? baht(p.cost_thb) : '-'}</td>` : ''}<td>${p.stock_qty == null ? '-' : `<span class="${p.stock_qty <= 2 ? 'warn' : ''}">${p.stock_qty}</span>`}</td><td>${p.active === false ? '<span class="st">ปิดขาย</span>' : '<span class="st accepted">ขายอยู่</span>'}</td><td class="act"><button class="btn line sm" data-act="editprod" data-id="${p.id}">แก้ไข</button>${mgr() ? ` <button class="btn line sm bad" data-act="delprod" data-id="${p.id}">ลบ</button>` : ''}</td></tr>`;
-      const groupHtml = b => `<tr><td colspan="${colCount}" style="background:#f4f1ea;font-weight:700;font-size:12.5px;padding:8px 10px;letter-spacing:.2px">${esc(b)} <span class="tag" style="font-weight:400">(${prodGroups.get(b).length} รายการ)</span></td></tr>${prodGroups.get(b).map(rowHtml).join('')}`;
-      return `<div class="panel wrap"><table><tr><th>สินค้า</th><th>ประเภท</th><th>ราคา</th>${mgr() ? '<th>ต้นทุน</th>' : ''}<th>สต็อก</th><th>สถานะ</th><th></th></tr>${brandKeys.map(groupHtml).join('')}</table></div>`;
-    })()
-      : empty('ยังไม่มีสินค้า', `<button class="btn" data-act="newprod">เพิ่มสินค้า</button> ${live('products').length ? '' : '<button class="btn line" data-act="sample">เพิ่มสินค้าตัวอย่าง 8 รายการ</button>'}`)}`;
+    ${brandBarHtml}
+    ${bodyHtml}`;
   },
   quotes() {
     const rows = live('quotes').sort((a, b) => b.created_at.localeCompare(a.created_at));
@@ -3873,7 +3891,8 @@ document.addEventListener('click', e => {
   const id = b.dataset.id, a = b.dataset.act;
   if (a === 'go') { S.v = id; render(); if (id === 'settings') loadStaff(); }
   else if (a === 'need') { S.need = id; render(); }
-  else if (a === 'ptype') { S.ptype = id; render(); }
+  else if (a === 'ptype') { S.ptype = id; S.pbrand = ''; render(); }
+  else if (a === 'pbrand') { S.pbrand = id; render(); }
   else if (a === 'pickvariant') {
     const p = find('products', id); if (!p) return;
     const variants = p.product_type === 'lens' ? lensVariants(p) : [{ price: p.retail_price_thb }];
