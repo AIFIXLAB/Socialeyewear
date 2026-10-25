@@ -1653,7 +1653,7 @@ function kioskMenu() {
   const c = find('customer_profiles', K.custId);
   return `<div class="panel" style="padding:30px;text-align:center">
     <div class="tag">ลูกค้า</div>
-    <div style="font-size:20px;font-weight:700;margin:4px 0 24px">${esc(c?.full_name || '')}</div>
+    <div style="font-size:20px;font-weight:700;margin:4px 0 24px">${esc(c?.full_name || '')}${c?.customer_code ? ` <span class="tag" style="font-weight:400;font-size:14px">รหัส ${esc(c.customer_code)}</span>` : ''}</div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
       ${svcBtn('exam', 'ตรวจสายตา')}${svcBtn('lens', 'แนะนำเลนส์')}${svcBtn('frame', 'ตัดกรอบและเลนส์ใหม่')}${svcBtn('claim', 'ซ่อมและเคลม')}
     </div>
