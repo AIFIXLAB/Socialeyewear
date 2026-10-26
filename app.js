@@ -197,6 +197,68 @@ function lrSummary() {
 }
 const CC_SEED = ["ตาพร่ามัว", "มองไกลไม่ชัด", "มองใกล้ไม่ชัด", "ปวดตา/ปวดกระบอกตา", "ตาแห้ง", "คันตา/ระคายเคือง", "ตาแดง", "น้ำตาไหล", "เห็นภาพซ้อน", "แพ้แสง/สู้แสงไม่ได้", "ปวดศีรษะบ่อย", "สายตาล้า/เพลีย", "แว่นเก่าชำรุด/อยากเปลี่ยนใหม่", "ตรวจสายตาประจำปี"];
 const knownCC = () => [...new Set([...CC_SEED, ...ls.get('ccSeed', [])])];
+// รายการโรคประจำตัวแบบติ๊กในหน้าซักประวัติ — key ใช้ตั้งชื่อ field ในฟอร์ม (chk_/med_/yr_ + key) และเก็บใน prescriptions.meta.diseases
+const CHRONIC_DISEASES = [['diabetes', 'เบาหวาน'], ['htn', 'ความดันโลหิตสูง'], ['chol', 'ไขมันในเลือดสูง'], ['allergy', 'ภูมิแพ้'], ['sle', 'SLE / รูมาตอยด์'], ['other', 'อื่นๆ']];
+// อ่านค่าจากฟอร์มซักประวัติ (ใช้ทั้งตอนกดบันทึกและตอนกดพิมพ์ โดยไม่ต้อง submit จริง)
+function examIntakeDataFromForm(d) {
+  const diseases = CHRONIC_DISEASES.map(([k, label]) => ({ key: k, label, on: !!d['chk_' + k], meds: (d['med_' + k] || '').trim(), years: num(d['yr_' + k]) })).filter(x => x.on || x.meds || x.years != null);
+  return {
+    diseases,
+    disease_other_text: (d.disease_other || '').trim() || null,
+    screen_hours: num(d.screen_hours),
+    last_exam: (d.last_exam || '').trim() || null,
+    wear_history: (d.wear_history || '').trim() || null,
+    eye_disease_history: (d.eye_history || '').trim() || null,
+    eye_accident: (d.eye_accident || '').trim() || null,
+    meds_other: (d.meds || '').trim() || null,
+    autoref_od: (d.autoref_od || '').trim() || null,
+    autoref_os: (d.autoref_os || '').trim() || null,
+    pdref_od: (d.pdref_od || '').trim() || null,
+    pdref_os: (d.pdref_os || '').trim() || null,
+    old_glasses: (d.old_glasses || '').trim() || null,
+    old_va_od: (d.old_va_od || '').trim() || null,
+    old_va_os: (d.old_va_os || '').trim() || null,
+    dominant_eye: d.dominant_eye || null,
+    dominant_hand: d.dominant_hand || null,
+    purpose: (d.purpose || '').trim() || null,
+    examiner_role: (d.examiner_role || '').trim() || null,
+    notes2: (d.notes2 || '').trim() || null
+  };
+}
+function examIntakeHasData(m) {
+  return !!(m && (m.diseases.length || m.disease_other_text || m.screen_hours != null || m.last_exam || m.wear_history || m.eye_disease_history || m.eye_accident || m.meds_other || m.autoref_od || m.autoref_os || m.pdref_od || m.pdref_os || m.old_glasses || m.old_va_od || m.old_va_os || m.dominant_eye || m.dominant_hand || m.purpose || m.examiner_role || m.notes2));
+}
+// หน้าพิมพ์ "ประวัติสุขภาพ" ใส่กระดาษ A4 — ใช้ได้ทั้งก่อนบันทึก (จากหน้าซักประวัติ) และหลังบันทึกแล้ว (จากประวัติลูกค้า)
+function examIntakePrintView(custId, ccText, ccOther, m) {
+  const dis = (m.diseases || []).map(x => `${x.label}${x.meds ? ' · ทานยา: ' + x.meds : ''}${x.years != null ? ' · เป็นมา ' + x.years + ' ปี' : ''}`);
+  const row = (l, v) => v ? `<div class="row" style="border:0;padding:3px 0"><span class="tag">${esc(l)}</span><span>${esc(v)}</span></div>` : '';
+  dialog(`<style>#dlg{width:min(720px,95vw)!important;max-width:95vw!important}</style>
+  <div class="sheet"><h2>ประวัติสุขภาพก่อนตรวจสายตา</h2><div class="meta">${esc(shop?.name || 'Social Eyewear')} · ${esc(custName(custId))} · ${day(now())}</div>
+  <h3 style="margin-top:14px">อาการทางตา</h3>
+  ${row('อาการที่แจ้ง', [ccText, ccOther].filter(Boolean).join(' / ') || '-')}
+  <h3 style="margin-top:14px">โรคประจำตัว</h3>
+  ${dis.length ? dis.map(t => `<div class="row" style="border:0;padding:2px 0">${esc(t)}</div>`).join('') : '<div class="tag">ไม่มี</div>'}
+  ${row('อื่นๆ (ระบุ)', m.disease_other_text)}
+  ${row('ประวัติการใช้ยาอื่นๆ', m.meds_other)}
+  <h3 style="margin-top:14px">ประวัติการใช้งาน / ตรวจตา</h3>
+  ${row('ใช้สายตาใกล้/จ้องจอ (ชม./วัน)', m.screen_hours != null ? m.screen_hours + ' ชม.' : '')}
+  ${row('ตรวจสายตาล่าสุดเมื่อ/ที่ไหน', m.last_exam)}
+  ${row('ประวัติใช้คอนแทคเลนส์/แว่นเดิม', m.wear_history)}
+  ${row('ประวัติโรคตา', m.eye_disease_history)}
+  ${row('ประวัติอุบัติเหตุทางตา', m.eye_accident)}
+  <h3 style="margin-top:14px">ข้อมูลตรวจเบื้องต้น</h3>
+  ${row('Auto-Ref ขวา (OD)', m.autoref_od)}${row('Auto-Ref ซ้าย (OS)', m.autoref_os)}
+  ${row('PD (Ref) ขวา', m.pdref_od)}${row('PD (Ref) ซ้าย', m.pdref_os)}
+  ${row('แว่น/เลนส์เดิม ยี่ห้อ-รุ่น', m.old_glasses)}
+  ${row('VA เดิม ขวา', m.old_va_od)}${row('VA เดิม ซ้าย', m.old_va_os)}
+  ${row('ตาข้างที่ถนัด', m.dominant_eye === 'od' ? 'ขวา' : m.dominant_eye === 'os' ? 'ซ้าย' : m.dominant_eye)}
+  ${row('มือข้างที่ถนัด', m.dominant_hand === 'right' ? 'ขวา' : m.dominant_hand === 'left' ? 'ซ้าย' : m.dominant_hand)}
+  ${row('จุดประสงค์การตัดแว่น', m.purpose)}
+  ${row('ผู้ซักประวัติ/ตำแหน่ง', m.examiner_role)}
+  ${m.notes2 ? `<div style="margin-top:10px;padding-top:8px;border-top:1px dashed var(--line,#e4ddd2)">${esc(m.notes2)}</div>` : ''}
+  </div>
+  <div class="foot noprint"><button type="button" class="btn line" data-act="close">ปิด</button><button type="button" class="btn line" data-act="print">สั่งพิมพ์</button></div>`);
+}
 
 /* ---------- ตัวช่วยแสดงผล ---------- */
 const NEEDS = { general: 'ใช้งานทั่วไป', screen: 'ทำงานหน้าจอ', drive: 'ขับรถ/กลางคืน', outdoor: 'กลางแจ้ง', progressive: 'สายตายาว/โปรเกรสซีฟ' };
@@ -211,8 +273,8 @@ const NAV = [['customers', 'ลูกค้า'], ['products', 'สินค้�
 const S = { v: 'customers', need: 'general', cart: [], cust: '', disc: 0, notes: '', q: '', pq: '', ptype: 'all', pbrand: '', staff: null, mode: 'splash', custView: 'all', custFrom: '', custTo: '', catQ: '', catCompare: [], catDetail: null, catReturn: '', catDesign: '', catMain: '', activeSeller: null, varPick: null, knSel: [], knIdx: 0 };
 const freshLR = () => ({ purpose: [], other: '', vision: [], lenstype: [], brand: [], level: [], lensIndex: [], coating: [], photochromic: [], age: '', budget: '', occupation: '', notes: '' });
 const freshDisc = () => ({ type: 'amt', val: 0 });
-let K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, discFrame: freshDisc(), discLens: freshDisc(), lensFilterOn: true };
-const kioskReset = () => { K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, detailProdId: null, discFrame: freshDisc(), discLens: freshDisc(), lensFilterOn: true }; };
+let K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, discFrame: freshDisc(), discLens: freshDisc(), lensFilterOn: true, examMeta: null };
+const kioskReset = () => { K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, detailProdId: null, discFrame: freshDisc(), discLens: freshDisc(), lensFilterOn: true, examMeta: null }; };
 
 /* ---------- จับคู่เลนส์กับความต้องการลูกค้า (หน้าบริการลูกค้า ขั้นตอนที่ 1-3) ---------- */
 // ขั้นตอนที่ 3 ใช้ชุดตัวเลือกเดียวกับ LENS_DESIGN ที่หลังบ้านเป๊ะ ๆ (ไม่แยกชุดคำศัพท์กันสองที่)
@@ -1384,7 +1446,8 @@ function custView(id) {
       (m.od_ph != null || m.od_seg != null || m.od_param) ? `ขวา: ${[m.od_ph != null ? 'PH ' + m.od_ph : '', m.od_seg != null ? 'สูงถ้วย ' + m.od_seg : '', m.od_param || ''].filter(Boolean).join(' · ')}` : '',
       (m.os_ph != null || m.os_seg != null || m.os_param) ? `ซ้าย: ${[m.os_ph != null ? 'PH ' + m.os_ph : '', m.os_seg != null ? 'สูงถ้วย ' + m.os_seg : '', m.os_param || ''].filter(Boolean).join(' · ')}` : ''
     ].filter(Boolean).join(' / ');
-    return `<tr><td>${day(r.exam_date || r.created_at)}</td><td class="tag">${esc(r.examiner || '-')}</td><td>${fmtP(r.od_sph)} / ${fmtP(r.od_cyl)} / ${r.od_axis ?? '-'}</td><td class="tag">${fmtP(r.od_add ?? r.add_power)} / ${r.od_pd ?? r.pd ?? '-'}</td><td>${fmtP(r.os_sph)} / ${fmtP(r.os_cyl)} / ${r.os_axis ?? '-'}</td><td class="tag">${fmtP(r.os_add ?? r.add_power)} / ${r.os_pd ?? r.pd ?? '-'}</td><td class="tag">${esc(extra || '-')}</td><td>${mgr() ? `<button class="btn line sm bad" data-act="delrx" data-id="${r.id}" data-cid="${id}">ลบ</button>` : ''}</td></tr>`;
+    const hasHealth = examIntakeHasData(m);
+    return `<tr><td>${day(r.exam_date || r.created_at)}</td><td class="tag">${esc(r.examiner || '-')}</td><td>${fmtP(r.od_sph)} / ${fmtP(r.od_cyl)} / ${r.od_axis ?? '-'}</td><td class="tag">${fmtP(r.od_add ?? r.add_power)} / ${r.od_pd ?? r.pd ?? '-'}</td><td>${fmtP(r.os_sph)} / ${fmtP(r.os_cyl)} / ${r.os_axis ?? '-'}</td><td class="tag">${fmtP(r.os_add ?? r.add_power)} / ${r.os_pd ?? r.pd ?? '-'}</td><td class="tag">${esc(extra || '-')}</td><td style="white-space:nowrap">${hasHealth ? `<button class="btn line sm" data-act="printrxhealth" data-id="${r.id}" data-cid="${id}">พิมพ์</button> ` : ''}${mgr() ? `<button class="btn line sm bad" data-act="delrx" data-id="${r.id}" data-cid="${id}">ลบ</button>` : ''}</td></tr>`;
   }).join('')}</table></div>` : '<p class="tag">ยังไม่มีค่าสายตา</p>'}
   <h3 style="margin-top:18px">ประวัติการซื้อ</h3>
   <div style="display:flex;flex-direction:column;gap:10px">${qs.length ? qs.slice().sort((a, b) => b.created_at.localeCompare(a.created_at)).map(q => {
@@ -1734,19 +1797,55 @@ function kioskExamIntake() {
       <span style="display:inline-block;width:16px;height:16px;border-radius:4px;border:1.5px solid ${on ? '#fff' : 'rgba(0,0,0,.35)'};line-height:13px;font-size:11px;text-align:center">${on ? '✓' : ''}</span>${esc(s)}
     </button>`;
   };
+  const sec = (title, inner) => `<div class="tag" style="font-weight:700;margin:20px 0 8px;color:#23262a">${title}</div>${inner}`;
+  const dRow = ([k, label]) => `<div style="display:grid;grid-template-columns:1.3fr 1fr .8fr;gap:8px;align-items:center;padding:7px 0;border-bottom:1px dashed rgba(0,0,0,.08)">
+    <label class="chk" style="display:flex;align-items:center;gap:7px;margin:0;font-size:13.5px"><input type="checkbox" name="chk_${k}" style="width:17px;height:17px"> ${esc(label)}</label>
+    <input name="med_${k}" placeholder="ทานยา (ถ้ามี)" style="font-size:13px">
+    <input name="yr_${k}" type="number" min="0" placeholder="เป็นมา (ปี)" style="font-size:13px">
+  </div>`;
   return `<div class="panel" style="padding:26px">
     <h2 style="margin-top:0">ซักประวัติก่อนตรวจสายตา</h2>
     <p class="tag" style="margin-top:-6px">แตะติ๊กอาการที่ลูกค้าแจ้งได้เลย ถ้ายังไม่มีในรายการให้พิมพ์เพิ่มด้านล่าง — จะถูกบันทึกไว้ให้เลือกในครั้งถัดไปด้วย</p>
     <div style="display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 12px">${list.map(chip).join('')}</div>
-    <div style="display:flex;gap:10px;margin-bottom:18px">
+    <div style="display:flex;gap:10px;margin-bottom:6px">
       <input placeholder="พิมพ์อาการใหม่ที่ไม่มีในรายการ แล้วกด +" data-bind="ccnew" value="${esc(K.ccNew || '')}" style="flex:1">
       <button type="button" class="btn line sm" data-act="ccaddnew" style="white-space:nowrap">+ เพิ่มอาการ</button>
     </div>
     <form data-form="examintake">
       <label>อาการอื่นๆ นอกเหนือรายการ (รายละเอียดเพิ่มเติม)<textarea data-bind="ccother" rows="2" placeholder="ระบุรายละเอียดอาการอื่นๆ ที่ไม่อยู่ในรายการด้านบน">${esc(K.ccOther || '')}</textarea></label>
-      <div class="two"><label>โรคประจำตัว<input name="disease"></label><label>โรคตา / ประวัติรักษาตา<input name="eye_history"></label></div>
-      <label>ประวัติการใช้ยา<input name="meds"></label>
-      <div class="foot"><button type="button" class="btn line" data-act="kioskback">ย้อนกลับ</button><button class="btn" type="submit">ถัดไป: ตรวจสายตา</button></div>
+
+      ${sec('ประวัติสุขภาพ — โรคประจำตัว (ติ๊กที่มี แล้วกรอกยาและจำนวนปีถ้าทราบ)', `<div>${CHRONIC_DISEASES.map(dRow).join('')}</div>
+        <label style="margin-top:10px">อื่นๆ (ระบุโรคประจำตัวที่ไม่อยู่ในรายการ)<input name="disease_other"></label>`)}
+
+      <div class="two">${sec('ประวัติโรคตา', `<input name="eye_history" placeholder="เช่น ต้อหิน ต้อกระจก จอตาเสื่อม ฯลฯ">`)}${sec('ประวัติอุบัติเหตุทางตา', `<input name="eye_accident" placeholder="ถ้าไม่มีเว้นว่างได้">`)}</div>
+      <label>ประวัติการใช้ยาอื่นๆ (นอกเหนือโรคประจำตัวด้านบน)<input name="meds"></label>
+
+      ${sec('พฤติกรรมการใช้งาน / ประวัติการตรวจ', `<div class="two">
+        <label>ใช้สายตาใกล้ / จ้องจอต่อวัน (ชม.)<input name="screen_hours" type="number" min="0" step="0.5"></label>
+        <label>ตรวจสายตาล่าสุดเมื่อ/ที่ไหน<input name="last_exam"></label>
+      </div><label>ประวัติใช้คอนแทคเลนส์ / แว่นเดิม<input name="wear_history"></label>`)}
+
+      ${sec('ข้อมูลตรวจเบื้องต้น (ก่อนวัดค่าสายตา)', `<div class="two">
+        <label>Auto-Ref ขวา (OD)<input name="autoref_od" placeholder="เช่น -1.00 -0.50x180"></label>
+        <label>Auto-Ref ซ้าย (OS)<input name="autoref_os" placeholder="เช่น -1.00 -0.50x180"></label>
+      </div><div class="two">
+        <label>PD (Ref) ขวา<input name="pdref_od" type="number" step="0.5"></label>
+        <label>PD (Ref) ซ้าย<input name="pdref_os" type="number" step="0.5"></label>
+      </div><div class="two">
+        <label>แว่น/เลนส์เดิม ยี่ห้อ-รุ่น<input name="old_glasses"></label>
+        <label>ตาข้างที่ถนัด<select name="dominant_eye"><option value="">— ไม่ทราบ —</option><option value="od">ขวา</option><option value="os">ซ้าย</option></select></label>
+      </div><div class="two">
+        <label>VA เดิม ขวา<input name="old_va_od" placeholder="เช่น 6/12"></label>
+        <label>VA เดิม ซ้าย<input name="old_va_os" placeholder="เช่น 6/12"></label>
+      </div>`)}
+
+      ${sec('อื่นๆ', `<div class="two">
+        <label>มือข้างที่ถนัด<select name="dominant_hand"><option value="">— ไม่ทราบ —</option><option value="right">ขวา</option><option value="left">ซ้าย</option></select></label>
+        <label>จุดประสงค์การตัดแว่น<input name="purpose" placeholder="เช่น ใส่มองไกล ใส่ทำงานใกล้"></label>
+      </div><label>ผู้ซักประวัติ / ตำแหน่ง<input name="examiner_role"></label>
+      <label>หมายเหตุเพิ่มเติม<textarea name="notes2" rows="2"></textarea></label>`)}
+
+      <div class="foot"><button type="button" class="btn line" data-act="kioskback">ย้อนกลับ</button><button type="button" class="btn line" data-act="printexam">พิมพ์แบบฟอร์ม</button><button class="btn" type="submit">ถัดไป: ตรวจสายตา</button></div>
     </form>
   </div>`;
 }
@@ -2542,8 +2641,9 @@ document.addEventListener('click', e => {
   else if (a === 'editcust') custForm(find('customer_profiles', id));
   else if (a === 'viewcust') custView(id);
   else if (a === 'delcust') { if (confirm('ลบลูกค้ารายนี้? (ใบเสนอราคาเดิมยังอยู่)')) softDelete('customer_profiles', id); }
-  else if (a === 'newrx') rxForm(id);
+  else if (a === 'newrx') { K.examMeta = null; rxForm(id); }
   else if (a === 'delrx') { if (confirm('ลบค่าสายตานี้?')) { softDelete('prescriptions', id); custView(b.dataset.cid); } }
+  else if (a === 'printrxhealth') { const r = find('prescriptions', id); examIntakePrintView(b.dataset.cid, '', '', r.meta || {}); }
   else if (a === 'newprod') prodForm(); else if (a === 'newframe') frameForm();
   else if (a === 'addhlt') { const draft = readProdDraft(b.closest('form')); draft.lens_spec.highlights.push({ title: '', desc: '' }); prodForm(draft); }
   else if (a === 'rmhlt') { const draft = readProdDraft(b.closest('form')); draft.lens_spec.highlights.splice(+b.dataset.idx, 1); if (!draft.lens_spec.highlights.length) draft.lens_spec.highlights.push({ title: '', desc: '' }); prodForm(draft); }
@@ -2670,12 +2770,17 @@ document.addEventListener('click', e => {
   }
   else if (a === 'kioskcat') { K.pcat = id; K.pq = ''; render(); }
   else if (a === 'customlens') customLensForm();
+  else if (a === 'printexam') {
+    const f = b.closest('form'), d = Object.fromEntries(new FormData(f));
+    const ccText = [K.cc.join(', '), (K.ccOther || '').trim()].filter(Boolean).join(' / ');
+    examIntakePrintView(K.custId, ccText, '', examIntakeDataFromForm(d));
+  }
   else if (a === 'claimlist') claimListView();
   else if (a === 'svc') {
     K.hist.push(K.step);
     if (id === 'lens') { K.lr = freshLR(); K.step = 'lensreq'; render(); }
     else if (id === 'frame') { S.cust = K.custId; K.pq = ''; K.pcat = 'frame'; K.step = 'pick'; render(); }
-    else { if (id === 'exam') { K.cc = []; K.ccOther = ''; K.ccNew = ''; } K.step = id === 'exam' ? 'examintake' : 'claimform'; render(); }
+    else { if (id === 'exam') { K.cc = []; K.ccOther = ''; K.ccNew = ''; K.examMeta = null; } K.step = id === 'exam' ? 'examintake' : 'claimform'; render(); }
   }
   else if (a === 'lrtoggle') { const group = b.dataset.group, arr = K.lr[group] || (K.lr[group] = []); K.lr[group] = arr.includes(id) ? arr.filter(x => x !== id) : [...arr, id]; render(); }
   else if (a === 'lensreqgo') { S.cust = K.custId; K.pq = ''; K.pcat = 'lens'; K.hist.push(K.step); K.step = 'pick'; render(); }
@@ -2865,9 +2970,10 @@ document.addEventListener('submit', async e => {
         lens_spec: { group: d.group, color_code: (d.color_code || '').trim() || null, photos: d.photo_data ? [d.photo_data] : [] }, active: true, deleted_at: null });
       closeDlg(); commit(); toast('บันทึกเนื้อหาเสริมแล้ว');
     } else if (k === 'rx') {
-      const meta = { od_ph: num(d.od_ph), os_ph: num(d.os_ph), od_seg: num(d.od_seg), os_seg: num(d.os_seg), od_param: (d.od_param || '').trim() || null, os_param: (d.os_param || '').trim() || null };
-      const hasMeta = Object.values(meta).some(v => v != null);
+      const meta = { ...(K.examMeta || {}), od_ph: num(d.od_ph), os_ph: num(d.os_ph), od_seg: num(d.od_seg), os_seg: num(d.os_seg), od_param: (d.od_param || '').trim() || null, os_param: (d.os_param || '').trim() || null };
+      const hasMeta = Object.keys(meta).some(kk => { const v = meta[kk]; return Array.isArray(v) ? v.length : v != null; });
       save('prescriptions', { id: uid(), customer_id: f.dataset.cid, exam_date: d.exam_date || null, examiner: (d.examiner || '').trim() || null, od_sph: num(d.od_sph), od_cyl: num(d.od_cyl), od_axis: num(d.od_axis), os_sph: num(d.os_sph), os_cyl: num(d.os_cyl), os_axis: num(d.os_axis), od_pd: num(d.od_pd), os_pd: num(d.os_pd), od_add: num(d.od_add), os_add: num(d.os_add), pd: null, add_power: null, meta: hasMeta ? meta : null, notes: d.notes.trim() || null, deleted_at: null });
+      K.examMeta = null;
       commit(); custView(f.dataset.cid); toast('บันทึกค่าสายตาแล้ว');
     } else if (k === 'customlens') {
       if (!d.price || +d.price <= 0) { toast('กรุณาใส่ราคาขาย'); return; }
@@ -2956,7 +3062,10 @@ document.addEventListener('submit', async e => {
       commit(); K.custId = nid; K.step = 'menu'; render(); toast('เพิ่มลูกค้าใหม่แล้ว');
     } else if (k === 'examintake') {
       const ccText = [K.cc.join(', '), (K.ccOther || '').trim()].filter(Boolean).join(' / ');
-      const pre = [ccText && `CC: ${ccText}`, d.disease && `โรคประจำตัว: ${d.disease}`, d.eye_history && `โรคตา/ประวัติ: ${d.eye_history}`, d.meds && `ประวัติการใช้ยา: ${d.meds}`].filter(Boolean).join(' · ');
+      const health = examIntakeDataFromForm(d);
+      const diseaseText = health.diseases.map(x => x.label + (x.years != null ? ` (${x.years} ปี)` : '')).join(', ');
+      const pre = [ccText && `CC: ${ccText}`, diseaseText && `โรคประจำตัว: ${diseaseText}`, health.disease_other_text && `อื่นๆ: ${health.disease_other_text}`, d.eye_history && `โรคตา/ประวัติ: ${d.eye_history}`, d.meds && `ประวัติการใช้ยา: ${d.meds}`].filter(Boolean).join(' · ');
+      K.examMeta = examIntakeHasData(health) ? health : null;
       rxForm(K.custId, pre);
     } else if (k === 'claimform') {
       const claimNote = 'หมายเหตุ: ระยะเวลาการเคลมสินค้าอาจมีระยะนานกว่าที่นัด เนื่องจากอะไหล่บางประเภทต้องรอสั่งนอก และอาจไม่ตรงรุ่น เนื่องจากไม่มีผลิต หากมีปัญหาดังกล่าวทางร้านจะมีการแจ้งให้ลูกค้าทราบอีกครั้ง';
