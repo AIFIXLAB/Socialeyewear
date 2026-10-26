@@ -315,8 +315,8 @@ const NAV = [['customers', 'ลูกค้า'], ['products', 'สินค้�
 const S = { v: 'customers', need: 'general', cart: [], cust: '', disc: 0, notes: '', q: '', pq: '', ptype: 'all', pbrand: '', staff: null, mode: 'splash', custView: 'all', custFrom: '', custTo: '', catQ: '', catCompare: [], catDetail: null, catReturn: '', catDesign: '', catMain: '', activeSeller: null, varPick: null, knSel: [], knIdx: 0 };
 const freshLR = () => ({ purpose: [], other: '', vision: [], lenstype: [], brand: [], level: [], lensIndex: [], coating: [], photochromic: [], age: '', budget: '', occupation: '', notes: '' });
 const freshDisc = () => ({ type: 'amt', val: 0 });
-let K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, discFrame: freshDisc(), discLens: freshDisc(), lensFilterOn: true, examMeta: null, examDraft: {} };
-const kioskReset = () => { K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, detailProdId: null, discFrame: freshDisc(), discLens: freshDisc(), lensFilterOn: true, examMeta: null, examDraft: {} }; };
+let K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, discFrame: freshDisc(), discLens: freshDisc(), lensFilterOn: true, examMeta: null, examDraft: {}, pickupDate: '' };
+const kioskReset = () => { K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, detailProdId: null, discFrame: freshDisc(), discLens: freshDisc(), lensFilterOn: true, examMeta: null, examDraft: {}, pickupDate: '' }; };
 
 /* ---------- จับคู่เลนส์กับความต้องการลูกค้า (หน้าบริการลูกค้า ขั้นตอนที่ 1-3) ---------- */
 // ขั้นตอนที่ 3 ใช้ชุดตัวเลือกเดียวกับ LENS_DESIGN ที่หลังบ้านเป๊ะ ๆ (ไม่แยกชุดคำศัพท์กันสองที่)
@@ -513,6 +513,35 @@ function nextReceiptNo() {
     if (m && m[1] === yy && +m[2] > maxN) maxN = +m[2];
   }
   return `RC-${yy}${String(maxN + 1).padStart(4, '0')}`;
+}
+function nextDepositNo() {
+  const yy = String(new Date().getFullYear()).slice(-2);
+  let maxN = 0;
+  for (const q of db.quotes) {
+    const pays = (q.meta && Array.isArray(q.meta.payments)) ? q.meta.payments : [];
+    for (const p of pays) {
+      const m = /^DP-?(\d{2})(\d{4})$/.exec(p.docNo || '');
+      if (m && m[1] === yy && +m[2] > maxN) maxN = +m[2];
+    }
+  }
+  return `DP-${yy}${String(maxN + 1).padStart(4, '0')}`;
+}
+function quotePayments(q) {
+  return (q && q.meta && Array.isArray(q.meta.payments)) ? q.meta.payments.slice().sort((a, b) => (a.at || '').localeCompare(b.at || '')) : [];
+}
+function quotePaid(q) {
+  return quotePayments(q).reduce((s, p) => s + (+p.amount || 0), 0);
+}
+function quoteBalance(q) {
+  const bal = (q.total_thb || 0) - quotePaid(q);
+  return bal < 0.005 ? 0 : Math.round(bal * 100) / 100;
+}
+const PAY_STATUS_LABEL = { unpaid: 'ยังไม่ชำระ', partial: 'ชำระบางส่วน', paid: 'ชำระครบ' };
+function quotePayStatus(q) {
+  const paid = quotePaid(q);
+  if (paid <= 0.004) return 'unpaid';
+  if (quoteBalance(q) <= 0.004) return 'paid';
+  return 'partial';
 }
 // IMPORT-HELPERS-END
 let IMP = null;
@@ -953,7 +982,7 @@ const views = {
   quotes() {
     const rows = live('quotes').sort((a, b) => b.created_at.localeCompare(a.created_at));
     return `<div class="bar"><div><h1>ใบเสนอราคา</h1><p class="sub" style="margin:0">เปลี่ยนสถานะได้ทันที พิมพ์หรือบันทึกเป็น PDF ได้</p></div><button class="btn line" data-act="csvq">ส่งออก CSV</button></div>
-    ${rows.length ? `<div class="panel wrap"><table><tr><th>เลขที่</th><th>วันที่</th><th>ลูกค้า</th><th>ยอดสุทธิ</th><th>สถานะ</th><th></th></tr>${rows.map(q => `<tr><td>${esc(q.quote_number || 'รอออกเลข')}</td><td>${day(q.created_at)}</td><td>${esc(custName(q.customer_id))}</td><td>${baht(q.total_thb)}</td><td><select class="st-sel ${q.status}" data-bind="qstatus" data-id="${q.id}">${Object.entries(QST).map(([k, l]) => `<option value="${k}" ${q.status === k ? 'selected' : ''}>${l}</option>`).join('')}</select></td><td class="act"><button class="btn line sm" data-act="viewq" data-id="${q.id}">เปิด/พิมพ์</button> <button class="btn line sm bad" data-act="delq" data-id="${q.id}">ลบ</button></td></tr>`).join('')}</table></div>` : empty('ยังไม่มีใบเสนอราคา ไปที่ Sales Studio เพื่อสร้างใบแรก', '<button class="btn" data-act="go" data-id="studio">ไปที่ Sales Studio</button>')}`;
+    ${rows.length ? `<div class="panel wrap"><table><tr><th>เลขที่</th><th>วันที่</th><th>ลูกค้า</th><th>ยอดสุทธิ</th><th>สถานะ</th><th>การชำระเงิน</th><th></th></tr>${rows.map(q => { const payStatus = quotePayStatus(q), bal = quoteBalance(q); return `<tr><td>${esc(q.quote_number || 'รอออกเลข')}</td><td>${day(q.created_at)}</td><td>${esc(custName(q.customer_id))}</td><td>${baht(q.total_thb)}</td><td><select class="st-sel ${q.status}" data-bind="qstatus" data-id="${q.id}">${Object.entries(QST).map(([k, l]) => `<option value="${k}" ${q.status === k ? 'selected' : ''}>${l}</option>`).join('')}</select></td><td><span class="st ${payStatus}">${PAY_STATUS_LABEL[payStatus]}</span>${payStatus === 'partial' ? `<br><span class="tag">ค้าง ${baht(bal)}</span>` : ''}</td><td class="act"><button class="btn line sm" data-act="viewq" data-id="${q.id}">เปิด/พิมพ์</button>${bal > 0.004 ? ` <button class="btn line sm" data-act="openpay" data-id="${q.id}" data-kind="${payStatus === 'unpaid' ? 'deposit' : 'final'}">${payStatus === 'unpaid' ? 'รับมัดจำ' : 'รับชำระส่วนที่เหลือ'}</button>` : ''} <button class="btn line sm bad" data-act="delq" data-id="${q.id}">ลบ</button></td></tr>`; }).join('')}</table></div>` : empty('ยังไม่มีใบเสนอราคา ไปที่ Sales Studio เพื่อสร้างใบแรก', '<button class="btn" data-act="go" data-id="studio">ไปที่ Sales Studio</button>')}`;
   },
   insights() {
     const q = live('quotes'), won = q.filter(x => ['accepted', 'converted'].includes(x.status)), rev = won.reduce((n, x) => n + x.total_thb, 0);
@@ -2249,9 +2278,11 @@ function kioskCart() {
     <div class="row" style="border:0;margin-top:6px"><span>ยอดรวมก่อนลด</span><span>${baht(c.sub)}</span></div>
     ${c.discTotal ? `<div class="row" style="border:0"><span>ส่วนลดรวม</span><span>-${baht(c.discTotal)}</span></div>` : ''}
     <div class="row" style="border:0"><b>รวมทั้งสิ้น</b><b>${baht(c.total)}</b></div>
+    ${S.cart.length ? `<label style="margin-top:10px">วันนัดรับสินค้า (ถ้ามี)<input type="date" data-bind="kioskpickup" value="${esc(K.pickupDate || '')}"></label>` : ''}
     <div class="foot" style="margin-top:18px">
       <button class="btn line" data-act="kioskback">ย้อนกลับ</button>
       ${S.cart.length ? `<button class="btn line" data-act="receiptpreview">ดูตัวอย่าง/พิมพ์ใบเสร็จ</button>` : ''}
+      ${S.cart.length ? `<button class="btn line" data-act="kioskdeposit">รับมัดจำ</button>` : ''}
       <button class="btn" data-act="kioskcheckout">ยืนยันสั่งซื้อ</button>
     </div>
   </div>`;
@@ -2311,13 +2342,36 @@ function kioskView() {
 }
 function quoteSheet(id) {
   const q = find('quotes', id), items = live('quote_items').filter(i => i.quote_id === id);
-  dialog(`<div class="sheet"><h2>ใบเสนอราคา ${esc(q.quote_number || '')}</h2><div class="meta">${esc(shop?.name || 'Social Eyewear')} · ${day(q.created_at)} · ลูกค้า: ${esc(custName(q.customer_id))}${q.valid_until ? ` · ใช้ได้ถึง ${day(q.valid_until)}` : ''}</div>
+  const payStatus = quotePayStatus(q), paid = quotePaid(q), balance = quoteBalance(q);
+  const payments = quotePayments(q);
+  const pickupHistory = (q.meta && Array.isArray(q.meta.pickupHistory)) ? q.meta.pickupHistory : [];
+  const lockPickup = payStatus === 'paid';
+  dialog(`<style>#dlg{width:min(720px,96vw)!important;max-width:96vw!important}@media print{#dlg{width:100%!important;max-width:100%!important;margin:0!important;padding:14px!important}}</style>
+  <div class="sheet"><h2>ใบเสนอราคา ${esc(q.quote_number || '')}</h2><div class="meta">${esc(shop?.name || 'Social Eyewear')} · ${day(q.created_at)} · ลูกค้า: ${esc(custName(q.customer_id))}${q.valid_until ? ` · ใช้ได้ถึง ${day(q.valid_until)}` : ''}${(q.meta && q.meta.pickupDate) ? ` · นัดรับ: ${day(q.meta.pickupDate)}` : ''}</div>
   <table><tr><th>รายการ</th><th>จำนวน</th><th>ราคา/หน่วย</th><th style="text-align:right">รวม</th></tr>${items.map(i => `<tr><td>${esc(i.item_name_snapshot)}</td><td>${i.quantity}</td><td>${baht(i.unit_price_thb)}</td><td style="text-align:right">${baht(i.line_total_thb)}</td></tr>`).join('')}</table>
   <div class="row"><span>รวม</span><span>${baht(q.subtotal_thb)}</span></div>${q.discount_thb ? `<div class="row"><span>ส่วนลด</span><span>-${baht(q.discount_thb)}</span></div>` : ''}
-  <div class="row" style="border:0"><b>รวมสุทธิ</b><span class="total">${baht(q.total_thb)}</span></div>${q.notes ? `<p class="tag">หมายเหตุ: ${esc(q.notes)}</p>` : ''}
-  <form data-form="quote" data-id="${id}" class="noprint"><div class="two"><label>สถานะ<select name="status">${Object.entries(QST).map(([k, l]) => `<option value="${k}" ${q.status === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>${fld('valid_until', 'ใช้ได้ถึง', q.valid_until || '', 'date')}</div><label>หมายเหตุ<textarea name="notes" rows="2">${esc(q.notes)}</textarea></label><div class="foot"><button type="button" class="btn line" data-act="close">ปิด</button><button type="button" class="btn line" data-act="print">พิมพ์ / PDF</button><button class="btn" type="submit">บันทึก</button></div></form></div>`);
+  <div class="row"><b>รวมสุทธิ</b><span class="total">${baht(q.total_thb)}</span></div>
+  <div class="row"><span>ชำระแล้วสะสม</span><span>${baht(paid)}</span></div>
+  <div class="row" style="border:0"><b>ยอดคงเหลือ</b><span class="total">${baht(balance)}</span></div>
+  <p class="tag">สถานะการชำระเงิน: <b>${PAY_STATUS_LABEL[payStatus]}</b></p>
+  ${q.notes ? `<p class="tag">หมายเหตุ: ${esc(q.notes)}</p>` : ''}
+  ${payments.length ? `<div class="wrap" style="margin:10px 0"><table><tr><th>เลขที่</th><th>วันที่</th><th>ประเภท</th><th style="text-align:right">จำนวนเงิน</th><th>ช่องทาง</th><th class="noprint"></th></tr>${payments.map(p => `<tr><td>${esc(p.docNo || '-')}</td><td>${day(p.date)}</td><td>${p.kind === 'deposit' ? 'รับมัดจำ' : 'ชำระส่วนที่เหลือ'}</td><td style="text-align:right">${baht(p.amount)}</td><td>${(p.methods || []).map(m => PAY_LABELS[m] || m).join(' + ') || '-'}</td><td class="act noprint"><button type="button" class="btn line sm" data-act="viewdeposit" data-id="${id}" data-pid="${p.id}">พิมพ์ใบรับเงิน</button></td></tr>`).join('')}</table></div>` : ''}
+  <form data-form="quote" data-id="${id}" class="noprint">
+    <div class="two"><label>สถานะ<select name="status">${Object.entries(QST).map(([k, l]) => `<option value="${k}" ${q.status === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>${fld('valid_until', 'ใช้ได้ถึง', q.valid_until || '', 'date')}</div>
+    <div class="two">${fld('pickup_date', 'วันนัดรับสินค้า', (q.meta && q.meta.pickupDate) || '', 'date', lockPickup ? 'disabled' : '')}<div></div></div>
+    ${lockPickup ? '<p class="tag">ชำระครบแล้ว ไม่สามารถแก้วันนัดรับได้</p>' : ''}
+    ${pickupHistory.length ? `<p class="tag">ประวัติแก้วันนัดรับ: ${pickupHistory.map(h => `${h.from ? day(h.from) : '-'} → ${h.to ? day(h.to) : '-'} (${day(h.at)})`).join(' · ')}</p>` : ''}
+    <label>หมายเหตุ<textarea name="notes" rows="2">${esc(q.notes || '')}</textarea></label>
+    <div class="foot" style="flex-wrap:wrap">
+      <button type="button" class="btn line" data-act="close">ปิด</button>
+      <button type="button" class="btn line" data-act="print">พิมพ์ / PDF</button>
+      ${balance > 0.004 ? `<button type="button" class="btn line" data-act="openpay" data-id="${id}" data-kind="deposit">รับมัดจำ</button>` : ''}
+      ${balance > 0.004 ? `<button type="button" class="btn line" data-act="openpay" data-id="${id}" data-kind="final">รับชำระส่วนที่เหลือ</button>` : ''}
+      <button class="btn" type="submit">บันทึก</button>
+    </div>
+  </form></div>`);
 }
-let RCPT = null, RCPT_FOR = null, SIG_CANVAS = null;
+let RCPT = null, RCPT_FOR = null, SIG_CANVAS = null, PAYF = null;
 function sellerReportHTML() {
   const sellerNames = [...new Set([...live('sellers').map(s => s.name), ...live('quotes').map(q => (q.meta || {}).seller).filter(Boolean)])];
   const months = [...Array(6)].map((_, i) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 5 + i); return d.toISOString().slice(0, 7); });
@@ -2446,6 +2500,87 @@ function openReceipt(forQuoteId) {
   const d = receiptData(RCPT_FOR);
   RCPT = { no: d.defNo, date: d.defDate, pay: d.defPay.slice(), sig: d.defSig, seller: d.defSeller };
   dialog(receiptHTML());
+}
+// ===== ระบบรับเงินมัดจำ / รับชำระส่วนที่เหลือ =====
+let PAY_BUSY = false;
+function paymentFormHTML() {
+  const q = find('quotes', PAYF.quoteId);
+  const d = receiptData(PAYF.quoteId);
+  const paidSoFar = quotePaid(q), balance = quoteBalance(q);
+  const kindLabel = PAYF.kind === 'deposit' ? 'รับเงินมัดจำ' : 'รับชำระเงินส่วนที่เหลือ';
+  return `<style>#dlg{width:min(640px,95vw)!important;max-width:95vw!important}@media print{#dlg{width:100%!important;max-width:100%!important;margin:0!important;padding:14px!important}}</style>
+  <div class="sheet"><h2>${kindLabel}</h2>
+  <div class="meta">${esc(q.quote_number || '(ยังไม่ออกเลข)')} · ลูกค้า: ${esc(custName(q.customer_id))}</div>
+  <table><tr><th>รายการ</th><th>จำนวน</th><th>ราคา/หน่วย</th><th style="text-align:right">รวม</th></tr>${d.items.map(i => { const ex = itemExtraLine(i, i.type); return `<tr><td>${esc(i.name)}${ex ? `<br><span class="tag">${esc(ex)}</span>` : ''}</td><td>${i.qty}</td><td>${baht(i.price)}</td><td style="text-align:right">${baht(i.lineTotal)}</td></tr>`; }).join('')}</table>
+  <div class="row"><span>รวมสินค้า</span><span>${baht(d.sub)}</span></div>
+  ${d.discTotal ? `<div class="row"><span>ส่วนลด</span><span>-${baht(d.discTotal)}</span></div>` : ''}
+  <div class="row"><b>ยอดสุทธิ</b><span class="total">${baht(d.total)}</span></div>
+  <div class="row"><span>ชำระแล้วก่อนหน้า</span><span>${baht(paidSoFar)}</span></div>
+  <div class="row" style="border:0"><b>ยอดคงเหลือ</b><span class="total">${baht(balance)}</span></div>
+  <form data-form="payrecv" data-id="${PAYF.quoteId}" data-kind="${PAYF.kind}">
+    <div class="two">
+      ${fld('amount', `จำนวนเงินที่รับครั้งนี้ (คงเหลือ ${baht(balance)})`, PAYF.amount ?? '', 'number', `step="0.01" min="0.01" max="${balance}" required`)}
+      ${fld('date', 'วันที่รับเงิน', PAYF.date || now().slice(0, 10), 'date')}
+    </div>
+    <label><span class="lbl" style="display:block;font-size:13px;color:var(--mute,#69756d);margin-bottom:6px">ช่องทางชำระเงิน (เลือกได้มากกว่า 1)</span></label>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px">${Object.entries(PAY_LABELS).map(([k, l]) => `<label class="chk" style="margin:0"><input type="checkbox" name="methods" value="${k}" ${(PAYF.methods || []).includes(k) ? 'checked' : ''}> ${l}</label>`).join('')}</div>
+    <label>พนักงานผู้รับเงิน<select name="seller"><option value="">— เลือกพนักงาน —</option>${live('sellers').map(s => `<option value="${esc(s.name)}" ${PAYF.seller === s.name ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select></label>
+    <label>หมายเหตุ<textarea name="note" rows="2">${esc(PAYF.note || '')}</textarea></label>
+    <div class="foot"><button type="button" class="btn line" data-act="close">ปิด</button><button class="btn" type="submit">บันทึก${PAYF.kind === 'deposit' ? 'เงินมัดจำ' : 'การชำระเงิน'}</button></div>
+  </form></div>`;
+}
+function openPaymentForm(quoteId, kind) {
+  const q = find('quotes', quoteId);
+  if (!q) return;
+  const balance = quoteBalance(q);
+  if (balance <= 0.004) return toast('รายการนี้ชำระครบแล้ว ไม่สามารถรับเงินเพิ่มได้');
+  PAYF = { quoteId, kind: kind === 'final' ? 'final' : 'deposit', amount: kind === 'final' ? balance : '', date: now().slice(0, 10), methods: [], seller: S.activeSeller || '', note: '' };
+  dialog(paymentFormHTML());
+}
+function depositReceiptHTML(quoteId, paymentId) {
+  const q = find('quotes', quoteId);
+  const pay = quotePayments(q).find(p => p.id === paymentId);
+  if (!pay) return '<p>ไม่พบรายการรับเงินนี้</p>';
+  const d = receiptData(quoteId);
+  const cust = d.customerId ? find('customer_profiles', d.customerId) : null;
+  const paidUpToThis = quotePayments(q).filter(p => (p.at || '') <= (pay.at || '')).reduce((s, p) => s + (+p.amount || 0), 0);
+  const balAfter = Math.max(0, Math.round((q.total_thb - paidUpToThis) * 100) / 100);
+  const title = pay.kind === 'deposit' ? 'ใบรับเงินมัดจำ' : 'ใบรับเงิน (ชำระส่วนที่เหลือ)';
+  return `<style>#dlg{width:min(640px,95vw)!important;max-width:95vw!important}@media print{#dlg{width:100%!important;max-width:100%!important;margin:0!important;padding:14px!important}}</style>
+  <div class="sheet">
+    <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px">
+      <img src="${RECEIPT_LOGO_DATA_URI}" style="height:46px;object-fit:contain;flex-shrink:0">
+      <div style="font-size:11px;color:var(--mute,#69756d);line-height:1.5">${esc(SHOP_ADDR)}<br>โทร ${esc(SHOP_PHONE)} · เลขประจำตัวผู้เสียภาษี ${esc(SHOP_TAXID)}</div>
+    </div>
+    <h2 style="margin:0 0 2px">${title}</h2>
+    <p class="tag" style="margin:0 0 8px">เอกสารนี้เป็น${title} ไม่ใช่ใบเสร็จรับเงินสำหรับยอดเต็ม</p>
+    <div class="meta">เลขที่ ${esc(pay.docNo || '')} · วันที่ ${day(pay.date)}${pay.seller ? ` · ผู้รับเงิน: ${esc(pay.seller)}` : ''}${q.quote_number ? ` · อ้างอิงใบเสนอราคา ${esc(q.quote_number)}` : ''}</div>
+    <p style="margin:4px 0"><b>ชื่อ-นามสกุล:</b> ${esc(cust?.full_name || 'ลูกค้าทั่วไป')}${cust?.customer_code ? ` <span class="tag">(${esc(cust.customer_code)})</span>` : ''}</p>
+    <table><tr><th>รายการ</th><th>จำนวน</th><th>ราคา/หน่วย</th><th style="text-align:right">รวม</th></tr>${d.items.map(i => { const ex = itemExtraLine(i, i.type); return `<tr><td>${esc(i.name)}${ex ? `<br><span class="tag">${esc(ex)}</span>` : ''}</td><td>${i.qty}</td><td>${baht(i.price)}</td><td style="text-align:right">${baht(i.lineTotal)}</td></tr>`; }).join('')}</table>
+    <div class="row"><span>รวมสินค้า</span><span>${baht(d.sub)}</span></div>
+    ${d.discTotal ? `<div class="row"><span>ส่วนลด</span><span>-${baht(d.discTotal)}</span></div>` : ''}
+    <div class="row"><b>ยอดสุทธิ</b><span class="total">${baht(d.total)}</span></div>
+    <div class="row" style="border:2px solid var(--gold,#b8964f);background:rgba(184,150,79,.08)"><b>รับเงินครั้งนี้ (${pay.kind === 'deposit' ? 'มัดจำ' : 'ชำระส่วนที่เหลือ'})</b><span class="total">${baht(pay.amount)}</span></div>
+    <div class="row"><span>ยอดชำระสะสม ณ วันนี้</span><span>${baht(paidUpToThis)}</span></div>
+    <div class="row" style="border:0"><b>ยอดคงเหลือหลังรับเงินนี้</b><span class="total">${baht(balAfter)}</span></div>
+    <p style="margin:10px 0 4px"><b>ชำระโดย:</b> ${pay.methods && pay.methods.length ? esc(pay.methods.map(k => PAY_LABELS[k] || k).join(' + ')) : '(ยังไม่ระบุ)'}</p>
+    ${pay.note ? `<p class="tag">หมายเหตุ: ${esc(pay.note)}</p>` : ''}
+    <div style="margin-top:16px;padding-top:10px;border-top:1px dashed var(--line,#e4ddd2);font-size:11px;color:var(--mute,#69756d);line-height:1.6">
+      <b>หมายเหตุ:</b> เอกสารนี้เป็นหลักฐานการรับเงิน${pay.kind === 'deposit' ? 'มัดจำบางส่วน' : 'ส่วนที่เหลือ'}เท่านั้น ไม่ใช่ใบเสร็จรับเงินฉบับสมบูรณ์สำหรับยอดเต็มของรายการสั่งซื้อ
+    </div>
+    <div class="foot"><button type="button" class="btn line" data-act="close">ปิด</button><button type="button" class="btn" data-act="print">พิมพ์ / PDF</button></div>
+  </div>`;
+}
+function openDepositReceipt(quoteId, paymentId) {
+  const q = find('quotes', quoteId);
+  const payments = quotePayments(q);
+  const pay = payments.find(p => p.id === paymentId);
+  if (pay && !pay.docNo) {
+    pay.docNo = nextDepositNo();
+    save('quotes', { ...q, meta: { ...(q.meta || {}), payments: payments.map(p => p.id === pay.id ? pay : p) } });
+    commit();
+  }
+  dialog(depositReceiptHTML(quoteId, paymentId));
 }
 function sigPadHTML() {
   return `<div style="padding:18px">
@@ -2860,6 +2995,8 @@ document.addEventListener('click', e => {
     }
   }
   else if (a === 'viewq') quoteSheet(id);
+  else if (a === 'openpay') openPaymentForm(id, b.dataset.kind);
+  else if (a === 'viewdeposit') openDepositReceipt(id, b.dataset.pid);
   else if (a === 'delq') { if (confirm('ลบใบเสนอราคานี้?')) softDelete('quotes', id); }
   else if (a === 'csvcust') download('customers.csv', csv([['รหัส', 'ชื่อ', 'โทรศัพท์', 'งบ', 'ไลฟ์สไตล์', 'ยินยอม'], ...live('customer_profiles').map(c => [c.customer_code, c.full_name, c.phone, c.budget_thb, c.lifestyle, c.consent_recorded_at ? 'ใช่' : 'ไม่'])]));
   else if (a === 'csvq') download('quotes.csv', csv([['เลขที่', 'วันที่', 'ลูกค้า', 'รวม', 'ส่วนลด', 'สุทธิ', 'สถานะ'], ...live('quotes').map(q => [q.quote_number, q.created_at.slice(0, 10), custName(q.customer_id), q.subtotal_thb, q.discount_thb, q.total_thb, QST[q.status]])]));
@@ -2939,7 +3076,18 @@ document.addEventListener('click', e => {
     const discNote = c.discTotal ? `ส่วนลด — กรอบ: ${c.discFrameAmt ? baht(c.discFrameAmt) : '-'} / เลนส์: ${c.discLensAmt ? baht(c.discLensAmt) : '-'}` : '';
     save('quotes', { id: qid, customer_id: S.cust || null, quote_number: nextReceiptNo(), status: 'converted', subtotal_thb: c.sub, discount_thb: c.discTotal, total_thb: c.total, notes: [lrNote ? `ความต้องการลูกค้า: ${lrNote}` : '', discNote].filter(Boolean).join(' · ') || null, valid_until: null, receipt_date: now().slice(0, 10), meta: { payment: [], signature: '', seller: S.activeSeller || '' }, deleted_at: null });
     S.cart.forEach(i => save('quote_items', { id: uid(), quote_id: qid, product_id: i.productId || i.id, item_name_snapshot: i.name, product_type: i.type, quantity: i.qty, unit_price_thb: i.price, line_total_thb: i.price * i.qty, meta: cartItemMeta(i), deleted_at: null }));
-    S.cart = []; K.step = 'done'; K.hist = []; K.lr = freshLR(); K.lastQuoteId = qid; K.discFrame = freshDisc(); K.discLens = freshDisc(); commit(); render(); toast('บันทึกการสั่งซื้อแล้ว');
+    S.cart = []; K.step = 'done'; K.hist = []; K.lr = freshLR(); K.lastQuoteId = qid; K.discFrame = freshDisc(); K.discLens = freshDisc(); K.pickupDate = ''; commit(); render(); toast('บันทึกการสั่งซื้อแล้ว');
+  }
+  else if (a === 'kioskdeposit') {
+    if (!S.cart.length) return toast('เลือกสินค้าอย่างน้อย 1 รายการก่อน');
+    S.cust = K.custId;
+    const c = cartCalc(), qid = uid();
+    const lrNote = lrSummary();
+    const discNote = c.discTotal ? `ส่วนลด — กรอบ: ${c.discFrameAmt ? baht(c.discFrameAmt) : '-'} / เลนส์: ${c.discLensAmt ? baht(c.discLensAmt) : '-'}` : '';
+    save('quotes', { id: qid, customer_id: S.cust || null, quote_number: null, status: 'accepted', subtotal_thb: c.sub, discount_thb: c.discTotal, total_thb: c.total, notes: [lrNote ? `ความต้องการลูกค้า: ${lrNote}` : '', discNote].filter(Boolean).join(' · ') || null, valid_until: null, receipt_date: null, meta: { payment: [], signature: '', seller: S.activeSeller || '', pickupDate: K.pickupDate || null }, deleted_at: null });
+    S.cart.forEach(i => save('quote_items', { id: uid(), quote_id: qid, product_id: i.productId || i.id, item_name_snapshot: i.name, product_type: i.type, quantity: i.qty, unit_price_thb: i.price, line_total_thb: i.price * i.qty, meta: cartItemMeta(i), deleted_at: null }));
+    S.cart = []; K.lr = freshLR(); K.discFrame = freshDisc(); K.discLens = freshDisc(); K.pickupDate = ''; K.lastQuoteId = qid; commit();
+    openPaymentForm(qid, 'deposit');
   }
   else if (a === 'kioskprintreceipt') { if (K.lastQuoteId) openReceipt(K.lastQuoteId); }
   else if (a === 'receiptpreview') openReceipt(null);
@@ -3013,6 +3161,7 @@ document.addEventListener('change', e => {
   else if (k === 'discframeval') { K.discFrame.val = Math.max(0, +e.target.value || 0); render(); }
   else if (k === 'disclensval') { K.discLens.val = Math.max(0, +e.target.value || 0); render(); }
   else if (k === 'notes') S.notes = e.target.value;
+  else if (k === 'kioskpickup') K.pickupDate = e.target.value || '';
   else if (k === 'qstatus') { save('quotes', { ...find('quotes', e.target.dataset.id), status: e.target.value }); commit(); }
   else if (k === 'url' || k === 'key') { ls.set(k, e.target.value.trim()); toast('บันทึกการตั้งค่าแล้ว'); setStatus(); }
   else if (k === 'newprodtype') { const draft = readProdDraft(e.target.closest('form')); draft.product_type = e.target.value; prodForm(draft); }
@@ -3166,12 +3315,48 @@ document.addEventListener('submit', async e => {
       save('products', { ...o, id: id || uid(), product_type: 'frame', product_name: d.product_name.trim(), brand: (d.brand || '').trim() || null, retail_price_thb: Math.round(+d.retail_price_thb) || 0, cost_thb: mgr() ? num(d.cost_thb) : (o.cost_thb ?? null), active: o.active === false ? false : true, lens_spec: { ...(o.lens_spec || {}), material: (d.material || '').trim() || null, manufacturer: (d.manufacturer || '').trim() || null, frame_type: d.frame_type || null, purchased_at: d.purchased_at || null }, deleted_at: null });
       closeDlg(); commit(); toast('บันทึกกรอบแว่นแล้ว');
     } else if (k === 'quote') {
-      save('quotes', { ...find('quotes', id), status: d.status, valid_until: d.valid_until || null, notes: d.notes.trim() || null }); closeDlg(); commit(); toast('บันทึกใบเสนอราคาแล้ว');
+      const q0 = find('quotes', id);
+      const meta = { ...(q0.meta || {}) };
+      const newPickup = d.pickup_date || null;
+      const oldPickup = meta.pickupDate || null;
+      if (quotePayStatus(q0) !== 'paid' && newPickup !== oldPickup) {
+        const hist = Array.isArray(meta.pickupHistory) ? meta.pickupHistory.slice() : [];
+        hist.push({ from: oldPickup, to: newPickup, at: now() });
+        meta.pickupHistory = hist;
+        meta.pickupDate = newPickup;
+      }
+      save('quotes', { ...q0, status: d.status, valid_until: d.valid_until || null, notes: d.notes.trim() || null, meta });
+      commit(); quoteSheet(id); toast('บันทึกใบเสนอราคาแล้ว');
     } else if (k === 'receiptmeta') {
       const payVals = [...f.querySelectorAll('[name="pay"]:checked')].map(x => x.value);
       RCPT = { no: (d.receipt_no || '').trim(), date: d.receipt_date || now().slice(0, 10), pay: payVals, sig: RCPT.sig, seller: (d.seller || '').trim() };
       if (RCPT_FOR) { const q = find('quotes', RCPT_FOR); save('quotes', { ...q, quote_number: RCPT.no || null, receipt_date: RCPT.date, meta: { ...(q.meta || {}), payment: payVals, seller: RCPT.seller } }); commit(); }
       dialog(receiptHTML());
+    } else if (k === 'payrecv') {
+      if (PAY_BUSY) return;
+      const q = find('quotes', id);
+      if (!q) return;
+      const balance = quoteBalance(q);
+      const amt = Math.round((+d.amount || 0) * 100) / 100;
+      if (!amt || amt <= 0) { toast('กรุณาใส่จำนวนเงินที่ถูกต้อง'); return; }
+      if (amt - balance > 0.004) { toast(`รับเงินได้ไม่เกินยอดคงเหลือ ${baht(balance)}`); return; }
+      const methodVals = [...f.querySelectorAll('[name="methods"]:checked')].map(x => x.value);
+      PAY_BUSY = true;
+      try {
+        const kind = f.dataset.kind === 'final' ? 'final' : 'deposit';
+        const pay = { id: uid(), kind, amount: amt, date: d.date || now().slice(0, 10), methods: methodVals, note: (d.note || '').trim() || null, seller: (d.seller || '').trim() || null, docNo: nextDepositNo(), at: now() };
+        const meta = { ...(q.meta || {}) };
+        meta.payments = [...(Array.isArray(meta.payments) ? meta.payments : []), pay];
+        const newBalance = quoteBalance({ ...q, meta });
+        const newStatus = (newBalance <= 0.004 && ['draft', 'presented'].includes(q.status)) ? 'accepted' : q.status;
+        save('quotes', { ...q, status: newStatus, meta });
+        commit();
+        PAYF = null;
+        openDepositReceipt(id, pay.id);
+        toast(newBalance <= 0.004 ? 'บันทึกการชำระเงินแล้ว — ชำระครบแล้ว' : (kind === 'deposit' ? 'บันทึกเงินมัดจำแล้ว' : 'บันทึกการชำระเงินส่วนที่เหลือแล้ว'));
+      } finally {
+        PAY_BUSY = false;
+      }
     } else if (k === 'auth') {
       await auth(e.submitter?.value === 'signup' ? 'signup' : 'login', d.email.trim(), d.password); toast('เข้าสู่ระบบแล้ว'); render(); await sync(); if (!shop) S.v = 'settings'; render(); loadStaff();
     } else if (k === 'shop') {

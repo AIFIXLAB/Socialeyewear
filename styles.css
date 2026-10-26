@@ -64,6 +64,7 @@ label.chk{display:flex;gap:8px;align-items:flex-start;color:var(--ink)}label.chk
 td.act{text-align:right;white-space:nowrap}
 dialog h3{font-size:15px;font-weight:500;margin:18px 0 8px}dialog{max-height:92vh;overflow:auto}
 .st.presented{background:#d9e4f2;color:#1d3d63}.st.declined{background:#f1d2cc;color:#7a2a1d}.st.expired{background:#e3dfd2;color:#5c5a4c}.st.converted{background:#cfe8d6;color:#14472a}
+.st.unpaid{background:#f1d2cc;color:#7a2a1d}.st.partial{background:#f2e3b9;color:#6b5517}.st.paid{background:#cfe8d6;color:#14472a}
 .st-sel{width:auto;padding:4px 10px;border-radius:99px;font-size:12.5px;background:var(--line)}
 .st-sel.accepted,.st-sel.converted{background:#cfe8d6;color:#14472a}.st-sel.presented{background:#d9e4f2;color:#1d3d63}.st-sel.declined{background:#f1d2cc;color:#7a2a1d}
 .sheet table th:last-child{text-align:right}
