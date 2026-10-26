@@ -1747,9 +1747,18 @@ function kioskExamIntake() {
     </form>
   </div>`;
 }
+function claimListView() {
+  const rows = live('claims').sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const row = x => `<tr><td>${day(x.created_at)}</td><td>${esc(custName(x.customer_id))}</td><td>${x.kind === 'claim' ? 'เคลมประกัน' : 'ซ่อมแว่น'}</td><td>${esc(x.frame_model || '-')}</td><td>${esc(x.frame_code || '-')}</td><td>${esc(x.issue || '-')}</td><td>${x.cost_thb != null ? baht(x.cost_thb) : '-'}</td><td>${x.pickup_date ? day(x.pickup_date) : '-'}</td><td class="noprint">${x.status === 'pending' ? 'รอดำเนินการ' : x.status}</td></tr>`;
+  dialog(`<style>#dlg{width:min(900px,95vw)!important;max-width:95vw!important}</style>
+  <div class="sheet"><h2>รายการแจ้งซ่อม / เคลมสินค้า</h2><div class="meta">${esc(shop?.name || 'Social Eyewear')} · พิมพ์เมื่อ ${day(now())} · ทั้งหมด ${rows.length} รายการ</div>
+  ${rows.length ? `<div class="wrap"><table><tr><th>วันที่แจ้ง</th><th>ลูกค้า</th><th>ประเภท</th><th>รุ่น/ยี่ห้อกรอบ</th><th>รหัสสินค้า</th><th>อาการ/ปัญหา</th><th>ค่าบริการ</th><th>นัดรับ</th><th class="noprint">สถานะ</th></tr>${rows.map(row).join('')}</table></div>` : '<p class="tag">ยังไม่มีรายการแจ้งซ่อม/เคลม</p>'}
+  </div>
+  <div class="foot noprint"><button type="button" class="btn line" data-act="close">ปิด</button><button type="button" class="btn line" data-act="print">สั่งพิมพ์</button></div>`);
+}
 function kioskClaimForm() {
   return `<div class="panel" style="padding:26px">
-    <h2 style="margin-top:0">แจ้งซ่อม / เคลมสินค้า</h2>
+    <div class="bar" style="margin-bottom:0"><h2 style="margin-top:0">แจ้งซ่อม / เคลมสินค้า</h2><button type="button" class="btn line sm" data-act="claimlist">แสดงรายการ</button></div>
     <form data-form="claimform">
       <div class="two">
         <label>ประเภท<select name="kind"><option value="repair">ซ่อมแว่น</option><option value="claim">เคลมประกัน</option></select></label>
@@ -2642,6 +2651,7 @@ document.addEventListener('click', e => {
   }
   else if (a === 'kioskcat') { K.pcat = id; K.pq = ''; render(); }
   else if (a === 'customlens') customLensForm();
+  else if (a === 'claimlist') claimListView();
   else if (a === 'svc') {
     K.hist.push(K.step);
     if (id === 'lens') { K.lr = freshLR(); K.step = 'lensreq'; render(); }
