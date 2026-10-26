@@ -781,6 +781,9 @@ const views = {
     </div>`;
   },
   products() {
+    // กันกรณีเครื่องนี้ยังไม่เคยล้างรายการ HOYA/Apollo ที่ซ้ำกันเลย (เช่น ยังไม่เคยกดอัปเดต หรือเพิ่งซิงก์ข้อมูลเก่าที่มีรายการซ้ำเข้ามาสดๆ) — ล้างให้ทุกครั้งที่เข้าหน้าสินค้าด้วย
+    dedupeHoyaProducts(new Set(HOYA_LENSES.map(o => o.product_name)));
+    dedupeApolloProducts(new Set(APOLLO_LENSES.map(o => o.product_name)));
     const q = S.pq.toLowerCase(), rows = live('products').filter(p => p.product_type !== 'kn_custom' && (S.ptype === 'all' || p.product_type === S.ptype) && [p.product_name, p.sku, p.brand].join(' ').toLowerCase().includes(q));
     const chips = [['all', 'ทั้งหมด'], ...Object.entries(TYPES)].map(([k, l]) => `<button class="chip ${S.ptype === k ? 'on' : ''}" data-act="ptype" data-id="${k}">${l}</button>`).join('');
     const missingOther = OTHER_ITEMS.filter(n => !live('products').some(p => p.product_name === n));
@@ -798,7 +801,7 @@ const views = {
     const hoyaUpToDate = ls.get('hoyaSyncVer', '') === HOYA_DATA_VERSION && hoyaHave === HOYA_LENSES.length;
     const hoyaStatus = hoyaUpToDate
       ? `<span class="tag" style="align-self:center;white-space:nowrap">เลนส์ HOYA เป็นปัจจุบันแล้ว (${hoyaHave}/${HOYA_LENSES.length}) ✓</span>`
-      : `<button class="btn line bad" data-act="hoyaimport">${hoyaHave === 0 ? `นำเข้าเลนส์ HOYA ${HOYA_LENSES.length} รายการ` : `ซิงก์เลนส์ HOYA ใหม่ — ข้อมูลไม่ครบ (${hoyaHave}/${HOYA_LENSES.length})`}</button>`;
+      : `<button class="btn line bad" data-act="hoyaimport">${hoyaHave === 0 ? `นำเข้าเลนส์ HOYA ${HOYA_LENSES.length} รายการ` : hoyaHave > HOYA_LENSES.length ? `ล้างเลนส์ HOYA ที่ซ้ำกัน — มีอยู่ ${hoyaHave} ควรมี ${HOYA_LENSES.length}` : `ซิงก์เลนส์ HOYA ใหม่ — ข้อมูลไม่ครบ (${hoyaHave}/${HOYA_LENSES.length})`}</button>`;
     const hoyaRestoreBtn = hoyaDeleted ? `<button class="btn line" data-act="hoyarestore">กู้คืนสินค้า HOYA ที่ลบไป ${hoyaDeleted} รายการ</button>` : '';
     const hoyaCleanBtn = (hoyaLegacy && hoyaUpToDate) ? `<button class="btn line bad" data-act="hoyacleanlegacy">ลบรายการ HOYA เก่าซ้ำซ้อน ${hoyaLegacy} รายการ</button>` : '';
     const apolloNames = new Set(APOLLO_LENSES.map(o => o.product_name));
@@ -808,7 +811,7 @@ const views = {
     const apolloUpToDate = ls.get('apolloSyncVer', '') === APOLLO_DATA_VERSION && apolloHave === APOLLO_LENSES.length;
     const apolloStatus = apolloUpToDate
       ? `<span class="tag" style="align-self:center;white-space:nowrap">เลนส์ Apollo เป็นปัจจุบันแล้ว (${apolloHave}/${APOLLO_LENSES.length}) ✓</span>`
-      : `<button class="btn line bad" data-act="apolloimport">${apolloHave === 0 ? `นำเข้าเลนส์ Apollo ${APOLLO_LENSES.length} รายการ` : `ซิงก์เลนส์ Apollo ใหม่ — ข้อมูลไม่ครบ (${apolloHave}/${APOLLO_LENSES.length})`}</button>`;
+      : `<button class="btn line bad" data-act="apolloimport">${apolloHave === 0 ? `นำเข้าเลนส์ Apollo ${APOLLO_LENSES.length} รายการ` : apolloHave > APOLLO_LENSES.length ? `ล้างเลนส์ Apollo ที่ซ้ำกัน — มีอยู่ ${apolloHave} ควรมี ${APOLLO_LENSES.length}` : `ซิงก์เลนส์ Apollo ใหม่ — ข้อมูลไม่ครบ (${apolloHave}/${APOLLO_LENSES.length})`}</button>`;
     const apolloRestoreBtn = apolloDeleted ? `<button class="btn line" data-act="apollorestore">กู้คืนสินค้า Apollo ที่ลบไป ${apolloDeleted} รายการ</button>` : '';
     const apolloCleanBtn = (apolloLegacy && apolloUpToDate) ? `<button class="btn line bad" data-act="apollocleanlegacy">ลบรายการ Apollo เก่าซ้ำซ้อน ${apolloLegacy} รายการ</button>` : '';
     const rowHtml = p => `<tr><td>${esc(p.product_name)}<br><span class="tag">${esc([p.sku, p.brand].filter(Boolean).join(' · '))}</span></td><td>${TYPES[p.product_type]}</td><td>${priceLabel(p)}</td>${mgr() ? `<td>${p.cost_thb != null ? baht(p.cost_thb) : '-'}</td>` : ''}<td>${p.stock_qty == null ? '-' : `<span class="${p.stock_qty <= 2 ? 'warn' : ''}">${p.stock_qty}</span>`}</td><td>${p.active === false ? '<span class="st">ปิดขาย</span>' : '<span class="st accepted">ขายอยู่</span>'}</td><td class="act"><button class="btn line sm" data-act="editprod" data-id="${p.id}">แก้ไข</button>${mgr() ? ` <button class="btn line sm bad" data-act="delprod" data-id="${p.id}">ลบ</button>` : ''}</td></tr>`;
