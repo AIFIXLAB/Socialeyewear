@@ -249,11 +249,22 @@ function examIntakePrintView(custId, ccText, ccOther, m) {
   const dis = (m.diseases || []).map(x => `${x.label}${x.meds ? ' · ทานยา: ' + x.meds : ''}${x.years != null ? ' · เป็นมา ' + x.years + ' ปี' : ''}`);
   const row = (l, v) => v ? `<div class="row" style="border:0;padding:3px 0"><span class="tag">${esc(l)}</span><span>${esc(v)}</span></div>` : '';
   const gridTbl = (g, rows, cols) => gridHasData(g) ? `<div class="wrap" style="overflow-x:auto;margin:6px 0"><table><tr><th></th>${cols.map(([, l]) => `<th style="font-size:10.5px">${l}</th>`).join('')}</tr>${rows.filter(([rk]) => g[rk]).map(([rk, rl]) => `<tr><th style="text-align:left;white-space:nowrap;font-size:11.5px">${rl}</th>${cols.map(([ck]) => `<td style="text-align:center;font-size:11.5px">${esc((g[rk] || {})[ck] || '-')}</td>`).join('')}</tr>`).join('')}</table></div>` : '';
-  dialog(`<style>#dlg{width:min(900px,96vw)!important;max-width:96vw!important}@media print{#dlg{width:100%!important;max-width:100%!important;margin:0!important;padding:14px!important}}</style>
-  <div class="sheet"><h2>ประวัติสุขภาพ / ผลตรวจสายตา</h2><div class="meta">${esc(shop?.name || 'Social Eyewear')} · ${esc(custName(custId))} · ${day(m.exam_date || now())}</div>
-  <h3 style="margin-top:14px">ข้อมูลผู้รับบริการ</h3>
-  ${row('รหัสลูกค้า', m.patient_code)}${row('ชื่อ-นามสกุล', m.cust_fullname)}${row('อายุ', m.cust_age ? m.cust_age + ' ปี' : '')}${row('เบอร์โทร', m.cust_phone)}
-  ${row('ใช้คอมพิวเตอร์/โน้ตบุ๊ค (ชม./วัน)', m.comp_hours)}${row('แทปเลต/มือถือ (ชม./วัน)', m.tablet_hours)}${row('อื่นๆ', m.usage_other)}
+  dialog(`<style>#dlg{width:min(900px,96vw)!important;max-width:96vw!important}@media print{#dlg{width:100%!important;max-width:100%!important;margin:0!important;padding:14px!important}}
+  #dlg .sheet{font-size:11.5px;line-height:1.35}#dlg .sheet h2{font-size:17px;margin-bottom:2px}#dlg .sheet h3{margin:9px 0 3px;font-size:12px}
+  #dlg .sheet .row{padding:1.5px 0}#dlg .sheet table th,#dlg .sheet table td{padding:4px 6px}</style>
+  <div class="sheet"><h2>ประวัติสุขภาพ / ผลตรวจสายตา</h2><div class="meta" style="margin-bottom:4px">${esc(shop?.name || 'Social Eyewear')} · ${esc(custName(custId))} · ${day(m.exam_date || now())}</div>
+  <h3>ข้อมูลผู้รับบริการ</h3>
+  <div style="display:flex;flex-wrap:wrap;gap:4px 18px;margin:2px 0 4px">
+    <span><span class="tag">รหัสลูกค้า</span> ${esc(m.patient_code || '-')}</span>
+    <span><span class="tag">ชื่อ-นามสกุล</span> ${esc(m.cust_fullname || '-')}</span>
+    <span><span class="tag">อายุ</span> ${m.cust_age ? esc(m.cust_age) + ' ปี' : '-'}</span>
+    <span><span class="tag">เบอร์โทร</span> ${esc(m.cust_phone || '-')}</span>
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:4px 18px;margin:0 0 4px">
+    <span><span class="tag">คอมพิวเตอร์/โน้ตบุ๊ค</span> ${m.comp_hours ? esc(m.comp_hours) + ' ชม./วัน' : '-'}</span>
+    <span><span class="tag">แทปเลต/มือถือ</span> ${m.tablet_hours ? esc(m.tablet_hours) + ' ชม./วัน' : '-'}</span>
+    ${m.usage_other ? `<span><span class="tag">อื่นๆ</span> ${esc(m.usage_other)}</span>` : ''}
+  </div>
   <h3 style="margin-top:14px">อาการทางตา</h3>
   ${row('อาการที่แจ้ง', [ccText, ccOther].filter(Boolean).join(' / ') || '-')}
   ${row('ตามัว/ภาพซ้อน ระยะ', m.blur_distance)}
