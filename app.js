@@ -82,19 +82,23 @@ async function loadShop() {
 }
 const pendingCount = () => T.reduce((n, t) => n + db[t].filter(r => r._dirty && !r._err).length, 0);
 const errCount = () => T.reduce((n, t) => n + db[t].filter(r => r._err).length, 0);
-// รายการที่เคยซิงก์ไม่สำเร็จ (_err) จะไม่ถูกลองใหม่อัตโนมัติอีก (กันไม่ให้วนส่งรายการพังซ้ำๆ ไม่จบ) — ฟังก์ชันนี้ล้างสถานะผิดพลาดแล้วสั่งซิงก์ใหม่ทั้งหมด ให้กดได้เองตรงแถบสถานะ
-function retryFailedSync() {
+// บังคับซิงก์ทันที — ล้างสถานะผิดพลาด (_err) แล้วดึงข้อมูลล่าสุดจากเซิร์ฟเวอร์ + ส่งรายการที่แก้ในเครื่องขึ้นไป
+// ใช้ตอนแก้ไขข้อมูลหลังบ้านเสร็จแล้วอยากให้หน้าร้าน(เครื่องอื่น)เห็นล่าสุดทันที แทนที่จะรอซิงก์พื้นหลังทุก 60 วิ
+function forceSync() {
   let n = 0;
   T.forEach(t => db[t].forEach(r => { if (r._err) { delete r._err; r._dirty = true; r.updated_at = now(); n++; } }));
-  if (n) { persist(); toast(`กำลังลองซิงก์ใหม่ ${n} รายการ`); sync(); }
+  if (n) persist();
+  if (!navigator.onLine || !sess) { toast('ออฟไลน์อยู่ ไม่สามารถซิงก์ได้ตอนนี้'); return; }
+  toast('กำลังซิงก์ข้อมูลล่าสุด…'); sync();
 }
+const retryFailedSync = forceSync; // ชื่อเดิม เผื่อมีที่อื่นอ้างถึง
 function setStatus() {
   const el = $('#sync'); if (!el) return; const c = cfg();
   const s = !navigator.onLine ? ['off', 'ออฟไลน์ · บันทึกในเครื่อง'] : !sess ? ['off', 'ยังไม่ได้ล็อกอิน · บันทึกในเครื่อง'] : !c.url || !c.key ? ['off', 'ยังไม่ตั้งค่า Supabase'] : !shop ? ['off', 'ยังไม่มีร้าน'] : ['ok', status || 'เชื่อมต่อแล้ว'];
-  const p = pendingCount(), e = errCount();
-  el.className = 'sync ' + s[0]; el.innerHTML = `<i></i><span>${esc(s[1])}${p ? ` · รอซิงก์ ${p}` : ''}${e ? ` · ผิดพลาด ${e} (แตะเพื่อลองใหม่)` : ''}</span>`;
-  el.style.cursor = e ? 'pointer' : '';
-  el.onclick = e ? retryFailedSync : null;
+  const p = pendingCount(), e = errCount(), canSync = navigator.onLine && sess;
+  el.className = 'sync ' + s[0]; el.innerHTML = `<i></i><span>${esc(s[1])}${p ? ` · รอซิงก์ ${p}` : ''}${e ? ` · ผิดพลาด ${e}` : ''}${canSync ? ' · แตะเพื่อซิงก์ล่าสุด' : ''}</span>`;
+  el.style.cursor = canSync ? 'pointer' : '';
+  el.onclick = canSync ? forceSync : null;
 }
 // ดึงข้อมูลใหม่จากเซิร์ฟเวอร์ก่อน (แก้ล่าสุดชนะ) แล้วจึงส่งรายการที่แก้ในเครื่องขึ้นไป
 async function sync() {
@@ -941,7 +945,7 @@ const views = {
       })()
         : empty('ยังไม่มีสินค้า', `<button class="btn" data-act="newprod">เพิ่มสินค้า</button> ${live('products').length ? '' : '<button class="btn line" data-act="sample">เพิ่มสินค้าตัวอย่าง 8 รายการ</button>'}`);
     }
-    return `<div class="bar"><div><h1>สินค้า</h1><p class="sub" style="margin:0">ราคา สต็อก และแท็กการใช้งานสำหรับ Sales Studio · ข้อมูลเลนส์ HOYA/Apollo ซิงก์ให้อัตโนมัติทุกครั้งที่เข้าแอป ไม่ต้องกดอัปเดตเอง</p></div><div class="tools"><input placeholder="ค้นหาชื่อ SKU แบรนด์" value="${esc(S.pq)}" data-bind="pq" style="width:220px">${missingOther.length ? `<button class="btn line" data-act="impother">นำเข้ารายการบริการเดิม ${missingOther.length} รายการ</button>` : ''}${hoyaStatus}${hoyaRestoreBtn}${hoyaCleanBtn}${apolloStatus}${apolloRestoreBtn}${apolloCleanBtn}${lensCount ? `<button class="btn line" data-act="gomode" data-id="lenscat">เปิดแคตตาล็อกเลนส์</button>` : ''}${missingFrameBrands.length ? `<button class="btn line" data-act="impframebrands">นำเข้ายี่ห้อกรอบแว่น ${missingFrameBrands.length} ยี่ห้อ</button>` : ''}${missingLensBrands.length ? `<button class="btn line" data-act="implensbrands">นำเข้ายี่ห้อเลนส์อื่นๆ ${missingLensBrands.length} ยี่ห้อ</button>` : ''}${oldFrameImportCount ? `<button class="btn line bad" data-act="cleanupoldframe">ล้างกรอบแว่นแบบรายรุ่นเดิม ${oldFrameImportCount} รายการ</button>` : ''}<button class="btn line" data-act="newframe">เพิ่มกรอบแว่น</button><button class="btn" data-act="newprod">เพิ่มสินค้า (เลนส์/อื่นๆ)</button></div></div>
+    return `<div class="bar"><div><h1>สินค้า</h1><p class="sub" style="margin:0">ราคา สต็อก และแท็กการใช้งานสำหรับ Sales Studio · แก้ไข/เพิ่มสินค้าแล้วกด "ซิงก์ล่าสุด" เพื่อให้หน้าร้านเห็นทันที (ปกติจะอัปเดตเองอัตโนมัติภายใน 1 นาที)</p></div><div class="tools"><button class="btn gold" data-act="syncnow">⟳ ซิงก์ล่าสุด</button><input placeholder="ค้นหาชื่อ SKU แบรนด์" value="${esc(S.pq)}" data-bind="pq" style="width:220px">${missingOther.length ? `<button class="btn line" data-act="impother">นำเข้ารายการบริการเดิม ${missingOther.length} รายการ</button>` : ''}${hoyaStatus}${hoyaRestoreBtn}${hoyaCleanBtn}${apolloStatus}${apolloRestoreBtn}${apolloCleanBtn}${lensCount ? `<button class="btn line" data-act="gomode" data-id="lenscat">เปิดแคตตาล็อกเลนส์</button>` : ''}${missingFrameBrands.length ? `<button class="btn line" data-act="impframebrands">นำเข้ายี่ห้อกรอบแว่น ${missingFrameBrands.length} ยี่ห้อ</button>` : ''}${missingLensBrands.length ? `<button class="btn line" data-act="implensbrands">นำเข้ายี่ห้อเลนส์อื่นๆ ${missingLensBrands.length} ยี่ห้อ</button>` : ''}${oldFrameImportCount ? `<button class="btn line bad" data-act="cleanupoldframe">ล้างกรอบแว่นแบบรายรุ่นเดิม ${oldFrameImportCount} รายการ</button>` : ''}<button class="btn line" data-act="newframe">เพิ่มกรอบแว่น</button><button class="btn" data-act="newprod">เพิ่มสินค้า (เลนส์/อื่นๆ)</button></div></div>
     <div class="chips">${chips}</div>
     ${brandBarHtml}
     ${bodyHtml}`;
@@ -1492,13 +1496,13 @@ function custView(id) {
     const items = live('quote_items').filter(i => i.quote_id === q.id);
     const itemRows = items.length ? `<div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--line,#e4ddd2);display:flex;flex-direction:column;gap:4px">${items.map(i => `<div class="row" style="border:0;padding:0"><span>${esc(i.item_name_snapshot)} <span class="tag">× ${i.quantity}</span></span><span class="tag">${baht(i.unit_price_thb)}</span></div>`).join('')}</div>` : '';
     return `<div class="panel" style="padding:12px 14px">
-      <div class="row" style="border:0;padding:0"><span><b>${esc(q.quote_number || 'รอออกเลข')}</b> <span class="tag">· ${day(q.created_at)}</span></span><span><b>${baht(q.total_thb)}</b> <span class="st ${q.status}">${QST[q.status]}</span></span></div>
+      <div class="row" style="border:0;padding:0"><span><b>${esc(q.quote_number || 'รอออกเลข')}</b> <span class="tag">· ${day(q.created_at)}</span></span><span style="display:flex;align-items:center;gap:8px"><b>${baht(q.total_thb)}</b> <span class="st ${q.status}">${QST[q.status]}</span>${mgr() ? `<button class="btn line sm bad" data-act="delquote" data-id="${q.id}" data-cid="${id}">ลบ</button>` : ''}</span></div>
       ${itemRows}
     </div>`;
   }).join('') : '<p class="tag">ยังไม่มี</p>'}</div>
   ${cls.length ? `<h3 style="margin-top:18px">ประวัติซ่อม/เคลม</h3><div style="display:flex;flex-direction:column;gap:10px">${cls.map(x => `<div class="panel" style="padding:12px 14px">
-      <div class="row" style="border:0;padding:0"><span><b>${x.kind === 'claim' ? 'เคลมประกัน' : 'ซ่อมแว่น'}</b> <span class="tag">· ${day(x.created_at)}${x.frame_model ? ' · ' + esc(x.frame_model) : ''}</span></span><span>${x.cost_thb != null ? baht(x.cost_thb) : '-'} <span class="st">${x.status === 'pending' ? 'รอดำเนินการ' : x.status}</span></span></div>
-      ${x.issue ? `<div class="tag" style="margin-top:6px">${esc(x.issue)}</div>` : ''}${x.repair_items ? `<div class="tag">${esc(x.repair_items)}</div>` : ''}${x.pickup_date ? `<div class="tag">นัดรับ: ${day(x.pickup_date)}</div>` : ''}
+      <div class="row" style="border:0;padding:0"><span><b>${x.kind === 'claim' ? 'เคลมประกัน' : 'ซ่อมแว่น'}</b> <span class="tag">· ${day(x.created_at)}${x.frame_model ? ' · ' + esc(x.frame_model) : ''}</span></span><span style="display:flex;align-items:center;gap:8px">${x.cost_thb != null ? baht(x.cost_thb) : '-'} <span class="st">${x.status === 'pending' ? 'รอดำเนินการ' : x.status}</span>${mgr() ? `<button class="btn line sm bad" data-act="delclaim" data-id="${x.id}" data-cid="${id}">ลบ</button>` : ''}</span></div>
+      ${x.issue ? `<div class="tag" style="margin-top:6px">${esc(x.issue)}</div>` : ''}${x.repair_items ? `<div class="tag">${esc(x.repair_items)}</div>` : ''}${x.pickup_date ? `<div class="tag">นัดรับ: ${day(x.pickup_date)}</div>` : ''}${x.notes ? `<div class="tag">หมายเหตุ: ${esc(x.notes)}</div>` : ''}
     </div>`).join('')}</div>` : ''}
   <div class="foot"><button class="btn line" data-act="close">ปิด</button><button class="btn line" data-act="editcust" data-id="${id}">แก้ไขข้อมูล</button><button class="btn" data-act="newrx" data-id="${id}">เพิ่มค่าสายตา</button></div>`);
 }
@@ -1972,6 +1976,7 @@ function claimListView() {
     <div class="row" style="border:0;padding:0"><span><b>${x.kind === 'claim' ? 'เคลมประกัน' : 'ซ่อมแว่น'}</b> <span class="tag">· แจ้งเมื่อ ${day(x.created_at)}</span></span><span style="display:flex;gap:8px;align-items:center"><span class="tag noprint">${x.status === 'pending' ? 'รอดำเนินการ' : x.status}</span>${mgr() ? `<button type="button" class="btn line sm bad noprint" data-act="delclaim" data-id="${x.id}">ลบ</button>` : ''}</span></div>
     <div style="margin-top:6px">
       ${field('ลูกค้า', custName(x.customer_id))}
+      ${field(x.kind === 'claim' ? 'วันแจ้งเคลม' : 'วันรับซ่อม', day(x.created_at))}
       ${field('รุ่น/ยี่ห้อกรอบ', x.frame_model)}
       ${field('รหัสสินค้า', x.frame_code)}
       ${field('อาการ/ปัญหา', x.issue)}
@@ -2298,7 +2303,8 @@ function kioskView() {
       <button data-act="kioskback" style="${backBtn}">‹ ย้อนกลับ</button>
       <img src="${LOGO_DATA_URI}" style="width:32px;height:32px;object-fit:contain;filter:drop-shadow(0 4px 8px rgba(20,22,26,.3))">
       <span style="font-size:11.5px;letter-spacing:.18em;color:#23262a;font-weight:600">SOCIAL EYEWEAR · บริการลูกค้า${S.activeSeller ? ` · ${esc(S.activeSeller)}` : ''}</span>
-      <button data-act="kioskexit" style="margin-left:auto;padding:8px 18px;border-radius:999px;border:1px solid rgba(255,255,255,.8);background:rgba(255,255,255,.65);box-shadow:0 6px 16px rgba(20,22,26,.18);color:#23262a;font-size:12.5px;cursor:pointer">ออก</button>
+      <button data-act="syncnow" title="ดึงสินค้า/ข้อมูลล่าสุดจากหลังบ้าน" style="margin-left:auto;padding:8px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.8);background:rgba(255,255,255,.65);box-shadow:0 6px 16px rgba(20,22,26,.18);color:#23262a;font-size:12.5px;cursor:pointer">⟳ ซิงก์ล่าสุด</button>
+      <button data-act="kioskexit" style="padding:8px 18px;border-radius:999px;border:1px solid rgba(255,255,255,.8);background:rgba(255,255,255,.65);box-shadow:0 6px 16px rgba(20,22,26,.18);color:#23262a;font-size:12.5px;cursor:pointer">ออก</button>
     </div>
     <div style="max-width:${wide};margin:0 auto">${inner}</div>
   </div>`;
@@ -2760,7 +2766,8 @@ document.addEventListener('click', e => {
   else if (a === 'delcust') { if (confirm('ลบลูกค้ารายนี้? (ใบเสนอราคาเดิมยังอยู่)')) softDelete('customer_profiles', id); }
   else if (a === 'newrx') { K.examMeta = null; rxForm(id); }
   else if (a === 'delrx') { if (confirm('ลบค่าสายตานี้?')) { softDelete('prescriptions', id); custView(b.dataset.cid); } }
-  else if (a === 'delclaim') { if (confirm('ลบรายการแจ้งซ่อม/เคลมนี้?')) { softDelete('claims', id); claimListView(); } }
+  else if (a === 'delclaim') { if (confirm('ลบรายการแจ้งซ่อม/เคลมนี้?')) { softDelete('claims', id); if (b.dataset.cid) custView(b.dataset.cid); else claimListView(); } }
+  else if (a === 'delquote') { if (confirm('ลบประวัติการซื้อรายการนี้? (รวมรายการสินค้าในบิลนี้ด้วย)')) { softDelete('quotes', id); live('quote_items').filter(i => i.quote_id === id).forEach(i => softDelete('quote_items', i.id)); custView(b.dataset.cid); } }
   else if (a === 'printrxhealth') { const r = find('prescriptions', id); examIntakePrintView(b.dataset.cid, '', '', r.meta || {}); }
   else if (a === 'newprod') prodForm(); else if (a === 'newframe') frameForm();
   else if (a === 'addhlt') { const draft = readProdDraft(b.closest('form')); draft.lens_spec.highlights.push({ title: '', desc: '' }); prodForm(draft); }
@@ -2877,6 +2884,7 @@ document.addEventListener('click', e => {
   else if (a === 'gomode') { if (id === 'kiosk') kioskReset(); S.mode = id; render(); }
   else if (a === 'gokeynote') { S.mode = 'admin'; S.v = 'keynote'; render(); }
   else if (a === 'kioskexit') { const viaPin = !!S.activeSeller; S.activeSeller = null; S.mode = viaPin ? 'splash' : 'hub'; render(); }
+  else if (a === 'syncnow') forceSync();
   else if (a === 'opencatalog') { S.catReturn = id || ''; S.catDetail = null; S.mode = 'lenscat'; render(); }
   else if (a === 'closecatalog') { S.mode = S.catReturn || ''; S.catReturn = ''; render(); }
   else if (a === 'catdesign') { S.catDesign = id; render(); }
