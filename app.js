@@ -1937,6 +1937,8 @@ function kioskLensReq() {
 }
 function kioskProductBrowse() {
   const type = K.pcat || 'frame';
+  // กันกรณีเครื่อง/แท็บนี้เปิดแอปค้างมาตั้งแต่ก่อนล้างรายการ HOYA/Apollo ที่ซ้ำกัน (ไม่ได้รีโหลดหน้าใหม่) — ล้างซ้ำให้ทุกครั้งที่เข้าหน้าเลือกสินค้านี้ด้วย ไม่ต้องรอรีโหลดทั้งแอป
+  if (type === 'lens') { dedupeHoyaProducts(new Set(HOYA_LENSES.map(o => o.product_name))); dedupeApolloProducts(new Set(APOLLO_LENSES.map(o => o.product_name))); }
   const q = (K.pq || '').toLowerCase();
   let rows = live('products').filter(p => p.product_type === type && p.active !== false && [p.product_name, p.brand, p.description].join(' ').toLowerCase().includes(q));
   const totalBeforeFilter = rows.length;
