@@ -249,7 +249,7 @@ function examIntakePrintView(custId, ccText, ccOther, m) {
   const dis = (m.diseases || []).map(x => `${x.label}${x.meds ? ' · ทานยา: ' + x.meds : ''}${x.years != null ? ' · เป็นมา ' + x.years + ' ปี' : ''}`);
   const row = (l, v) => v ? `<div class="row" style="border:0;padding:3px 0"><span class="tag">${esc(l)}</span><span>${esc(v)}</span></div>` : '';
   const gridTbl = (g, rows, cols) => gridHasData(g) ? `<div class="wrap" style="overflow-x:auto;margin:6px 0"><table><tr><th></th>${cols.map(([, l]) => `<th style="font-size:10.5px">${l}</th>`).join('')}</tr>${rows.filter(([rk]) => g[rk]).map(([rk, rl]) => `<tr><th style="text-align:left;white-space:nowrap;font-size:11.5px">${rl}</th>${cols.map(([ck]) => `<td style="text-align:center;font-size:11.5px">${esc((g[rk] || {})[ck] || '-')}</td>`).join('')}</tr>`).join('')}</table></div>` : '';
-  dialog(`<style>#dlg{width:min(900px,96vw)!important;max-width:96vw!important}</style>
+  dialog(`<style>#dlg{width:min(900px,96vw)!important;max-width:96vw!important}@media print{#dlg{width:100%!important;max-width:100%!important;margin:0!important;padding:14px!important}}</style>
   <div class="sheet"><h2>ประวัติสุขภาพ / ผลตรวจสายตา</h2><div class="meta">${esc(shop?.name || 'Social Eyewear')} · ${esc(custName(custId))} · ${day(m.exam_date || now())}</div>
   <h3 style="margin-top:14px">ข้อมูลผู้รับบริการ</h3>
   ${row('รหัสลูกค้า', m.patient_code)}${row('ชื่อ-นามสกุล', m.cust_fullname)}${row('อายุ', m.cust_age ? m.cust_age + ' ปี' : '')}${row('เบอร์โทร', m.cust_phone)}
@@ -300,8 +300,8 @@ const NAV = [['customers', 'ลูกค้า'], ['products', 'สินค้�
 const S = { v: 'customers', need: 'general', cart: [], cust: '', disc: 0, notes: '', q: '', pq: '', ptype: 'all', pbrand: '', staff: null, mode: 'splash', custView: 'all', custFrom: '', custTo: '', catQ: '', catCompare: [], catDetail: null, catReturn: '', catDesign: '', catMain: '', activeSeller: null, varPick: null, knSel: [], knIdx: 0 };
 const freshLR = () => ({ purpose: [], other: '', vision: [], lenstype: [], brand: [], level: [], lensIndex: [], coating: [], photochromic: [], age: '', budget: '', occupation: '', notes: '' });
 const freshDisc = () => ({ type: 'amt', val: 0 });
-let K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, discFrame: freshDisc(), discLens: freshDisc(), lensFilterOn: true, examMeta: null };
-const kioskReset = () => { K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, detailProdId: null, discFrame: freshDisc(), discLens: freshDisc(), lensFilterOn: true, examMeta: null }; };
+let K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, discFrame: freshDisc(), discLens: freshDisc(), lensFilterOn: true, examMeta: null, examDraft: {} };
+const kioskReset = () => { K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, detailProdId: null, discFrame: freshDisc(), discLens: freshDisc(), lensFilterOn: true, examMeta: null, examDraft: {} }; };
 
 /* ---------- จับคู่เลนส์กับความต้องการลูกค้า (หน้าบริการลูกค้า ขั้นตอนที่ 1-3) ---------- */
 // ขั้นตอนที่ 3 ใช้ชุดตัวเลือกเดียวกับ LENS_DESIGN ที่หลังบ้านเป๊ะ ๆ (ไม่แยกชุดคำศัพท์กันสองที่)
@@ -1820,37 +1820,51 @@ function kioskExamIntake() {
   const list = knownCC();
   const c = K.custId ? find('customer_profiles', K.custId) : null;
   const ageGuess = (c && c.notes && (c.notes.match(/อายุ\s*(\d+)/) || [])[1]) || '';
+  if (!K.examDraft) K.examDraft = {};
+  const dr = K.examDraft; // ค่าร่างที่พิมพ์ไว้ล่าสุด (กันข้อมูลหายตอน render ซ้ำ เช่น ตอนซิงก์พื้นหลัง)
   const chip = s => {
     const on = K.cc.includes(s);
-    return `<button type="button" data-act="cctoggle" data-id="${esc(s)}" style="display:inline-flex;align-items:center;gap:7px;padding:8px 13px;border-radius:999px;border:1px solid ${on ? '#1f6f43' : 'rgba(0,0,0,.18)'};background:${on ? '#1f6f43' : '#fff'};color:${on ? '#fff' : '#23262a'};font-size:12.5px;cursor:pointer;transition:.12s">
-      <span style="display:inline-block;width:14px;height:14px;border-radius:4px;border:1.5px solid ${on ? '#fff' : 'rgba(0,0,0,.35)'};line-height:11px;font-size:10px;text-align:center">${on ? '✓' : ''}</span>${esc(s)}
-    </button>`;
+    const custom = !CC_SEED.includes(s);
+    return `<span style="display:inline-flex;align-items:center;gap:2px">
+      <button type="button" data-act="cctoggle" data-id="${esc(s)}" style="display:inline-flex;align-items:center;gap:7px;padding:8px 13px;border-radius:999px;border:1px solid ${on ? '#1f6f43' : 'rgba(0,0,0,.18)'};background:${on ? '#1f6f43' : '#fff'};color:${on ? '#fff' : '#23262a'};font-size:12.5px;cursor:pointer;transition:.12s">
+        <span style="display:inline-block;width:14px;height:14px;border-radius:4px;border:1.5px solid ${on ? '#fff' : 'rgba(0,0,0,.35)'};line-height:11px;font-size:10px;text-align:center">${on ? '✓' : ''}</span>${esc(s)}
+      </button>${custom ? `<button type="button" data-act="ccdelseed" data-id="${esc(s)}" title="ลบอาการนี้ออกจากรายการ" style="width:22px;height:22px;flex:none;border-radius:50%;border:1px solid rgba(0,0,0,.15);background:#fff;color:#a23b2a;font-size:11px;cursor:pointer;line-height:20px;text-align:center;padding:0">✕</button>` : ''}
+    </span>`;
   };
   // กรอบ/หัวข้อ จำลองสไตล์แบบฟอร์มกระดาษ — เส้นกรอบบาง มีเลขหัวข้อ
   const box = (title, inner) => `<div style="border:1px solid #c9ceb6;border-radius:10px;padding:14px 16px;margin:14px 0;background:#fdfdf8">
     <div style="font-weight:700;font-size:13px;color:#7a3b2e;margin-bottom:10px;letter-spacing:.02em">${title}</div>${inner}</div>`;
-  const u = (n, ph = '', type = 'text', extra = '') => `<input name="${n}" type="${type}" placeholder="${esc(ph)}" ${extra} style="border:none;border-bottom:1px solid #b9c0c9;border-radius:0;background:transparent;padding:5px 2px;font-size:13px">`;
-  const uw = (label, n, ph = '', type = 'text', extra = '') => `<label style="display:flex;flex-direction:column;gap:2px;font-size:12px;color:#60655e">${esc(label)}${u(n, ph, type, extra)}</label>`;
+  // u/uw อ่านค่าที่พิมพ์ไว้ล่าสุดจาก K.examDraft ก่อนเสมอ (ถ้ายังไม่เคยพิมพ์ ใช้ def ที่ส่งมา) กัน re-render แล้วข้อมูลหาย
+  const u = (n, ph = '', type = 'text', extra = '', def = '') => {
+    const val = dr[n] != null ? dr[n] : def;
+    const valAttr = val !== '' && val != null ? `value="${esc(val)}"` : '';
+    return `<input name="${n}" type="${type}" placeholder="${esc(ph)}" ${valAttr} ${extra} style="border:none;border-bottom:1px solid #b9c0c9;border-radius:0;background:transparent;padding:5px 2px;font-size:13px">`;
+  };
+  const uw = (label, n, ph = '', type = 'text', extra = '', def = '') => `<label style="display:flex;flex-direction:column;gap:2px;font-size:12px;color:#60655e">${esc(label)}${u(n, ph, type, extra, def)}</label>`;
+  const ta = (n, rows = 2, extra = '') => `<textarea name="${n}" rows="${rows}" ${extra}>${esc(dr[n] || '')}</textarea>`;
+  const sel = (n, options, blankLabel = '— ไม่ทราบ —') => `<select name="${n}">${blankLabel ? `<option value="">${esc(blankLabel)}</option>` : ''}${options.map(([v, l]) => `<option value="${v}" ${dr[n] === v ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+  const selw = (label, n, options, blankLabel) => `<label style="display:flex;flex-direction:column;gap:2px;font-size:12px;color:#60655e">${esc(label)}${sel(n, options, blankLabel)}</label>`;
+  const radio = (n, v, label) => `<label style="display:flex;align-items:center;gap:5px;margin:0;white-space:nowrap;flex:none"><input type="radio" name="${n}" value="${v}" ${dr[n] === v ? 'checked' : ''}> ${esc(label)}</label>`;
   const dRow = ([k, label]) => `<div style="display:grid;grid-template-columns:1.2fr 1fr .8fr;gap:8px;align-items:center;padding:6px 0;border-bottom:1px dashed rgba(0,0,0,.08)">
-    <label style="display:flex;align-items:center;gap:7px;margin:0;font-size:13px"><input type="checkbox" name="chk_${k}" style="width:17px;height:17px"> ${esc(label)}</label>
-    <input name="med_${k}" placeholder="ทานยา (ถ้ามี)" style="font-size:12.5px">
-    <input name="yr_${k}" type="number" min="0" placeholder="เป็นมา (ปี)" style="font-size:12.5px">
+    <label style="display:flex;align-items:center;gap:7px;margin:0;font-size:13px"><input type="checkbox" name="chk_${k}" ${dr['chk_' + k] ? 'checked' : ''} style="width:17px;height:17px"> ${esc(label)}</label>
+    <input name="med_${k}" placeholder="ทานยา (ถ้ามี)" value="${esc(dr['med_' + k] || '')}" style="font-size:12.5px">
+    <input name="yr_${k}" type="number" min="0" placeholder="เป็นมา (ปี)" value="${esc(dr['yr_' + k] != null ? dr['yr_' + k] : '')}" style="font-size:12.5px">
   </div>`;
   // แถวโรคตา/อุบัติเหตุ: ชื่อ + รพ./คลินิก + รักษา/ผ่าตัด
   const med3 = (n1, n2, n3, ph1) => `<div style="display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:10px;margin-bottom:8px">${uw('รายละเอียด', n1, ph1)}${uw('รักษา รพ./คลินิก', n2)}${uw('รักษา/ผ่าตัด', n3)}</div>`;
   // ตารางกรอกแบบ grid (VA / SUBJECTIVE) — ช่องกรอกเล็กต่อแถวต่อคอลัมน์
   const gridTable = (rows, cols, prefix, cellW = 64) => `<div class="wrap" style="overflow-x:auto"><table style="min-width:${80 + cols.length * (cellW + 6)}px"><tr><th></th>${cols.map(([, l]) => `<th style="font-size:10.5px;white-space:nowrap">${l}</th>`).join('')}</tr>
-    ${rows.map(([rk, rl]) => `<tr><th style="text-align:left;white-space:nowrap;font-size:11.5px">${rl}</th>${cols.map(([ck]) => `<td style="padding:3px"><input name="${prefix}_${rk}_${ck}" style="width:${cellW}px;padding:5px 4px;font-size:11.5px;text-align:center"></td>`).join('')}</tr>`).join('')}
+    ${rows.map(([rk, rl]) => `<tr><th style="text-align:left;white-space:nowrap;font-size:11.5px">${rl}</th>${cols.map(([ck]) => { const nm = `${prefix}_${rk}_${ck}`; return `<td style="padding:3px"><input name="${nm}" value="${esc(dr[nm] || '')}" style="width:${cellW}px;padding:5px 4px;font-size:11.5px;text-align:center"></td>`; }).join('')}</tr>`).join('')}
     </table></div>`;
   return `<div class="panel" style="padding:20px 22px;width:100%;box-sizing:border-box">
     <h2 style="margin-top:0">ซักประวัติก่อนตรวจสายตา</h2>
     <form data-form="examintake">
     <div style="display:grid;grid-template-columns:1fr 1fr 2fr 1fr 1.3fr;gap:12px;margin-bottom:4px">
-      ${uw('รหัสลูกค้า', 'patient_code', '', 'text', c && c.customer_code ? `value="${esc(c.customer_code)}"` : '')}
-      ${uw('วันที่ตรวจ', 'exam_date', '', 'date', `value="${now().slice(0, 10)}"`)}
-      ${uw('ชื่อ-นามสกุล', 'cust_fullname', '', 'text', c ? `value="${esc(c.full_name || '')}"` : '')}
-      ${uw('อายุ', 'cust_age', 'ปี', 'number', ageGuess ? `value="${esc(ageGuess)}"` : '')}
-      ${uw('เบอร์โทร', 'cust_phone', '', 'text', c && c.phone ? `value="${esc(c.phone)}"` : '')}
+      ${uw('รหัสลูกค้า', 'patient_code', '', 'text', '', c && c.customer_code || '')}
+      ${uw('วันที่ตรวจ', 'exam_date', '', 'date', '', now().slice(0, 10))}
+      ${uw('ชื่อ-นามสกุล', 'cust_fullname', '', 'text', '', c && c.full_name || '')}
+      ${uw('อายุ', 'cust_age', 'ปี', 'number', '', ageGuess || '')}
+      ${uw('เบอร์โทร', 'cust_phone', '', 'text', '', c && c.phone || '')}
     </div>
 
     ${box('ลักษณะการใช้สายตา/การใช้แว่น', `<div style="display:grid;grid-template-columns:1fr 1fr 2fr;gap:12px">
@@ -1868,14 +1882,14 @@ function kioskExamIntake() {
       </div>`)}
 
     ${box('อาการทางตา', `
-      <p class="tag" style="margin:0 0 8px">แตะติ๊กอาการที่ลูกค้าแจ้งได้เลย ถ้ายังไม่มีในรายการให้พิมพ์เพิ่มด้านล่าง — จะถูกบันทึกไว้ให้เลือกในครั้งถัดไปด้วย</p>
+      <p class="tag" style="margin:0 0 8px">แตะติ๊กอาการที่ลูกค้าแจ้งได้เลย ถ้ายังไม่มีในรายการให้พิมพ์เพิ่มด้านล่าง — จะถูกบันทึกไว้ให้เลือกในครั้งถัดไปด้วย (กด ✕ เพื่อลบอาการที่พิมพ์เพิ่มเองออกจากรายการได้)</p>
       <div style="display:flex;flex-wrap:wrap;gap:7px;margin:0 0 10px">${list.map(chip).join('')}</div>
       <div style="display:flex;gap:10px;margin-bottom:10px">
         <input placeholder="พิมพ์อาการใหม่ที่ไม่มีในรายการ แล้วกด +" data-bind="ccnew" value="${esc(K.ccNew || '')}" style="flex:1">
         <button type="button" class="btn line sm" data-act="ccaddnew" style="white-space:nowrap">+ เพิ่มอาการ</button>
       </div>
       <label>อาการอื่นๆ นอกเหนือรายการ (รายละเอียดเพิ่มเติม)<textarea data-bind="ccother" rows="2" placeholder="ระบุรายละเอียดอาการอื่นๆ ที่ไม่อยู่ในรายการด้านบน">${esc(K.ccOther || '')}</textarea></label>
-      <label style="margin-top:8px">ตามัว/เห็นภาพซ้อน ระยะ<select name="blur_distance"><option value="">— ไม่ระบุ —</option><option value="ใกล้">ใกล้</option><option value="ไกล">ไกล</option><option value="ทั้งใกล้และไกล">ทั้งใกล้และไกล</option></select></label>`)}
+      <div style="margin-top:8px">${selw('ตามัว/เห็นภาพซ้อน ระยะ', 'blur_distance', [['ใกล้', 'ใกล้'], ['ไกล', 'ไกล'], ['ทั้งใกล้และไกล', 'ทั้งใกล้และไกล']], '— ไม่ระบุ —')}</div>`)}
 
     ${box('ประวัติโรคตา (ถ้ามีมากกว่า 1 รายการ กรอกได้สูงสุด 4 แถว)', `
       ${EYE_DISEASE_ROWS.map(i => med3('ed' + i + '_name', 'ed' + i + '_clinic', 'ed' + i + '_treat', 'โรคตา')).join('')}
@@ -1883,13 +1897,13 @@ function kioskExamIntake() {
       ${med3('accident_detail', 'accident_clinic', 'accident_treat', 'อุบัติเหตุทางตา (ถ้าไม่มีเว้นว่างได้)')}
       <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;margin-top:6px">
         ${uw('ตรวจวัดสายตาล่าสุด เมื่อ/ที่ไหน', 'last_va_check_where')}
-        <label style="display:flex;flex-direction:column;gap:2px;font-size:12px;color:#60655e">ตรวจโดย<select name="last_va_check_by"><option value="">— ไม่ระบุ —</option><option value="od">OD</option><option value="optician">Optician</option><option value="other">อื่น</option></select></label>
+        ${selw('ตรวจโดย', 'last_va_check_by', [['od', 'OD'], ['optician', 'Optician'], ['other', 'อื่น']], '— ไม่ระบุ —')}
         ${uw('ระบุ (ถ้าเลือกอื่น)', 'last_va_check_other')}
       </div>`)}
 
     ${box('ประวัติการใช้แว่น / คอนแทคเลนส์', `
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px">
-        <label style="display:flex;flex-direction:column;gap:2px;font-size:12px;color:#60655e">CL<select name="cl_freq"><option value="">— ไม่ได้ใช้ —</option><option value="daily">รายวัน</option><option value="monthly">รายเดือน</option></select></label>
+        ${selw('CL', 'cl_freq', [['daily', 'รายวัน'], ['monthly', 'รายเดือน']], '— ไม่ได้ใช้ —')}
         ${uw('R', 'cl_r')}${uw('L', 'cl_l')}${uw('ระยะเวลาที่ใช้', 'cl_duration')}
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:10px">
@@ -1918,25 +1932,23 @@ function kioskExamIntake() {
 
     ${box('VA', `${gridTable(VA_ROWS, VA_COLS, 'va')}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px">
-        <label style="display:flex;flex-direction:column;gap:2px;font-size:12px;color:#60655e">ตาข้างที่ถนัด<select name="dominant_eye"><option value="">— ไม่ทราบ —</option><option value="od">ขวา (R)</option><option value="os">ซ้าย (L)</option></select></label>
-        <label style="display:flex;flex-direction:column;gap:2px;font-size:12px;color:#60655e">มือข้างที่ถนัด<select name="dominant_hand"><option value="">— ไม่ทราบ —</option><option value="right">ขวา</option><option value="left">ซ้าย</option></select></label>
+        ${selw('ตาข้างที่ถนัด', 'dominant_eye', [['od', 'ขวา (R)'], ['os', 'ซ้าย (L)']])}
+        ${selw('มือข้างที่ถนัด', 'dominant_hand', [['right', 'ขวา'], ['left', 'ซ้าย']])}
       </div>`)}
 
     ${box('SUBJECTIVE', gridTable(SUB_ROWS, SUB_COLS, 'sub', 56))}
 
     ${box('สรุปผล', `
-      <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#60655e;margin-bottom:10px">แว่นสำหรับ
-        <span style="display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:#23262a">
-          <label style="display:flex;align-items:center;gap:5px;margin:0"><input type="radio" name="purpose_type" value="distance"> มองไกล</label>
-          <label style="display:flex;align-items:center;gap:5px;margin:0"><input type="radio" name="purpose_type" value="near"> มองใกล้</label>
-          <label style="display:flex;align-items:center;gap:5px;margin:0"><input type="radio" name="purpose_type" value="other"> อื่นๆ</label>
-          <input name="purpose_other" placeholder="ระบุ (ถ้าเลือกอื่นๆ)" style="flex:1;min-width:140px">
+      <label style="display:flex;flex-direction:column;gap:6px;font-size:12px;color:#60655e;margin-bottom:10px">แว่นสำหรับ
+        <span style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:13px;color:#23262a">
+          ${radio('purpose_type', 'distance', 'มองไกล')}${radio('purpose_type', 'near', 'มองใกล้')}${radio('purpose_type', 'other', 'อื่นๆ')}
+          <input name="purpose_other" value="${esc(dr.purpose_other || '')}" placeholder="ระบุ (ถ้าเลือกอื่นๆ)" style="flex:1;min-width:140px">
         </span>
       </label>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         ${uw('ผู้ตรวจ', 'examiner')}${uw('ตำแหน่ง', 'examiner_role')}
       </div>
-      <label style="margin-top:10px">หมายเหตุเพิ่มเติม<textarea name="notes2" rows="2"></textarea></label>`)}
+      <label style="margin-top:10px">หมายเหตุเพิ่มเติม${ta('notes2', 2)}</label>`)}
 
       <div class="foot"><button type="button" class="btn line" data-act="kioskback">ย้อนกลับ</button><button type="button" class="btn line" data-act="printexam">พิมพ์แบบฟอร์ม</button><button class="btn" type="submit">บันทึกผลตรวจ</button></div>
     </form>
@@ -1946,7 +1958,7 @@ function claimListView() {
   const rows = live('claims').sort((a, b) => b.created_at.localeCompare(a.created_at));
   const field = (l, v) => v ? `<div class="row" style="border:0;padding:2px 0"><span class="tag">${l}</span><span>${esc(v)}</span></div>` : '';
   const card = x => `<div class="panel" style="padding:12px 14px;margin-bottom:10px">
-    <div class="row" style="border:0;padding:0"><span><b>${x.kind === 'claim' ? 'เคลมประกัน' : 'ซ่อมแว่น'}</b> <span class="tag">· แจ้งเมื่อ ${day(x.created_at)}</span></span><span class="tag noprint">${x.status === 'pending' ? 'รอดำเนินการ' : x.status}</span></div>
+    <div class="row" style="border:0;padding:0"><span><b>${x.kind === 'claim' ? 'เคลมประกัน' : 'ซ่อมแว่น'}</b> <span class="tag">· แจ้งเมื่อ ${day(x.created_at)}</span></span><span style="display:flex;gap:8px;align-items:center"><span class="tag noprint">${x.status === 'pending' ? 'รอดำเนินการ' : x.status}</span>${mgr() ? `<button type="button" class="btn line sm bad noprint" data-act="delclaim" data-id="${x.id}">ลบ</button>` : ''}</span></div>
     <div style="margin-top:6px">
       ${field('ลูกค้า', custName(x.customer_id))}
       ${field('รุ่น/ยี่ห้อกรอบ', x.frame_model)}
@@ -1955,10 +1967,11 @@ function claimListView() {
       ${field('รายการที่ต้องซ่อม', x.repair_items)}
       ${field('ค่าบริการโดยประมาณ', x.cost_thb != null ? baht(x.cost_thb) : '')}
       ${field('วันนัดรับสินค้า', x.pickup_date ? day(x.pickup_date) : '')}
+      ${!(x.frame_model || x.frame_code || x.issue || x.repair_items || x.cost_thb != null) ? `<div class="tag" style="margin-top:4px">(รายการนี้ยังไม่มีรายละเอียดกรอกไว้)</div>` : ''}
       ${x.notes ? `<div style="margin-top:6px;padding-top:6px;border-top:1px dashed var(--line,#e4ddd2);font-size:12px;color:var(--mute,#69756d)">${esc(x.notes)}</div>` : ''}
     </div>
   </div>`;
-  dialog(`<style>#dlg{width:min(760px,95vw)!important;max-width:95vw!important}</style>
+  dialog(`<style>#dlg{width:min(760px,95vw)!important;max-width:95vw!important}@media print{#dlg{width:100%!important;max-width:100%!important;margin:0!important;padding:14px!important}}</style>
   <div class="sheet"><h2>รายการแจ้งซ่อม / เคลมสินค้า</h2><div class="meta">${esc(shop?.name || 'Social Eyewear')} · พิมพ์เมื่อ ${day(now())} · ทั้งหมด ${rows.length} รายการ</div>
   ${rows.length ? rows.map(card).join('') : '<p class="tag">ยังไม่มีรายการแจ้งซ่อม/เคลม</p>'}
   </div>
@@ -2736,6 +2749,7 @@ document.addEventListener('click', e => {
   else if (a === 'delcust') { if (confirm('ลบลูกค้ารายนี้? (ใบเสนอราคาเดิมยังอยู่)')) softDelete('customer_profiles', id); }
   else if (a === 'newrx') { K.examMeta = null; rxForm(id); }
   else if (a === 'delrx') { if (confirm('ลบค่าสายตานี้?')) { softDelete('prescriptions', id); custView(b.dataset.cid); } }
+  else if (a === 'delclaim') { if (confirm('ลบรายการแจ้งซ่อม/เคลมนี้?')) { softDelete('claims', id); claimListView(); } }
   else if (a === 'printrxhealth') { const r = find('prescriptions', id); examIntakePrintView(b.dataset.cid, '', '', r.meta || {}); }
   else if (a === 'newprod') prodForm(); else if (a === 'newframe') frameForm();
   else if (a === 'addhlt') { const draft = readProdDraft(b.closest('form')); draft.lens_spec.highlights.push({ title: '', desc: '' }); prodForm(draft); }
@@ -2873,7 +2887,7 @@ document.addEventListener('click', e => {
     K.hist.push(K.step);
     if (id === 'lens') { K.lr = freshLR(); K.step = 'lensreq'; render(); }
     else if (id === 'frame') { S.cust = K.custId; K.pq = ''; K.pcat = 'frame'; K.step = 'pick'; render(); }
-    else { if (id === 'exam') { K.cc = []; K.ccOther = ''; K.ccNew = ''; K.examMeta = null; } K.step = id === 'exam' ? 'examintake' : 'claimform'; render(); }
+    else { if (id === 'exam') { K.cc = []; K.ccOther = ''; K.ccNew = ''; K.examMeta = null; K.examDraft = {}; } K.step = id === 'exam' ? 'examintake' : 'claimform'; render(); }
   }
   else if (a === 'lrtoggle') { const group = b.dataset.group, arr = K.lr[group] || (K.lr[group] = []); K.lr[group] = arr.includes(id) ? arr.filter(x => x !== id) : [...arr, id]; render(); }
   else if (a === 'lensreqgo') { S.cust = K.custId; K.pq = ''; K.pcat = 'lens'; K.hist.push(K.step); K.step = 'pick'; render(); }
@@ -2894,6 +2908,7 @@ document.addEventListener('click', e => {
     if (!K.cc.includes(v)) K.cc = [...K.cc, v];
     K.ccNew = ''; render();
   }
+  else if (a === 'ccdelseed') { ls.set('ccSeed', ls.get('ccSeed', []).filter(x => x !== id)); K.cc = K.cc.filter(x => x !== id); render(); }
   else if (a === 'kioskaddprod') kioskQuickAddProd(id);
   else if (a === 'kioskdelprod') { if (confirm('ลบสินค้านี้?')) { S.cart = S.cart.filter(i => i.id !== id && i.productId !== id); softDelete('products', id); render(); } }
   else if (a === 'kioskproddetail') { S.catReturn = 'kiosk'; S.catDetail = id; S.mode = 'lenscat'; render(); }
@@ -3033,6 +3048,7 @@ document.addEventListener('input', e => {
   else if (k === 'kpq') { K.pq = e.target.value; refocus(); }
   else if (k === 'knq') { S.knq = e.target.value; refocus(); }
   else if (k === 'ccnew') K.ccNew = e.target.value;
+  else if (k === 'ccother') K.ccOther = e.target.value;
   else if (k.startsWith('cartcode:')) { const x = S.cart.find(i => i.id === k.slice(9)); if (x) x.code = e.target.value; }
   else if (k.startsWith('cartcolor:')) { const x = S.cart.find(i => i.id === k.slice(10)); if (x) x.color = e.target.value; }
   else if (k.startsWith('cartframetype:')) { const x = S.cart.find(i => i.id === k.slice(14)); if (x) x.frameType = e.target.value || null; }
@@ -3041,6 +3057,17 @@ document.addEventListener('input', e => {
   else if (k === 'vpcorridor') { if (S.varPick) S.varPick.corridor = e.target.value; }
   else if (k === 'vptype') { if (S.varPick) S.varPick.lensType = e.target.value; }
 });
+// เก็บค่าที่พิมพ์ในหน้าซักประวัติ/ตรวจสายตาไว้ใน K.examDraft ทันทีที่พิมพ์ (ไม่เรียก render()) — กันข้อมูลหายถ้ามี render() อื่นเกิดขึ้นระหว่างกรอก (เช่น ซิงก์พื้นหลังทุก 60 วิ)
+function trackExamDraft(e) {
+  const t = e.target; if (!t.name || !t.closest) return;
+  const f = t.closest('form[data-form="examintake"]'); if (!f) return;
+  if (!K.examDraft) K.examDraft = {};
+  if (t.type === 'checkbox') K.examDraft[t.name] = t.checked;
+  else if (t.type === 'radio') { if (t.checked) K.examDraft[t.name] = t.value; }
+  else K.examDraft[t.name] = t.value;
+}
+document.addEventListener('input', trackExamDraft);
+document.addEventListener('change', trackExamDraft);
 document.addEventListener('keydown', e => {
   if (S.mode !== 'present') return;
   if (e.target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return;
@@ -3169,7 +3196,7 @@ document.addEventListener('submit', async e => {
         meta: { ...meta, od_ph: num(fo.fh), os_ph: num(fs.fh), od_seg: num(fo.sh), os_seg: num(fs.sh), od_param: prismTxt(fo), os_param: prismTxt(fs) },
         notes: notes || null, deleted_at: null
       });
-      K.cc = []; K.ccOther = ''; K.ccNew = ''; K.examMeta = null; K.hist = [];
+      K.cc = []; K.ccOther = ''; K.ccNew = ''; K.examMeta = null; K.examDraft = {}; K.hist = [];
       commit(); K.step = 'done'; render(); toast('บันทึกผลตรวจสายตาแล้ว');
     } else if (k === 'claimform') {
       const claimNote = 'หมายเหตุ: ระยะเวลาการเคลมสินค้าอาจมีระยะนานกว่าที่นัด เนื่องจากอะไหล่บางประเภทต้องรอสั่งนอก และอาจไม่ตรงรุ่น เนื่องจากไม่มีผลิต หากมีปัญหาดังกล่าวทางร้านจะมีการแจ้งให้ลูกค้าทราบอีกครั้ง';
