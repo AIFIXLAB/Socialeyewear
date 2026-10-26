@@ -14,7 +14,7 @@ const errText = e => { const m = e?.message || String(e); try { return JSON.pars
 /* ---------- โครงสร้างข้อมูล (ตรงกับ supabase/schema.sql) ---------- */
 const COLS = {
   customer_profiles: ['id', 'shop_id', 'customer_code', 'full_name', 'phone', 'budget_thb', 'lifestyle', 'notes', 'consent_recorded_at', 'deleted_at', 'created_at'],
-  prescriptions: ['id', 'shop_id', 'customer_id', 'exam_date', 'od_sph', 'od_cyl', 'od_axis', 'os_sph', 'os_cyl', 'os_axis', 'pd', 'add_power', 'od_pd', 'os_pd', 'od_add', 'os_add', 'examiner', 'notes', 'deleted_at', 'created_at'],
+  prescriptions: ['id', 'shop_id', 'customer_id', 'exam_date', 'od_sph', 'od_cyl', 'od_axis', 'os_sph', 'os_cyl', 'os_axis', 'pd', 'add_power', 'od_pd', 'os_pd', 'od_add', 'os_add', 'examiner', 'notes', 'meta', 'deleted_at', 'created_at'],
   products: ['id', 'shop_id', 'product_type', 'sku', 'brand', 'color', 'product_name', 'description', 'features', 'retail_price_thb', 'cost_thb', 'stock_qty', 'active', 'lens_spec', 'deleted_at', 'created_at'],
   quotes: ['id', 'shop_id', 'customer_id', 'quote_number', 'status', 'subtotal_thb', 'discount_thb', 'total_thb', 'notes', 'valid_until', 'receipt_date', 'meta', 'deleted_at', 'created_at'],
   quote_items: ['id', 'shop_id', 'quote_id', 'product_id', 'item_name_snapshot', 'product_type', 'quantity', 'unit_price_thb', 'line_total_thb', 'meta', 'deleted_at', 'created_at'],
@@ -1336,10 +1336,35 @@ function rxForm(cid, pre = '') {
   const g = (n, l, st = '0.25') => fld(n, l, '', 'number', `step="${st}"`);
   const eyeGrid = (prefix, label) => `<div style="margin-top:10px"><div class="tag" style="font-weight:600;margin-bottom:6px">${label}</div>
     <div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0 12px">${g(prefix + '_sph', 'SPH')}${g(prefix + '_cyl', 'CYL')}${fld(prefix + '_axis', 'AXIS (0-180)', '', 'number', 'min="0" max="180"')}${g(prefix + '_add', 'ADD')}${g(prefix + '_pd', 'PD', '0.5')}</div></div>`;
+  const eyeExtra = (prefix, label) => `<div style="margin-top:10px"><div class="tag" style="font-weight:600;margin-bottom:6px">พารามิเตอร์เพิ่มเติม · ${label}</div>
+    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0 12px">${g(prefix + '_ph', 'PH', '0.5')}${g(prefix + '_seg', 'ค่าสูงถ้วย (Seg Height)', '0.5')}${fld(prefix + '_param', 'พารามิเตอร์อื่นๆ', '')}</div></div>`;
   dialog(`<style>#dlg{width:min(640px,95vw)!important}</style><form data-form="rx" data-cid="${cid}"><h2>เพิ่มค่าสายตา · ${esc(custName(cid))}</h2>
     <div class="two">${fld('exam_date', 'วันที่ตรวจ', now().slice(0, 10), 'date')}${fld('examiner', 'ผู้ตรวจ', '', 'text')}</div>
     ${eyeGrid('od', 'ขวา (OD)')}${eyeGrid('os', 'ซ้าย (OS)')}
+    ${eyeExtra('od', 'ขวา')}${eyeExtra('os', 'ซ้าย')}
     <label style="margin-top:12px">บันทึก<textarea name="notes" rows="2">${esc(pre)}</textarea></label>${foot('บันทึกค่าสายตา')}</form>`);
+}
+// ฟอร์ม "กรอกเลนส์เอง" — ใช้ตอนเลนส์ที่ขายไม่มีในแคตตาล็อก (ไม่ผูกกับสินค้าในระบบ บันทึกเป็นรายละเอียดอิสระต่อบิลนี้เท่านั้น)
+function customLensForm() {
+  const brands = knownBrands('lens');
+  dialog(`<style>#dlg{width:min(640px,95vw)!important}</style><form data-form="customlens"><h2>กรอกเลนส์เอง</h2>
+    <p class="tag" style="margin:0 0 10px">ใช้เมื่อหาเลนส์ที่ขายไม่เจอในแคตตาล็อก รายการนี้จะไม่ผูกกับสต็อกสินค้า</p>
+    <div class="two">
+      <label>ยี่ห้อเลนส์<select name="brand"><option value="">— เลือกยี่ห้อ —</option>${brands.map(b => `<option value="${esc(b)}">${esc(b)}</option>`).join('')}</select></label>
+      ${fld('model', 'รุ่น/ชื่อเลนส์', '')}
+    </div>
+    <div class="two">
+      ${fld('lens_type', 'ชนิดเลนส์ (กรอกเอง)', '')}
+      <label>Index<select name="lens_index"><option value="">— ไม่ระบุ —</option>${LENS_INDEX_OPTS.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></label>
+    </div>
+    <div class="two">
+      ${fld('corridor', 'Corridor (สำหรับโปรเกรสซีฟ)', '')}
+      <label>เปลี่ยนสี/ย้อมสี<select name="color_change">${LENS_COLOR_OPTS.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></label>
+    </div>
+    ${fld('tint_code', 'รหัสสี/เฉดสีที่ย้อม (ถ้ามี)', '')}
+    <div class="two">${fld('price', 'ราคาขาย (บาท)', '', 'number', 'min="0" required')}${fld('params', 'พารามิเตอร์เพิ่มเติม', '')}</div>
+    <label style="margin-top:10px">หมายเหตุ<textarea name="notes" rows="2"></textarea></label>
+    ${foot('เพิ่มลงตะกร้า')}</form>`);
 }
 function custView(id) {
   const c = find('customer_profiles', id), rx = db.prescriptions.filter(r => !r.deleted_at && r.customer_id === id).sort((a, b) => (b.exam_date || b.created_at).localeCompare(a.exam_date || a.created_at));
@@ -1347,7 +1372,14 @@ function custView(id) {
   const cls = live('claims').filter(x => x.customer_id === id).sort((a, b) => b.created_at.localeCompare(a.created_at));
   dialog(`<style>#dlg{width:min(760px,95vw)!important;max-width:95vw!important}</style>
   <h2>${esc(c.full_name)} <span class="tag">${esc(c.customer_code || '')}</span></h2><p class="tag">${esc([c.phone, c.budget_thb ? 'งบ ' + baht(c.budget_thb) : '', c.lifestyle].filter(Boolean).join(' · '))}${c.notes ? '<br>' + esc(c.notes) : ''}</p>
-  <h3>ประวัติค่าสายตา</h3>${rx.length ? `<div class="wrap"><table><tr><th>วันที่</th><th>ผู้ตรวจ</th><th>ขวา SPH/CYL/AXIS</th><th>ขวา ADD/PD</th><th>ซ้าย SPH/CYL/AXIS</th><th>ซ้าย ADD/PD</th><th></th></tr>${rx.map(r => `<tr><td>${day(r.exam_date || r.created_at)}</td><td class="tag">${esc(r.examiner || '-')}</td><td>${fmtP(r.od_sph)} / ${fmtP(r.od_cyl)} / ${r.od_axis ?? '-'}</td><td class="tag">${fmtP(r.od_add ?? r.add_power)} / ${r.od_pd ?? r.pd ?? '-'}</td><td>${fmtP(r.os_sph)} / ${fmtP(r.os_cyl)} / ${r.os_axis ?? '-'}</td><td class="tag">${fmtP(r.os_add ?? r.add_power)} / ${r.os_pd ?? r.pd ?? '-'}</td><td>${mgr() ? `<button class="btn line sm bad" data-act="delrx" data-id="${r.id}" data-cid="${id}">ลบ</button>` : ''}</td></tr>`).join('')}</table></div>` : '<p class="tag">ยังไม่มีค่าสายตา</p>'}
+  <h3>ประวัติค่าสายตา</h3>${rx.length ? `<div class="wrap"><table><tr><th>วันที่</th><th>ผู้ตรวจ</th><th>ขวา SPH/CYL/AXIS</th><th>ขวา ADD/PD</th><th>ซ้าย SPH/CYL/AXIS</th><th>ซ้าย ADD/PD</th><th>พารามิเตอร์เพิ่มเติม</th><th></th></tr>${rx.map(r => {
+    const m = r.meta || {};
+    const extra = [
+      (m.od_ph != null || m.od_seg != null || m.od_param) ? `ขวา: ${[m.od_ph != null ? 'PH ' + m.od_ph : '', m.od_seg != null ? 'สูงถ้วย ' + m.od_seg : '', m.od_param || ''].filter(Boolean).join(' · ')}` : '',
+      (m.os_ph != null || m.os_seg != null || m.os_param) ? `ซ้าย: ${[m.os_ph != null ? 'PH ' + m.os_ph : '', m.os_seg != null ? 'สูงถ้วย ' + m.os_seg : '', m.os_param || ''].filter(Boolean).join(' · ')}` : ''
+    ].filter(Boolean).join(' / ');
+    return `<tr><td>${day(r.exam_date || r.created_at)}</td><td class="tag">${esc(r.examiner || '-')}</td><td>${fmtP(r.od_sph)} / ${fmtP(r.od_cyl)} / ${r.od_axis ?? '-'}</td><td class="tag">${fmtP(r.od_add ?? r.add_power)} / ${r.od_pd ?? r.pd ?? '-'}</td><td>${fmtP(r.os_sph)} / ${fmtP(r.os_cyl)} / ${r.os_axis ?? '-'}</td><td class="tag">${fmtP(r.os_add ?? r.add_power)} / ${r.os_pd ?? r.pd ?? '-'}</td><td class="tag">${esc(extra || '-')}</td><td>${mgr() ? `<button class="btn line sm bad" data-act="delrx" data-id="${r.id}" data-cid="${id}">ลบ</button>` : ''}</td></tr>`;
+  }).join('')}</table></div>` : '<p class="tag">ยังไม่มีค่าสายตา</p>'}
   <h3 style="margin-top:18px">ประวัติการซื้อ</h3>
   <div style="display:flex;flex-direction:column;gap:10px">${qs.length ? qs.slice().sort((a, b) => b.created_at.localeCompare(a.created_at)).map(q => {
     const items = live('quote_items').filter(i => i.quote_id === q.id);
@@ -1905,13 +1937,18 @@ function kioskProductBrowse() {
         <button data-act="kioskdelprod" data-id="${p.id}" class="btn line sm bad" title="ลบสินค้านี้">ลบ</button>
       </div>
     </div>
-    ${x && type === 'frame' ? `<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><input placeholder="รหัสกรอบ" value="${esc(x.code || '')}" data-bind="cartcode:${x.id}" style="width:140px;font-size:12.5px;padding:6px 8px"><input placeholder="สีกรอบ" value="${esc(x.color || '')}" data-bind="cartcolor:${x.id}" style="width:140px;font-size:12.5px;padding:6px 8px"></div>` : ''}
+    ${x && type === 'frame' ? `<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      <select data-bind="cartframetype:${x.id}" style="width:150px;font-size:12.5px;padding:6px 8px"><option value="">— ประเภทกรอบ —</option>${FRAME_TYPES.map(([k, l]) => `<option value="${k}" ${x.frameType === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
+      <input placeholder="รหัสกรอบ" value="${esc(x.code || '')}" data-bind="cartcode:${x.id}" style="width:120px;font-size:12.5px;padding:6px 8px">
+      <input placeholder="สีกรอบ" value="${esc(x.color || '')}" data-bind="cartcolor:${x.id}" style="width:120px;font-size:12.5px;padding:6px 8px">
+      <input type="number" min="0" placeholder="ราคาขาย" value="${x.price || ''}" data-bind="cartprice:${x.id}" style="width:120px;font-size:12.5px;padding:6px 8px">
+    </div>` : ''}
   </div>`; };
   const tab = (id, l) => `<button data-act="kioskcat" data-id="${id}" style="padding:9px 18px;border-radius:999px;border:1px solid ${K.pcat === id ? 'transparent' : 'rgba(0,0,0,.15)'};background:${K.pcat === id ? '#23262a' : 'rgba(255,255,255,.55)'};color:${K.pcat === id ? '#fff' : '#23262a'};font-size:13px;cursor:pointer">${l}</button>`;
   const label = type === 'frame' ? 'กรอบแว่น' : 'เลนส์';
   const summary = type === 'lens' ? lrSummary() : '';
   return `<div>
-    <div style="display:flex;gap:10px;margin-bottom:14px">${tab('frame', 'กรอบแว่น')}${tab('lens', 'เลนส์')}<span class="tag" style="margin-left:auto;align-self:center">ตะกร้า ${S.cart.length} รายการ</span></div>
+    <div style="display:flex;gap:10px;margin-bottom:14px;align-items:center">${tab('frame', 'กรอบแว่น')}${tab('lens', 'เลนส์')}${type === 'lens' ? `<button class="btn line sm" data-act="customlens" style="margin-left:8px">+ กรอกเลนส์เอง</button>` : ''}<span class="tag" style="margin-left:auto;align-self:center">ตะกร้า ${S.cart.length} รายการ</span></div>
     ${summary ? `<div class="panel" style="padding:10px 14px;margin-bottom:14px;font-size:12.5px;color:#444"><b>ความต้องการลูกค้า:</b> ${esc(summary)}</div>` : ''}
     <div style="display:flex;gap:10px;margin-bottom:14px">
       <input placeholder="ค้นหา${label} ชื่อ/ยี่ห้อ" value="${esc(K.pq || '')}" data-bind="kpq" style="flex:1">
@@ -1949,7 +1986,12 @@ function kioskCart() {
   </div>`;
   return `<div class="panel" style="padding:24px">
     <h2 style="margin-top:0">สรุปรายการ</h2>
-    ${S.cart.length ? S.cart.map(i => `<div class="row" style="align-items:flex-start"><span style="flex:1"><span>${esc(i.name)}</span><br><span class="tag">${baht(i.price)} × ${i.qty}</span>${i.type === 'frame' ? `<div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap"><input placeholder="รหัสกรอบ" value="${esc(i.code || '')}" data-bind="cartcode:${i.id}" style="width:132px;font-size:12.5px;padding:6px 8px"><input placeholder="สีกรอบ" value="${esc(i.color || '')}" data-bind="cartcolor:${i.id}" style="width:132px;font-size:12.5px;padding:6px 8px"></div>` : ''}</span><span class="qty"><button class="btn line sm" data-act="qty" data-id="${i.id}" data-d="-1">−</button><b>${i.qty}</b><button class="btn line sm" data-act="qty" data-id="${i.id}" data-d="1">+</button></span></div>`).join('') : '<p class="tag">ยังไม่ได้เลือกสินค้า</p>'}
+    ${S.cart.length ? S.cart.map(i => `<div class="row" style="align-items:flex-start"><span style="flex:1"><span>${esc(i.name)}</span><br><span class="tag">${baht(i.price)} × ${i.qty}</span>${i.customLens ? `<div class="tag" style="margin-top:4px">${esc(itemExtraLine(i, 'lens'))}</div>` : ''}${i.type === 'frame' ? `<div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+        <select data-bind="cartframetype:${i.id}" style="width:150px;font-size:12.5px;padding:6px 8px"><option value="">— ประเภทกรอบ —</option>${FRAME_TYPES.map(([k, l]) => `<option value="${k}" ${i.frameType === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
+        <input placeholder="รหัสกรอบ" value="${esc(i.code || '')}" data-bind="cartcode:${i.id}" style="width:120px;font-size:12.5px;padding:6px 8px">
+        <input placeholder="สีกรอบ" value="${esc(i.color || '')}" data-bind="cartcolor:${i.id}" style="width:120px;font-size:12.5px;padding:6px 8px">
+        <input type="number" min="0" placeholder="ราคาขาย" value="${i.price || ''}" data-bind="cartprice:${i.id}" style="width:120px;font-size:12.5px;padding:6px 8px">
+      </div>` : ''}</span><span class="qty"><button class="btn line sm" data-act="qty" data-id="${i.id}" data-d="-1">−</button><b>${i.qty}</b><button class="btn line sm" data-act="qty" data-id="${i.id}" data-d="1">+</button></span></div>`).join('') : '<p class="tag">ยังไม่ได้เลือกสินค้า</p>'}
     ${discRow('กรอบแว่น', 'frame', K.discFrame, c.frameSub, c.discFrameAmt)}
     ${discRow('เลนส์', 'lens', K.discLens, c.lensSub, c.discLensAmt)}
     <div class="row" style="border:0;margin-top:6px"><span>ยอดรวมก่อนลด</span><span>${baht(c.sub)}</span></div>
@@ -2050,7 +2092,7 @@ function receiptData(forQuoteId) {
     const meta = q.meta || {};
     return {
       customerId: q.customer_id, saved: true,
-      items: items.map(i => ({ name: i.item_name_snapshot, type: i.product_type, qty: i.quantity, price: i.unit_price_thb, lineTotal: i.line_total_thb, productId: i.product_id, code: (i.meta || {}).code || '', color: (i.meta || {}).color || '' })),
+      items: items.map(i => ({ name: i.item_name_snapshot, type: i.product_type, qty: i.quantity, price: i.unit_price_thb, lineTotal: i.line_total_thb, productId: i.product_id, code: (i.meta || {}).code || '', color: (i.meta || {}).color || '', frameType: (i.meta || {}).frameType || '', customLens: (i.meta || {}).customLens || null })),
       sub: q.subtotal_thb, discTotal: q.discount_thb, total: q.total_thb,
       defNo: q.quote_number || '', defDate: q.receipt_date || (q.created_at || '').slice(0, 10) || now().slice(0, 10),
       defPay: meta.payment || [], defSig: meta.signature || '', defSeller: meta.seller || ''
@@ -2059,20 +2101,37 @@ function receiptData(forQuoteId) {
   const c = cartCalc();
   return {
     customerId: K.custId, saved: false,
-    items: S.cart.map(i => ({ name: i.name, type: i.type, qty: i.qty, price: i.price, lineTotal: i.price * i.qty, productId: i.productId || i.id, code: i.code || '', color: i.color || '' })),
+    items: S.cart.map(i => ({ name: i.name, type: i.type, qty: i.qty, price: i.price, lineTotal: i.price * i.qty, productId: i.productId || i.id, code: i.code || '', color: i.color || '', frameType: i.frameType || '', customLens: i.customLens || null })),
     sub: c.sub, discTotal: c.discTotal, total: c.total,
     defNo: '', defDate: now().slice(0, 10),
     defPay: [], defSig: '', defSeller: S.activeSeller || ''
   };
+}
+// เก็บรายละเอียดส่วนตัวของแต่ละบรรทัดในตะกร้า (รหัส/สี/ประเภทกรอบ/เลนส์ที่กรอกเอง) ลงใน quote_items.meta ตอนบันทึกบิล
+function cartItemMeta(i) {
+  const m = {};
+  if (i.code) m.code = i.code;
+  if (i.color) m.color = i.color;
+  if (i.frameType) m.frameType = i.frameType;
+  if (i.customLens) m.customLens = i.customLens;
+  return Object.keys(m).length ? m : null;
 }
 function itemExtraLine(item, type) {
   const p = item?.productId ? find('products', item.productId) : null;
   if (type === 'frame') {
     const code = item?.code || p?.sku || '';
     const color = item?.color || p?.color || '';
-    return [p?.brand ? `ยี่ห้อ ${p.brand}` : '', color ? `สี ${color}` : '', code ? `รหัส ${code}` : ''].filter(Boolean).join(' · ');
+    const ftLabel = (FRAME_TYPES.find(([k]) => k === item?.frameType) || [])[1];
+    return [p?.brand ? `ยี่ห้อ ${p.brand}` : '', ftLabel || '', color ? `สี ${color}` : '', code ? `รหัส ${code}` : ''].filter(Boolean).join(' · ');
   }
-  if (type === 'lens') { const idx = p ? lensIndexSummary(p) : ''; return [p?.brand ? `ยี่ห้อ ${p.brand}` : '', idx ? `Index ${idx}` : '', p?.sku ? `รหัส ${p.sku}` : ''].filter(Boolean).join(' · '); }
+  if (type === 'lens') {
+    if (item?.customLens) {
+      const cl = item.customLens;
+      const colorLabel = (LENS_COLOR_OPTS.find(([k]) => k === cl.color_change) || [])[1];
+      return [cl.brand ? `ยี่ห้อ ${cl.brand}` : '', cl.lens_type ? `ชนิด ${cl.lens_type}` : '', cl.index ? `Index ${cl.index}` : '', cl.corridor ? `Corridor ${cl.corridor}` : '', (colorLabel && cl.color_change !== 'none') ? colorLabel : '', cl.tint_code ? `สี ${cl.tint_code}` : '', cl.params ? `พารามิเตอร์ ${cl.params}` : ''].filter(Boolean).join(' · ');
+    }
+    const idx = p ? lensIndexSummary(p) : ''; return [p?.brand ? `ยี่ห้อ ${p.brand}` : '', idx ? `Index ${idx}` : '', p?.sku ? `รหัส ${p.sku}` : ''].filter(Boolean).join(' · ');
+  }
   return '';
 }
 function receiptHTML() {
@@ -2433,7 +2492,7 @@ document.addEventListener('click', e => {
     if (!S.cart.length) return toast('เลือกสินค้าอย่างน้อย 1 รายการก่อน');
     const sub = cartSub(), disc = Math.min(S.disc, sub), qid = uid();
     save('quotes', { id: qid, customer_id: S.cust || null, quote_number: null, status: 'draft', subtotal_thb: sub, discount_thb: disc, total_thb: sub - disc, notes: S.notes || null, valid_until: new Date(Date.now() + 14 * 864e5).toISOString().slice(0, 10), deleted_at: null });
-    S.cart.forEach(i => save('quote_items', { id: uid(), quote_id: qid, product_id: i.productId || i.id, item_name_snapshot: i.name, product_type: i.type, quantity: i.qty, unit_price_thb: i.price, line_total_thb: i.price * i.qty, deleted_at: null }));
+    S.cart.forEach(i => save('quote_items', { id: uid(), quote_id: qid, product_id: i.productId || i.id, item_name_snapshot: i.name, product_type: i.type, quantity: i.qty, unit_price_thb: i.price, line_total_thb: i.price * i.qty, meta: cartItemMeta(i), deleted_at: null }));
     S.cart = []; S.disc = 0; S.notes = ''; S.v = 'quotes'; commit(); toast('สร้างใบเสนอราคาแล้ว');
   }
   else if (a === 'impcust') importDialog();
@@ -2574,6 +2633,7 @@ document.addEventListener('click', e => {
     else { S.mode = 'hub'; render(); }
   }
   else if (a === 'kioskcat') { K.pcat = id; K.pq = ''; render(); }
+  else if (a === 'customlens') customLensForm();
   else if (a === 'svc') {
     K.hist.push(K.step);
     if (id === 'lens') { K.lr = freshLR(); K.step = 'lensreq'; render(); }
@@ -2609,7 +2669,7 @@ document.addEventListener('click', e => {
     const lrNote = lrSummary();
     const discNote = c.discTotal ? `ส่วนลด — กรอบ: ${c.discFrameAmt ? baht(c.discFrameAmt) : '-'} / เลนส์: ${c.discLensAmt ? baht(c.discLensAmt) : '-'}` : '';
     save('quotes', { id: qid, customer_id: S.cust || null, quote_number: nextReceiptNo(), status: 'converted', subtotal_thb: c.sub, discount_thb: c.discTotal, total_thb: c.total, notes: [lrNote ? `ความต้องการลูกค้า: ${lrNote}` : '', discNote].filter(Boolean).join(' · ') || null, valid_until: null, receipt_date: now().slice(0, 10), meta: { payment: [], signature: '', seller: S.activeSeller || '' }, deleted_at: null });
-    S.cart.forEach(i => save('quote_items', { id: uid(), quote_id: qid, product_id: i.productId || i.id, item_name_snapshot: i.name, product_type: i.type, quantity: i.qty, unit_price_thb: i.price, line_total_thb: i.price * i.qty, meta: (i.code || i.color) ? { code: i.code || null, color: i.color || null } : null, deleted_at: null }));
+    S.cart.forEach(i => save('quote_items', { id: uid(), quote_id: qid, product_id: i.productId || i.id, item_name_snapshot: i.name, product_type: i.type, quantity: i.qty, unit_price_thb: i.price, line_total_thb: i.price * i.qty, meta: cartItemMeta(i), deleted_at: null }));
     S.cart = []; K.step = 'done'; K.hist = []; K.lr = freshLR(); K.lastQuoteId = qid; K.discFrame = freshDisc(); K.discLens = freshDisc(); commit(); render(); toast('บันทึกการสั่งซื้อแล้ว');
   }
   else if (a === 'kioskprintreceipt') { if (K.lastQuoteId) openReceipt(K.lastQuoteId); }
@@ -2740,6 +2800,8 @@ document.addEventListener('input', e => {
   else if (k === 'ccnew') K.ccNew = e.target.value;
   else if (k.startsWith('cartcode:')) { const x = S.cart.find(i => i.id === k.slice(9)); if (x) x.code = e.target.value; }
   else if (k.startsWith('cartcolor:')) { const x = S.cart.find(i => i.id === k.slice(10)); if (x) x.color = e.target.value; }
+  else if (k.startsWith('cartframetype:')) { const x = S.cart.find(i => i.id === k.slice(14)); if (x) x.frameType = e.target.value || null; }
+  else if (k.startsWith('cartprice:')) { const x = S.cart.find(i => i.id === k.slice(10)); if (x) x.price = Math.max(0, +e.target.value || 0); render(); }
 });
 document.addEventListener('keydown', e => {
   if (S.mode !== 'present') return;
@@ -2763,8 +2825,18 @@ document.addEventListener('submit', async e => {
         lens_spec: { group: d.group, color_code: (d.color_code || '').trim() || null, photos: d.photo_data ? [d.photo_data] : [] }, active: true, deleted_at: null });
       closeDlg(); commit(); toast('บันทึกเนื้อหาเสริมแล้ว');
     } else if (k === 'rx') {
-      save('prescriptions', { id: uid(), customer_id: f.dataset.cid, exam_date: d.exam_date || null, examiner: (d.examiner || '').trim() || null, od_sph: num(d.od_sph), od_cyl: num(d.od_cyl), od_axis: num(d.od_axis), os_sph: num(d.os_sph), os_cyl: num(d.os_cyl), os_axis: num(d.os_axis), od_pd: num(d.od_pd), os_pd: num(d.os_pd), od_add: num(d.od_add), os_add: num(d.os_add), pd: null, add_power: null, notes: d.notes.trim() || null, deleted_at: null });
+      const meta = { od_ph: num(d.od_ph), os_ph: num(d.os_ph), od_seg: num(d.od_seg), os_seg: num(d.os_seg), od_param: (d.od_param || '').trim() || null, os_param: (d.os_param || '').trim() || null };
+      const hasMeta = Object.values(meta).some(v => v != null);
+      save('prescriptions', { id: uid(), customer_id: f.dataset.cid, exam_date: d.exam_date || null, examiner: (d.examiner || '').trim() || null, od_sph: num(d.od_sph), od_cyl: num(d.od_cyl), od_axis: num(d.od_axis), os_sph: num(d.os_sph), os_cyl: num(d.os_cyl), os_axis: num(d.os_axis), od_pd: num(d.od_pd), os_pd: num(d.os_pd), od_add: num(d.od_add), os_add: num(d.os_add), pd: null, add_power: null, meta: hasMeta ? meta : null, notes: d.notes.trim() || null, deleted_at: null });
       commit(); custView(f.dataset.cid); toast('บันทึกค่าสายตาแล้ว');
+    } else if (k === 'customlens') {
+      if (!d.price || +d.price <= 0) { toast('กรุณาใส่ราคาขาย'); return; }
+      const name = [d.brand, d.model].filter(Boolean).join(' ').trim() || 'เลนส์กรอกเอง';
+      S.cart.push({
+        id: uid(), productId: null, name, type: 'lens', price: Math.max(0, +d.price || 0), qty: 1,
+        customLens: { brand: d.brand || '', model: d.model || '', lens_type: d.lens_type || '', index: d.lens_index || '', corridor: d.corridor || '', color_change: d.color_change || 'none', tint_code: d.tint_code || '', params: d.params || '', notes: d.notes || '' }
+      });
+      closeDlg(); render(); toast('เพิ่มเลนส์ลงตะกร้าแล้ว');
     } else if (k === 'prod') {
       const o = id ? find('products', id) : {};
       const highlights = [...f.querySelectorAll('[name^="ls_hlt_"]')].map(el => {
