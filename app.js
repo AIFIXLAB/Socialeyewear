@@ -199,62 +199,89 @@ const CC_SEED = ["ตาพร่ามัว", "มองไกลไม่ช�
 const knownCC = () => [...new Set([...CC_SEED, ...ls.get('ccSeed', [])])];
 // รายการโรคประจำตัวแบบติ๊กในหน้าซักประวัติ — key ใช้ตั้งชื่อ field ในฟอร์ม (chk_/med_/yr_ + key) และเก็บใน prescriptions.meta.diseases
 const CHRONIC_DISEASES = [['diabetes', 'เบาหวาน'], ['htn', 'ความดันโลหิตสูง'], ['chol', 'ไขมันในเลือดสูง'], ['allergy', 'ภูมิแพ้'], ['sle', 'SLE / รูมาตอยด์'], ['other', 'อื่นๆ']];
+const EYE_DISEASE_ROWS = [1, 2, 3, 4]; // แถวโรคตา/รักษา/ผ่าตัด ตามแบบฟอร์มกระดาษ (4 แถว)
+const VA_ROWS = [['od', 'OD (ขวา)'], ['os', 'OS (ซ้าย)'], ['ou', 'OU (สองตา)']];
+const VA_COLS = [['sc', 'SC Distance'], ['near', 'VA Near'], ['ph', 'VA PH'], ['vadist', 'VA แว่น Distance'], ['vanear', 'VA แว่น Near']];
+const SUB_ROWS = [['bva_od', 'BVA OD'], ['bva_os', 'BVA OS'], ['final_od', 'FINAL OD'], ['final_os', 'FINAL OS']];
+const SUB_COLS = [['sph', 'SPH'], ['cyl', 'CYL'], ['axis', 'AXIS'], ['prism1', 'PRISM1'], ['base1', 'BASE1'], ['prism2', 'PRISM2'], ['base2', 'BASE2'], ['add', 'ADD'], ['vacc', 'VA cc'], ['distpd', 'Dist PD'], ['nearpd', 'Near PD'], ['fh', 'FH'], ['sh', 'SH']];
+// อ่านค่าตาราง grid (VA / SUBJECTIVE) จาก form object d ตาม prefix เช่น 'va' หรือ 'sub'
+function readGrid(d, rows, cols, prefix) {
+  const out = {};
+  rows.forEach(([rk]) => { const row = {}; cols.forEach(([ck]) => { const v = (d[`${prefix}_${rk}_${ck}`] || '').trim(); if (v) row[ck] = v; }); if (Object.keys(row).length) out[rk] = row; });
+  return out;
+}
+function gridHasData(g) { return !!(g && Object.keys(g).length); }
 // อ่านค่าจากฟอร์มซักประวัติ (ใช้ทั้งตอนกดบันทึกและตอนกดพิมพ์ โดยไม่ต้อง submit จริง)
 function examIntakeDataFromForm(d) {
   const diseases = CHRONIC_DISEASES.map(([k, label]) => ({ key: k, label, on: !!d['chk_' + k], meds: (d['med_' + k] || '').trim(), years: num(d['yr_' + k]) })).filter(x => x.on || x.meds || x.years != null);
+  const t = v => (v || '').trim() || null;
+  const eyeDiseaseRows = EYE_DISEASE_ROWS.map(i => ({ name: t(d['ed' + i + '_name']), clinic: t(d['ed' + i + '_clinic']), treat: t(d['ed' + i + '_treat']) })).filter(x => x.name || x.clinic || x.treat);
   return {
-    diseases,
-    disease_other_text: (d.disease_other || '').trim() || null,
-    screen_hours: num(d.screen_hours),
-    last_exam: (d.last_exam || '').trim() || null,
-    wear_history: (d.wear_history || '').trim() || null,
-    eye_disease_history: (d.eye_history || '').trim() || null,
-    eye_accident: (d.eye_accident || '').trim() || null,
-    meds_other: (d.meds || '').trim() || null,
-    autoref_od: (d.autoref_od || '').trim() || null,
-    autoref_os: (d.autoref_os || '').trim() || null,
-    pdref_od: (d.pdref_od || '').trim() || null,
-    pdref_os: (d.pdref_os || '').trim() || null,
-    old_glasses: (d.old_glasses || '').trim() || null,
-    old_va_od: (d.old_va_od || '').trim() || null,
-    old_va_os: (d.old_va_os || '').trim() || null,
-    dominant_eye: d.dominant_eye || null,
-    dominant_hand: d.dominant_hand || null,
-    purpose: (d.purpose || '').trim() || null,
-    examiner_role: (d.examiner_role || '').trim() || null,
-    notes2: (d.notes2 || '').trim() || null
+    exam_date: t(d.exam_date), examiner: t(d.examiner),
+    patient_code: t(d.patient_code), cust_fullname: t(d.cust_fullname), cust_age: t(d.cust_age), cust_phone: t(d.cust_phone),
+    comp_hours: t(d.comp_hours), tablet_hours: t(d.tablet_hours), usage_other: t(d.usage_other),
+    diseases, disease_other_text: t(d.disease_other), last_doctor_visit: t(d.last_doctor_visit), last_doctor_clinic: t(d.last_doctor_clinic),
+    blur_distance: t(d.blur_distance),
+    eye_disease_rows: eyeDiseaseRows,
+    accident_detail: t(d.accident_detail), accident_clinic: t(d.accident_clinic), accident_treat: t(d.accident_treat),
+    last_va_check_where: t(d.last_va_check_where), last_va_check_by: t(d.last_va_check_by), last_va_check_other: t(d.last_va_check_other),
+    cl_freq: t(d.cl_freq), cl_r: t(d.cl_r), cl_l: t(d.cl_l), cl_duration: t(d.cl_duration),
+    old_glasses_r: t(d.old_glasses_r), old_glasses_l: t(d.old_glasses_l), old_glasses_duration: t(d.old_glasses_duration),
+    lens_name: t(d.lens_name), lens_index: t(d.lens_index), lens_color_change: t(d.lens_color_change),
+    lens_corridor: t(d.lens_corridor), lens_pd_r: t(d.lens_pd_r), lens_pd_l: t(d.lens_pd_l), lens_problem: t(d.lens_problem),
+    autoref_od: t(d.autoref_od), autoref_os: t(d.autoref_os), pdref_od: t(d.pdref_od), pdref_os: t(d.pdref_os),
+    lens_marking: t(d.lens_marking), lens_brand_model: t(d.lens_brand_model),
+    va: readGrid(d, VA_ROWS, VA_COLS, 'va'),
+    dominant_eye: d.dominant_eye || null, dominant_hand: d.dominant_hand || null,
+    sub: readGrid(d, SUB_ROWS, SUB_COLS, 'sub'),
+    purpose_type: d.purpose_type || null, purpose_other: t(d.purpose_other),
+    examiner_role: t(d.examiner_role), notes2: t(d.notes2)
   };
 }
 function examIntakeHasData(m) {
-  return !!(m && (m.diseases.length || m.disease_other_text || m.screen_hours != null || m.last_exam || m.wear_history || m.eye_disease_history || m.eye_accident || m.meds_other || m.autoref_od || m.autoref_os || m.pdref_od || m.pdref_os || m.old_glasses || m.old_va_od || m.old_va_os || m.dominant_eye || m.dominant_hand || m.purpose || m.examiner_role || m.notes2));
+  if (!m) return false;
+  return Object.keys(m).some(k => { const v = m[k]; if (Array.isArray(v)) return v.length > 0; if (v && typeof v === 'object') return Object.keys(v).length > 0; return v != null && v !== ''; });
 }
-// หน้าพิมพ์ "ประวัติสุขภาพ" ใส่กระดาษ A4 — ใช้ได้ทั้งก่อนบันทึก (จากหน้าซักประวัติ) และหลังบันทึกแล้ว (จากประวัติลูกค้า)
+const DOM_EYE_LABEL = { od: 'ขวา', os: 'ซ้าย' }, DOM_HAND_LABEL = { right: 'ขวา', left: 'ซ้าย' }, PURPOSE_LABEL = { distance: 'มองไกล', near: 'มองใกล้', other: 'อื่นๆ' }, VABY_LABEL = { od: 'OD', optician: 'Optician', other: 'อื่น' };
+// หน้าพิมพ์ "ประวัติสุขภาพ/ผลตรวจสายตา" ใส่กระดาษ A4 — ใช้ได้ทั้งก่อนบันทึก (จากหน้าซักประวัติ) และหลังบันทึกแล้ว (จากประวัติลูกค้า)
 function examIntakePrintView(custId, ccText, ccOther, m) {
+  m = m || {};
   const dis = (m.diseases || []).map(x => `${x.label}${x.meds ? ' · ทานยา: ' + x.meds : ''}${x.years != null ? ' · เป็นมา ' + x.years + ' ปี' : ''}`);
   const row = (l, v) => v ? `<div class="row" style="border:0;padding:3px 0"><span class="tag">${esc(l)}</span><span>${esc(v)}</span></div>` : '';
-  dialog(`<style>#dlg{width:min(720px,95vw)!important;max-width:95vw!important}</style>
-  <div class="sheet"><h2>ประวัติสุขภาพก่อนตรวจสายตา</h2><div class="meta">${esc(shop?.name || 'Social Eyewear')} · ${esc(custName(custId))} · ${day(now())}</div>
+  const gridTbl = (g, rows, cols) => gridHasData(g) ? `<div class="wrap" style="overflow-x:auto;margin:6px 0"><table><tr><th></th>${cols.map(([, l]) => `<th style="font-size:10.5px">${l}</th>`).join('')}</tr>${rows.filter(([rk]) => g[rk]).map(([rk, rl]) => `<tr><th style="text-align:left;white-space:nowrap;font-size:11.5px">${rl}</th>${cols.map(([ck]) => `<td style="text-align:center;font-size:11.5px">${esc((g[rk] || {})[ck] || '-')}</td>`).join('')}</tr>`).join('')}</table></div>` : '';
+  dialog(`<style>#dlg{width:min(900px,96vw)!important;max-width:96vw!important}</style>
+  <div class="sheet"><h2>ประวัติสุขภาพ / ผลตรวจสายตา</h2><div class="meta">${esc(shop?.name || 'Social Eyewear')} · ${esc(custName(custId))} · ${day(m.exam_date || now())}</div>
+  <h3 style="margin-top:14px">ข้อมูลผู้รับบริการ</h3>
+  ${row('รหัสลูกค้า', m.patient_code)}${row('ชื่อ-นามสกุล', m.cust_fullname)}${row('อายุ', m.cust_age ? m.cust_age + ' ปี' : '')}${row('เบอร์โทร', m.cust_phone)}
+  ${row('ใช้คอมพิวเตอร์/โน้ตบุ๊ค (ชม./วัน)', m.comp_hours)}${row('แทปเลต/มือถือ (ชม./วัน)', m.tablet_hours)}${row('อื่นๆ', m.usage_other)}
   <h3 style="margin-top:14px">อาการทางตา</h3>
   ${row('อาการที่แจ้ง', [ccText, ccOther].filter(Boolean).join(' / ') || '-')}
-  <h3 style="margin-top:14px">โรคประจำตัว</h3>
+  ${row('ตามัว/ภาพซ้อน ระยะ', m.blur_distance)}
+  <h3 style="margin-top:14px">ประวัติสุขภาพ — โรคประจำตัว</h3>
   ${dis.length ? dis.map(t => `<div class="row" style="border:0;padding:2px 0">${esc(t)}</div>`).join('') : '<div class="tag">ไม่มี</div>'}
   ${row('อื่นๆ (ระบุ)', m.disease_other_text)}
-  ${row('ประวัติการใช้ยาอื่นๆ', m.meds_other)}
-  <h3 style="margin-top:14px">ประวัติการใช้งาน / ตรวจตา</h3>
-  ${row('ใช้สายตาใกล้/จ้องจอ (ชม./วัน)', m.screen_hours != null ? m.screen_hours + ' ชม.' : '')}
-  ${row('ตรวจสายตาล่าสุดเมื่อ/ที่ไหน', m.last_exam)}
-  ${row('ประวัติใช้คอนแทคเลนส์/แว่นเดิม', m.wear_history)}
-  ${row('ประวัติโรคตา', m.eye_disease_history)}
-  ${row('ประวัติอุบัติเหตุทางตา', m.eye_accident)}
+  ${row('พบแพทย์ล่าสุด', m.last_doctor_visit)}${row('รพ./คลินิก', m.last_doctor_clinic)}
+  <h3 style="margin-top:14px">ประวัติโรคตา</h3>
+  ${(m.eye_disease_rows || []).length ? m.eye_disease_rows.map(x => `<div class="row" style="border:0;padding:2px 0"><span class="tag">โรคตา</span><span>${esc([x.name, x.clinic && 'รพ./คลินิก: ' + x.clinic, x.treat && 'รักษา/ผ่าตัด: ' + x.treat].filter(Boolean).join(' · '))}</span></div>`).join('') : '<div class="tag">ไม่มี</div>'}
+  ${row('อุบัติเหตุทางตา', m.accident_detail)}${row('รพ./คลินิก', m.accident_clinic)}${row('รักษา/ผ่าตัด', m.accident_treat)}
+  ${row('ตรวจวัดสายตาล่าสุด', m.last_va_check_where)}${row('ตรวจโดย', m.last_va_check_by ? (VABY_LABEL[m.last_va_check_by] || m.last_va_check_by) + (m.last_va_check_other ? ' · ' + m.last_va_check_other : '') : '')}
+  <h3 style="margin-top:14px">ประวัติการใช้แว่น / คอนแทคเลนส์</h3>
+  ${row('CL', m.cl_freq ? (m.cl_freq === 'daily' ? 'รายวัน' : 'รายเดือน') + ` · R ${m.cl_r || '-'} L ${m.cl_l || '-'} · ใช้มา ${m.cl_duration || '-'}` : '')}
+  ${row('แว่นเดิม', (m.old_glasses_r || m.old_glasses_l) ? `R ${m.old_glasses_r || '-'} L ${m.old_glasses_l || '-'} · ใช้มา ${m.old_glasses_duration || '-'}` : '')}
+  ${row('เลนส์เดิม', m.lens_name)}${row('Index', m.lens_index)}${row('เปลี่ยนสี', m.lens_color_change)}
+  ${row('Corridor', m.lens_corridor)}${row('PD เลนส์เดิม', (m.lens_pd_r || m.lens_pd_l) ? `R ${m.lens_pd_r || '-'} L ${m.lens_pd_l || '-'}` : '')}${row('ปัญหาการใช้แว่น', m.lens_problem)}
   <h3 style="margin-top:14px">ข้อมูลตรวจเบื้องต้น</h3>
   ${row('Auto-Ref ขวา (OD)', m.autoref_od)}${row('Auto-Ref ซ้าย (OS)', m.autoref_os)}
   ${row('PD (Ref) ขวา', m.pdref_od)}${row('PD (Ref) ซ้าย', m.pdref_os)}
-  ${row('แว่น/เลนส์เดิม ยี่ห้อ-รุ่น', m.old_glasses)}
-  ${row('VA เดิม ขวา', m.old_va_od)}${row('VA เดิม ซ้าย', m.old_va_os)}
-  ${row('ตาข้างที่ถนัด', m.dominant_eye === 'od' ? 'ขวา' : m.dominant_eye === 'os' ? 'ซ้าย' : m.dominant_eye)}
-  ${row('มือข้างที่ถนัด', m.dominant_hand === 'right' ? 'ขวา' : m.dominant_hand === 'left' ? 'ซ้าย' : m.dominant_hand)}
-  ${row('จุดประสงค์การตัดแว่น', m.purpose)}
-  ${row('ผู้ซักประวัติ/ตำแหน่ง', m.examiner_role)}
+  ${row('สัญลักษณ์บนเลนส์เดิม', m.lens_marking)}${row('ยี่ห้อ/รุ่นแว่นเดิม', m.lens_brand_model)}
+  <h3 style="margin-top:14px">VA</h3>
+  ${gridTbl(m.va, VA_ROWS, VA_COLS) || '<div class="tag">ไม่มีข้อมูล</div>'}
+  ${row('ตาข้างที่ถนัด', DOM_EYE_LABEL[m.dominant_eye] || m.dominant_eye)}${row('มือข้างที่ถนัด', DOM_HAND_LABEL[m.dominant_hand] || m.dominant_hand)}
+  <h3 style="margin-top:14px">SUBJECTIVE</h3>
+  ${gridTbl(m.sub, SUB_ROWS, SUB_COLS) || '<div class="tag">ไม่มีข้อมูล</div>'}
+  <h3 style="margin-top:14px">สรุป</h3>
+  ${row('แว่นสำหรับ', m.purpose_type ? (PURPOSE_LABEL[m.purpose_type] || m.purpose_type) + (m.purpose_other ? ' · ' + m.purpose_other : '') : '')}
+  ${row('ผู้ตรวจ', m.examiner)}${row('ตำแหน่ง', m.examiner_role)}
   ${m.notes2 ? `<div style="margin-top:10px;padding-top:8px;border-top:1px dashed var(--line,#e4ddd2)">${esc(m.notes2)}</div>` : ''}
   </div>
   <div class="foot noprint"><button type="button" class="btn line" data-act="close">ปิด</button><button type="button" class="btn line" data-act="print">สั่งพิมพ์</button></div>`);
@@ -1791,61 +1818,127 @@ function kioskMenu() {
 }
 function kioskExamIntake() {
   const list = knownCC();
+  const c = K.custId ? find('customer_profiles', K.custId) : null;
+  const ageGuess = (c && c.notes && (c.notes.match(/อายุ\s*(\d+)/) || [])[1]) || '';
   const chip = s => {
     const on = K.cc.includes(s);
-    return `<button type="button" data-act="cctoggle" data-id="${esc(s)}" style="display:inline-flex;align-items:center;gap:7px;padding:9px 15px;border-radius:999px;border:1px solid ${on ? '#1f6f43' : 'rgba(0,0,0,.18)'};background:${on ? '#1f6f43' : '#fff'};color:${on ? '#fff' : '#23262a'};font-size:13.5px;cursor:pointer;transition:.12s">
-      <span style="display:inline-block;width:16px;height:16px;border-radius:4px;border:1.5px solid ${on ? '#fff' : 'rgba(0,0,0,.35)'};line-height:13px;font-size:11px;text-align:center">${on ? '✓' : ''}</span>${esc(s)}
+    return `<button type="button" data-act="cctoggle" data-id="${esc(s)}" style="display:inline-flex;align-items:center;gap:7px;padding:8px 13px;border-radius:999px;border:1px solid ${on ? '#1f6f43' : 'rgba(0,0,0,.18)'};background:${on ? '#1f6f43' : '#fff'};color:${on ? '#fff' : '#23262a'};font-size:12.5px;cursor:pointer;transition:.12s">
+      <span style="display:inline-block;width:14px;height:14px;border-radius:4px;border:1.5px solid ${on ? '#fff' : 'rgba(0,0,0,.35)'};line-height:11px;font-size:10px;text-align:center">${on ? '✓' : ''}</span>${esc(s)}
     </button>`;
   };
-  const sec = (title, inner) => `<div class="tag" style="font-weight:700;margin:20px 0 8px;color:#23262a">${title}</div>${inner}`;
-  const dRow = ([k, label]) => `<div style="display:grid;grid-template-columns:1.3fr 1fr .8fr;gap:8px;align-items:center;padding:7px 0;border-bottom:1px dashed rgba(0,0,0,.08)">
-    <label class="chk" style="display:flex;align-items:center;gap:7px;margin:0;font-size:13.5px"><input type="checkbox" name="chk_${k}" style="width:17px;height:17px"> ${esc(label)}</label>
-    <input name="med_${k}" placeholder="ทานยา (ถ้ามี)" style="font-size:13px">
-    <input name="yr_${k}" type="number" min="0" placeholder="เป็นมา (ปี)" style="font-size:13px">
+  // กรอบ/หัวข้อ จำลองสไตล์แบบฟอร์มกระดาษ — เส้นกรอบบาง มีเลขหัวข้อ
+  const box = (title, inner) => `<div style="border:1px solid #c9ceb6;border-radius:10px;padding:14px 16px;margin:14px 0;background:#fdfdf8">
+    <div style="font-weight:700;font-size:13px;color:#7a3b2e;margin-bottom:10px;letter-spacing:.02em">${title}</div>${inner}</div>`;
+  const u = (n, ph = '', type = 'text', extra = '') => `<input name="${n}" type="${type}" placeholder="${esc(ph)}" ${extra} style="border:none;border-bottom:1px solid #b9c0c9;border-radius:0;background:transparent;padding:5px 2px;font-size:13px">`;
+  const uw = (label, n, ph = '', type = 'text', extra = '') => `<label style="display:flex;flex-direction:column;gap:2px;font-size:12px;color:#60655e">${esc(label)}${u(n, ph, type, extra)}</label>`;
+  const dRow = ([k, label]) => `<div style="display:grid;grid-template-columns:1.2fr 1fr .8fr;gap:8px;align-items:center;padding:6px 0;border-bottom:1px dashed rgba(0,0,0,.08)">
+    <label style="display:flex;align-items:center;gap:7px;margin:0;font-size:13px"><input type="checkbox" name="chk_${k}" style="width:17px;height:17px"> ${esc(label)}</label>
+    <input name="med_${k}" placeholder="ทานยา (ถ้ามี)" style="font-size:12.5px">
+    <input name="yr_${k}" type="number" min="0" placeholder="เป็นมา (ปี)" style="font-size:12.5px">
   </div>`;
-  return `<div class="panel" style="padding:26px">
+  // แถวโรคตา/อุบัติเหตุ: ชื่อ + รพ./คลินิก + รักษา/ผ่าตัด
+  const med3 = (n1, n2, n3, ph1) => `<div style="display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:10px;margin-bottom:8px">${uw('รายละเอียด', n1, ph1)}${uw('รักษา รพ./คลินิก', n2)}${uw('รักษา/ผ่าตัด', n3)}</div>`;
+  // ตารางกรอกแบบ grid (VA / SUBJECTIVE) — ช่องกรอกเล็กต่อแถวต่อคอลัมน์
+  const gridTable = (rows, cols, prefix, cellW = 64) => `<div class="wrap" style="overflow-x:auto"><table style="min-width:${80 + cols.length * (cellW + 6)}px"><tr><th></th>${cols.map(([, l]) => `<th style="font-size:10.5px;white-space:nowrap">${l}</th>`).join('')}</tr>
+    ${rows.map(([rk, rl]) => `<tr><th style="text-align:left;white-space:nowrap;font-size:11.5px">${rl}</th>${cols.map(([ck]) => `<td style="padding:3px"><input name="${prefix}_${rk}_${ck}" style="width:${cellW}px;padding:5px 4px;font-size:11.5px;text-align:center"></td>`).join('')}</tr>`).join('')}
+    </table></div>`;
+  return `<div class="panel" style="padding:20px 22px;width:100%;box-sizing:border-box">
     <h2 style="margin-top:0">ซักประวัติก่อนตรวจสายตา</h2>
-    <p class="tag" style="margin-top:-6px">แตะติ๊กอาการที่ลูกค้าแจ้งได้เลย ถ้ายังไม่มีในรายการให้พิมพ์เพิ่มด้านล่าง — จะถูกบันทึกไว้ให้เลือกในครั้งถัดไปด้วย</p>
-    <div style="display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 12px">${list.map(chip).join('')}</div>
-    <div style="display:flex;gap:10px;margin-bottom:6px">
-      <input placeholder="พิมพ์อาการใหม่ที่ไม่มีในรายการ แล้วกด +" data-bind="ccnew" value="${esc(K.ccNew || '')}" style="flex:1">
-      <button type="button" class="btn line sm" data-act="ccaddnew" style="white-space:nowrap">+ เพิ่มอาการ</button>
-    </div>
     <form data-form="examintake">
-      <label>อาการอื่นๆ นอกเหนือรายการ (รายละเอียดเพิ่มเติม)<textarea data-bind="ccother" rows="2" placeholder="ระบุรายละเอียดอาการอื่นๆ ที่ไม่อยู่ในรายการด้านบน">${esc(K.ccOther || '')}</textarea></label>
+    <div style="display:grid;grid-template-columns:1fr 1fr 2fr 1fr 1.3fr;gap:12px;margin-bottom:4px">
+      ${uw('รหัสลูกค้า', 'patient_code', '', 'text', c && c.customer_code ? `value="${esc(c.customer_code)}"` : '')}
+      ${uw('วันที่ตรวจ', 'exam_date', '', 'date', `value="${now().slice(0, 10)}"`)}
+      ${uw('ชื่อ-นามสกุล', 'cust_fullname', '', 'text', c ? `value="${esc(c.full_name || '')}"` : '')}
+      ${uw('อายุ', 'cust_age', 'ปี', 'number', ageGuess ? `value="${esc(ageGuess)}"` : '')}
+      ${uw('เบอร์โทร', 'cust_phone', '', 'text', c && c.phone ? `value="${esc(c.phone)}"` : '')}
+    </div>
 
-      ${sec('ประวัติสุขภาพ — โรคประจำตัว (ติ๊กที่มี แล้วกรอกยาและจำนวนปีถ้าทราบ)', `<div>${CHRONIC_DISEASES.map(dRow).join('')}</div>
-        <label style="margin-top:10px">อื่นๆ (ระบุโรคประจำตัวที่ไม่อยู่ในรายการ)<input name="disease_other"></label>`)}
+    ${box('ลักษณะการใช้สายตา/การใช้แว่น', `<div style="display:grid;grid-template-columns:1fr 1fr 2fr;gap:12px">
+      ${uw('คอมพิวเตอร์/โน้ตบุ๊ค (ชม./วัน)', 'comp_hours', '', 'number', 'step="0.5" min="0"')}
+      ${uw('แทปเลต/มือถือ (ชม./วัน)', 'tablet_hours', '', 'number', 'step="0.5" min="0"')}
+      ${uw('อื่นๆ ระบุ', 'usage_other')}
+    </div>`)}
 
-      <div class="two">${sec('ประวัติโรคตา', `<input name="eye_history" placeholder="เช่น ต้อหิน ต้อกระจก จอตาเสื่อม ฯลฯ">`)}${sec('ประวัติอุบัติเหตุทางตา', `<input name="eye_accident" placeholder="ถ้าไม่มีเว้นว่างได้">`)}</div>
-      <label>ประวัติการใช้ยาอื่นๆ (นอกเหนือโรคประจำตัวด้านบน)<input name="meds"></label>
-
-      ${sec('พฤติกรรมการใช้งาน / ประวัติการตรวจ', `<div class="two">
-        <label>ใช้สายตาใกล้ / จ้องจอต่อวัน (ชม.)<input name="screen_hours" type="number" min="0" step="0.5"></label>
-        <label>ตรวจสายตาล่าสุดเมื่อ/ที่ไหน<input name="last_exam"></label>
-      </div><label>ประวัติใช้คอนแทคเลนส์ / แว่นเดิม<input name="wear_history"></label>`)}
-
-      ${sec('ข้อมูลตรวจเบื้องต้น (ก่อนวัดค่าสายตา)', `<div class="two">
-        <label>Auto-Ref ขวา (OD)<input name="autoref_od" placeholder="เช่น -1.00 -0.50x180"></label>
-        <label>Auto-Ref ซ้าย (OS)<input name="autoref_os" placeholder="เช่น -1.00 -0.50x180"></label>
-      </div><div class="two">
-        <label>PD (Ref) ขวา<input name="pdref_od" type="number" step="0.5"></label>
-        <label>PD (Ref) ซ้าย<input name="pdref_os" type="number" step="0.5"></label>
-      </div><div class="two">
-        <label>แว่น/เลนส์เดิม ยี่ห้อ-รุ่น<input name="old_glasses"></label>
-        <label>ตาข้างที่ถนัด<select name="dominant_eye"><option value="">— ไม่ทราบ —</option><option value="od">ขวา</option><option value="os">ซ้าย</option></select></label>
-      </div><div class="two">
-        <label>VA เดิม ขวา<input name="old_va_od" placeholder="เช่น 6/12"></label>
-        <label>VA เดิม ซ้าย<input name="old_va_os" placeholder="เช่น 6/12"></label>
+    ${box('ประวัติสุขภาพ — โรคประจำตัว (ติ๊กที่มี แล้วกรอกยาและจำนวนปีถ้าทราบ)', `
+      <div>${CHRONIC_DISEASES.map(dRow).join('')}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:10px">
+        ${uw('อื่นๆ (ระบุโรคที่ไม่อยู่ในรายการ)', 'disease_other')}
+        ${uw('พบแพทย์ล่าสุด', 'last_doctor_visit')}
+        ${uw('รพ./คลินิก', 'last_doctor_clinic')}
       </div>`)}
 
-      ${sec('อื่นๆ', `<div class="two">
-        <label>มือข้างที่ถนัด<select name="dominant_hand"><option value="">— ไม่ทราบ —</option><option value="right">ขวา</option><option value="left">ซ้าย</option></select></label>
-        <label>จุดประสงค์การตัดแว่น<input name="purpose" placeholder="เช่น ใส่มองไกล ใส่ทำงานใกล้"></label>
-      </div><label>ผู้ซักประวัติ / ตำแหน่ง<input name="examiner_role"></label>
-      <label>หมายเหตุเพิ่มเติม<textarea name="notes2" rows="2"></textarea></label>`)}
+    ${box('อาการทางตา', `
+      <p class="tag" style="margin:0 0 8px">แตะติ๊กอาการที่ลูกค้าแจ้งได้เลย ถ้ายังไม่มีในรายการให้พิมพ์เพิ่มด้านล่าง — จะถูกบันทึกไว้ให้เลือกในครั้งถัดไปด้วย</p>
+      <div style="display:flex;flex-wrap:wrap;gap:7px;margin:0 0 10px">${list.map(chip).join('')}</div>
+      <div style="display:flex;gap:10px;margin-bottom:10px">
+        <input placeholder="พิมพ์อาการใหม่ที่ไม่มีในรายการ แล้วกด +" data-bind="ccnew" value="${esc(K.ccNew || '')}" style="flex:1">
+        <button type="button" class="btn line sm" data-act="ccaddnew" style="white-space:nowrap">+ เพิ่มอาการ</button>
+      </div>
+      <label>อาการอื่นๆ นอกเหนือรายการ (รายละเอียดเพิ่มเติม)<textarea data-bind="ccother" rows="2" placeholder="ระบุรายละเอียดอาการอื่นๆ ที่ไม่อยู่ในรายการด้านบน">${esc(K.ccOther || '')}</textarea></label>
+      <label style="margin-top:8px">ตามัว/เห็นภาพซ้อน ระยะ<select name="blur_distance"><option value="">— ไม่ระบุ —</option><option value="ใกล้">ใกล้</option><option value="ไกล">ไกล</option><option value="ทั้งใกล้และไกล">ทั้งใกล้และไกล</option></select></label>`)}
 
-      <div class="foot"><button type="button" class="btn line" data-act="kioskback">ย้อนกลับ</button><button type="button" class="btn line" data-act="printexam">พิมพ์แบบฟอร์ม</button><button class="btn" type="submit">ถัดไป: ตรวจสายตา</button></div>
+    ${box('ประวัติโรคตา (ถ้ามีมากกว่า 1 รายการ กรอกได้สูงสุด 4 แถว)', `
+      ${EYE_DISEASE_ROWS.map(i => med3('ed' + i + '_name', 'ed' + i + '_clinic', 'ed' + i + '_treat', 'โรคตา')).join('')}
+      <div style="font-weight:600;font-size:12.5px;margin:10px 0 6px;color:#60655e">อุบัติเหตุทางตา</div>
+      ${med3('accident_detail', 'accident_clinic', 'accident_treat', 'อุบัติเหตุทางตา (ถ้าไม่มีเว้นว่างได้)')}
+      <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;margin-top:6px">
+        ${uw('ตรวจวัดสายตาล่าสุด เมื่อ/ที่ไหน', 'last_va_check_where')}
+        <label style="display:flex;flex-direction:column;gap:2px;font-size:12px;color:#60655e">ตรวจโดย<select name="last_va_check_by"><option value="">— ไม่ระบุ —</option><option value="od">OD</option><option value="optician">Optician</option><option value="other">อื่น</option></select></label>
+        ${uw('ระบุ (ถ้าเลือกอื่น)', 'last_va_check_other')}
+      </div>`)}
+
+    ${box('ประวัติการใช้แว่น / คอนแทคเลนส์', `
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px">
+        <label style="display:flex;flex-direction:column;gap:2px;font-size:12px;color:#60655e">CL<select name="cl_freq"><option value="">— ไม่ได้ใช้ —</option><option value="daily">รายวัน</option><option value="monthly">รายเดือน</option></select></label>
+        ${uw('R', 'cl_r')}${uw('L', 'cl_l')}${uw('ระยะเวลาที่ใช้', 'cl_duration')}
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:10px">
+        ${uw('แว่นเดิม R', 'old_glasses_r')}${uw('แว่นเดิม L', 'old_glasses_l')}${uw('ระยะเวลาที่ใช้', 'old_glasses_duration')}
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:10px">
+        ${uw('เลนส์', 'lens_name')}${uw('Index', 'lens_index')}${uw('เปลี่ยนสี', 'lens_color_change')}
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1.4fr;gap:12px;margin-top:10px">
+        ${uw('Corridor', 'lens_corridor')}${uw('PD เดิม R', 'lens_pd_r')}${uw('PD เดิม L', 'lens_pd_l')}${uw('ปัญหาการใช้แว่น', 'lens_problem')}
+      </div>`)}
+
+    ${box('ข้อมูลตรวจเบื้องต้น', `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        ${uw('Auto Ref. R', 'autoref_od', 'เช่น -1.00 -0.50 x180')}
+        ${uw('Auto Ref. L', 'autoref_os', 'เช่น -1.00 -0.50 x180')}
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px">
+        ${uw('PD ref. R', 'pdref_od', '', 'number', 'step="0.5"')}
+        ${uw('PD ref. L', 'pdref_os', '', 'number', 'step="0.5"')}
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px">
+        ${uw('สัญลักษณ์บนเลนส์เดิม', 'lens_marking')}
+        ${uw('ยี่ห้อ/รุ่นแว่นเดิม', 'lens_brand_model')}
+      </div>`)}
+
+    ${box('VA', `${gridTable(VA_ROWS, VA_COLS, 'va')}
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px">
+        <label style="display:flex;flex-direction:column;gap:2px;font-size:12px;color:#60655e">ตาข้างที่ถนัด<select name="dominant_eye"><option value="">— ไม่ทราบ —</option><option value="od">ขวา (R)</option><option value="os">ซ้าย (L)</option></select></label>
+        <label style="display:flex;flex-direction:column;gap:2px;font-size:12px;color:#60655e">มือข้างที่ถนัด<select name="dominant_hand"><option value="">— ไม่ทราบ —</option><option value="right">ขวา</option><option value="left">ซ้าย</option></select></label>
+      </div>`)}
+
+    ${box('SUBJECTIVE', gridTable(SUB_ROWS, SUB_COLS, 'sub', 56))}
+
+    ${box('สรุปผล', `
+      <label style="display:flex;flex-direction:column;gap:4px;font-size:12px;color:#60655e;margin-bottom:10px">แว่นสำหรับ
+        <span style="display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:#23262a">
+          <label style="display:flex;align-items:center;gap:5px;margin:0"><input type="radio" name="purpose_type" value="distance"> มองไกล</label>
+          <label style="display:flex;align-items:center;gap:5px;margin:0"><input type="radio" name="purpose_type" value="near"> มองใกล้</label>
+          <label style="display:flex;align-items:center;gap:5px;margin:0"><input type="radio" name="purpose_type" value="other"> อื่นๆ</label>
+          <input name="purpose_other" placeholder="ระบุ (ถ้าเลือกอื่นๆ)" style="flex:1;min-width:140px">
+        </span>
+      </label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        ${uw('ผู้ตรวจ', 'examiner')}${uw('ตำแหน่ง', 'examiner_role')}
+      </div>
+      <label style="margin-top:10px">หมายเหตุเพิ่มเติม<textarea name="notes2" rows="2"></textarea></label>`)}
+
+      <div class="foot"><button type="button" class="btn line" data-act="kioskback">ย้อนกลับ</button><button type="button" class="btn line" data-act="printexam">พิมพ์แบบฟอร์ม</button><button class="btn" type="submit">บันทึกผลตรวจ</button></div>
     </form>
   </div>`;
 }
@@ -2174,7 +2267,7 @@ function kioskView() {
   setThemeColor('#aab0b8');
   const steps = { lookup: kioskLookup, lookupresults: kioskLookupResults, newcust: kioskNewCust, menu: kioskMenu, history: kioskHistory, examintake: kioskExamIntake, claimform: kioskClaimForm, lensreq: kioskLensReq, pick: kioskProductBrowse, cart: kioskCart, done: kioskDone };
   const inner = (steps[K.step] || kioskLookup)();
-  const wide = ['pick', 'cart', 'lensreq'].includes(K.step) ? '680px' : '560px';
+  const wide = K.step === 'examintake' ? 'min(980px,96vw)' : ['pick', 'cart', 'lensreq'].includes(K.step) ? '680px' : '560px';
   const backBtn = 'padding:8px 14px;border-radius:999px;border:1px solid rgba(255,255,255,.8);background:rgba(255,255,255,.65);box-shadow:0 6px 16px rgba(20,22,26,.18);color:#23262a;font-size:12.5px;cursor:pointer;display:inline-flex;align-items:center;gap:4px';
   return `<div style="position:fixed;inset:0;background:${SILVER_BG};overflow:auto;padding:36px 18px">
     <div style="max-width:${wide};margin:0 auto 22px;display:flex;align-items:center;gap:10px">
@@ -3064,9 +3157,20 @@ document.addEventListener('submit', async e => {
       const ccText = [K.cc.join(', '), (K.ccOther || '').trim()].filter(Boolean).join(' / ');
       const health = examIntakeDataFromForm(d);
       const diseaseText = health.diseases.map(x => x.label + (x.years != null ? ` (${x.years} ปี)` : '')).join(', ');
-      const pre = [ccText && `CC: ${ccText}`, diseaseText && `โรคประจำตัว: ${diseaseText}`, health.disease_other_text && `อื่นๆ: ${health.disease_other_text}`, d.eye_history && `โรคตา/ประวัติ: ${d.eye_history}`, d.meds && `ประวัติการใช้ยา: ${d.meds}`].filter(Boolean).join(' · ');
-      K.examMeta = examIntakeHasData(health) ? health : null;
-      rxForm(K.custId, pre);
+      const notes = [ccText && `CC: ${ccText}`, diseaseText && `โรคประจำตัว: ${diseaseText}`, health.disease_other_text && `อื่นๆ: ${health.disease_other_text}`].filter(Boolean).join(' · ');
+      const fo = health.sub.final_od || {}, fs = health.sub.final_os || {};
+      const prismTxt = r => [r.prism1 && `Prism1 ${r.prism1}${r.base1 ? ' Base ' + r.base1 : ''}`, r.prism2 && `Prism2 ${r.prism2}${r.base2 ? ' Base ' + r.base2 : ''}`].filter(Boolean).join(' / ') || null;
+      const meta = { ...health };
+      save('prescriptions', {
+        id: uid(), customer_id: K.custId, exam_date: d.exam_date || null, examiner: health.examiner,
+        od_sph: num(fo.sph), od_cyl: num(fo.cyl), od_axis: num(fo.axis), od_add: num(fo.add), od_pd: num(fo.distpd),
+        os_sph: num(fs.sph), os_cyl: num(fs.cyl), os_axis: num(fs.axis), os_add: num(fs.add), os_pd: num(fs.distpd),
+        pd: null, add_power: null,
+        meta: { ...meta, od_ph: num(fo.fh), os_ph: num(fs.fh), od_seg: num(fo.sh), os_seg: num(fs.sh), od_param: prismTxt(fo), os_param: prismTxt(fs) },
+        notes: notes || null, deleted_at: null
+      });
+      K.cc = []; K.ccOther = ''; K.ccNew = ''; K.examMeta = null; K.hist = [];
+      commit(); K.step = 'done'; render(); toast('บันทึกผลตรวจสายตาแล้ว');
     } else if (k === 'claimform') {
       const claimNote = 'หมายเหตุ: ระยะเวลาการเคลมสินค้าอาจมีระยะนานกว่าที่นัด เนื่องจากอะไหล่บางประเภทต้องรอสั่งนอก และอาจไม่ตรงรุ่น เนื่องจากไม่มีผลิต หากมีปัญหาดังกล่าวทางร้านจะมีการแจ้งให้ลูกค้าทราบอีกครั้ง';
       save('claims', { id: uid(), customer_id: K.custId, kind: d.kind, frame_model: d.frame_model.trim() || null, frame_code: d.frame_code.trim() || null, issue: d.issue.trim() || null, repair_items: d.repair_items.trim() || null, cost_thb: num(d.cost_thb), pickup_date: d.pickup_date || null, photo: K.photo || null, status: 'pending', signed_at: null, notes: claimNote, deleted_at: null });
