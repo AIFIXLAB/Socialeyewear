@@ -1917,7 +1917,8 @@ function kioskLensReq() {
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap"><h2 style="margin:0;font-size:15px">${esc(title)}</h2>${cat ? tutBtn(cat) : ''}</div>
     ${grid ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px">${body || '<p class="tag">ยังไม่มีตัวเลือกในระบบ</p>'}</div>` : `<div class="chips" style="margin-bottom:0">${body || '<p class="tag">ยังไม่มีตัวเลือกในระบบ</p>'}</div>`}
   </div>`;
-  const brandOpts = knownBrands('lens');
+  // แสดงเฉพาะแบรนด์ที่มีเลนส์จริงอยู่ในระบบ (ไม่เอารายชื่อแบรนด์ที่ยังไม่มีสินค้าเชื่อมอยู่มาปนให้กดแล้วไม่เจออะไร)
+  const brandOpts = [...new Set(live('products').filter(p => p.product_type === 'lens' && p.active !== false).map(p => p.brand).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'th'));
   return `
     <h1 style="font-size:21px;margin:0 0 4px">เลือกเลนส์ที่ใช่สำหรับคุณ...</h1>
     <p class="tag" style="margin:0 0 18px">เลือกประเภทเลนส์ แบรนด์ และระดับที่ต้องการ เพื่อดูรายการเลนส์ที่ตรงกัน — ส่วน Index/Coating/เปลี่ยนสี ไปเลือกเทียบราคาได้ละเอียดอีกทีตอนเปิดหน้าเปรียบเทียบเลนส์</p>
