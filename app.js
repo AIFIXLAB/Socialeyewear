@@ -159,7 +159,7 @@ const LOOKUPS = {
 const OTHER_ITEMS = ["ค่าบริการเครื่องรูดบัตร", "ตรวจวัดสายตา", "ซ่อมแว่นตา", "ค่าส่งพัสดุ", "ค่าบริการประกอบ", "อะไหล่แว่นตา", "tint ย้อมสี", "vat7%"];
 const LENS_DESIGN = [['single', 'Single Vision'], ['anti_fatigue', 'Anti-Fatigue (ลดอาการล้าสายตา)'], ['kids', 'เลนส์เด็ก / ชะลอสายตาสั้น (Kids / Myopia Control)'], ['bifocal', 'Bifocal (FT / KT)'], ['office', 'Office (ระยะใกล้-กลาง)'], ['progressive', 'Progressive (มองได้ทุกระยะ)']];
 const LENS_SURFACE = [['spheric', 'Spheric'], ['aspheric', 'Aspheric'], ['double_aspheric', 'Double Aspheric'], ['freeform_backside', 'Freeform Backside'], ['double_surface_freeform', 'Double Surface Freeform']];
-const LENS_INDEX_OPTS = [['1.50', '1.50'], ['1.59', '1.59 (Polycarbonate)'], ['1.60', '1.60'], ['1.61', '1.61'], ['1.67', '1.67'], ['1.70', '1.70'], ['1.74', '1.74'], ['1.76', '1.76']];
+const LENS_INDEX_OPTS = [['1.50', '1.50'], ['1.56', '1.56'], ['1.59', '1.59 (Polycarbonate)'], ['1.60', '1.60'], ['1.61', '1.61'], ['1.67', '1.67'], ['1.70', '1.70'], ['1.74', '1.74'], ['1.76', '1.76']];
 const LENS_COATING_OPTS = [['uncoat', 'Uncoat'], ['sft', 'SFT'], ['hard', 'Hard Coat'], ['multi', 'Multi Coat'], ['hvp', 'HVP'], ['hvp_blue', 'HVP + Blue'], ['meiryo', 'Meiryo'], ['meiryo_blue', 'Meiryo Blue'], ['blue_full', 'Blue Coat (Full Control)']];
 const LENS_COATINGS = [['blue', 'กรองแสงสีฟ้า (Blue Block)'], ['photo', 'เปลี่ยนสีอัตโนมัติ (Photochromic)'], ['uv400', 'กัน UV400'], ['polarized', 'ตัดแสงสะท้อน (Polarized)'], ['ar', 'เคลือบกันแสงสะท้อน (Anti-Reflective)'], ['hard', 'กันรอยขีดข่วน (Hard Coat)'], ['hydro', 'กันน้ำ/คราบมัน (Hydrophobic/Oleophobic)'], ['fog', 'กันฝ้า (Anti-Fog)']];
 const LENS_TIER_OPTS = ['Entry', 'Standard', 'Premium', 'Flagship'];
@@ -1209,12 +1209,12 @@ function openLensCompare() {
 }
 // ใส่สินค้าลงตะกร้า — ถ้าเลนส์รุ่นนั้นมีมากกว่า 1 ชุดตัวเลือก ให้ใช้ id รวม "รหัสสินค้า::รหัสชุด" กันชุดต่างราคาของรุ่นเดียวกันมาปนกัน
 // รุ่น/สินค้าที่มีชุดตัวเลือกเดียว (กรอบแว่น, บริการ, เลนส์เก่าราคาเดียว) ยังใช้รหัสสินค้าตรงๆ เหมือนเดิม ไม่กระทบของเดิม
-function cartAdd(p, variant) {
+function cartAdd(p, variant, extra) {
   const multi = p.product_type === 'lens' && lensVariants(p).length > 1;
   const cid = multi ? p.id + '::' + (variant.id || [variant.index, variant.coating, variant.color_change, variant.price].join('|')) : p.id;
   const x = S.cart.find(i => i.id === cid);
-  if (x) x.qty++;
-  else S.cart.push({ id: cid, productId: p.id, name: p.product_name + (multi ? ' · ' + lensVariantLabel(variant) : ''), type: p.product_type, price: variant.price, qty: 1 });
+  if (x) { x.qty++; if (extra) Object.assign(x, extra); }
+  else S.cart.push({ id: cid, productId: p.id, name: p.product_name + (multi ? ' · ' + lensVariantLabel(variant) : ''), type: p.product_type, price: variant.price, qty: 1, ...(extra || {}) });
   render();
 }
 function openVariantPicker(pid) {
@@ -1241,6 +1241,9 @@ function renderVariantPicker() {
     ${idxVals.length > 1 ? `<label><span class="lbl">Index</span>${sel('vpidx', vp.index, idxVals)}</label>` : idxVals.length ? `<p class="tag">Index ${esc(idxVals[0])}</p>` : ''}
     ${coatVals.length > 1 ? `<label><span class="lbl">Coating</span>${sel('vpcoat', vp.coating, coatVals, coatLabel)}</label>` : coatVals.length ? `<p class="tag">${esc(coatLabel(coatVals[0]))}</p>` : ''}
     ${colorVals.length > 1 ? `<label><span class="lbl">เปลี่ยนสี</span><select data-bind="vpcolor">${LENS_COLOR_OPTS.filter(([k]) => colorVals.includes(k)).map(([k, l]) => `<option value="${k}" ${vp.color === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>` : ''}
+    <label><span class="lbl">สีเลนส์ (ย้อม/เฉดสี — ถ้ามี)</span><input value="${esc(vp.tint || '')}" data-bind="vptint" placeholder="เช่น เทาเข้ม, ฟ้า"></label>
+    <label><span class="lbl">Corridor</span><input value="${esc(vp.corridor || '')}" data-bind="vpcorridor" placeholder="เช่น 14, 16"></label>
+    <label><span class="lbl">ชนิดเลนส์ (ถ้าต้องระบุเพิ่ม)</span><input value="${esc(vp.lensType || '')}" data-bind="vptype" placeholder="เช่น Progressive"></label>
     <div class="panel" style="padding:14px 16px;margin-top:10px;text-align:center">
       ${match ? `<div style="font-size:22px;font-weight:700">${baht(match.price)}</div>` : `<p class="warn" style="margin:0">ไม่มีชุดตัวเลือกนี้ให้บริการ กรุณาเลือกใหม่</p>`}
     </div>
@@ -1451,7 +1454,7 @@ function lensPhotoField(p) {
   </label>`;
 }
 /* ---------- ตารางชุดตัวเลือกและราคาของเลนส์ (1 รุ่น มีได้หลายชุด Index/Coating/เปลี่ยนสี) ---------- */
-const LENS_COLOR_OPTS = [['none', 'ไม่มี'], ['sensity', 'Sensity / Transition'], ['sensity_shine', 'Sensity Shine'], ['sensity_colours', 'Sensity Colours'], ['mirror', 'Mirror'], ['polarized', 'Polarized']];
+const LENS_COLOR_OPTS = [['none', 'ไม่มี'], ['tint', 'Tint (ย้อมสีเลนส์)'], ['sensity', 'Sensity / Transition'], ['sensity_shine', 'Sensity Shine'], ['sensity_colours', 'Sensity Colours'], ['mirror', 'Mirror'], ['polarized', 'Polarized']];
 const LENS_PHOTO_COLOR_KEYS = ['sensity', 'sensity_shine', 'sensity_colours', 'mirror', 'polarized'];
 function lensVariants(p) {
   const ls = p.lens_spec || {};
@@ -1941,7 +1944,7 @@ function kioskProductBrowse() {
       <select data-bind="cartframetype:${x.id}" style="width:150px;font-size:12.5px;padding:6px 8px"><option value="">— ประเภทกรอบ —</option>${FRAME_TYPES.map(([k, l]) => `<option value="${k}" ${x.frameType === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
       <input placeholder="รหัสกรอบ" value="${esc(x.code || '')}" data-bind="cartcode:${x.id}" style="width:120px;font-size:12.5px;padding:6px 8px">
       <input placeholder="สีกรอบ" value="${esc(x.color || '')}" data-bind="cartcolor:${x.id}" style="width:120px;font-size:12.5px;padding:6px 8px">
-      <input type="number" min="0" placeholder="ราคาขาย" value="${x.price || ''}" data-bind="cartprice:${x.id}" style="width:120px;font-size:12.5px;padding:6px 8px">
+      <input type="text" inputmode="numeric" placeholder="ราคาขาย" value="${x.price || ''}" data-bind="cartprice:${x.id}" style="width:120px;font-size:12.5px;padding:6px 8px">
     </div>` : ''}
   </div>`; };
   const tab = (id, l) => `<button data-act="kioskcat" data-id="${id}" style="padding:9px 18px;border-radius:999px;border:1px solid ${K.pcat === id ? 'transparent' : 'rgba(0,0,0,.15)'};background:${K.pcat === id ? '#23262a' : 'rgba(255,255,255,.55)'};color:${K.pcat === id ? '#fff' : '#23262a'};font-size:13px;cursor:pointer">${l}</button>`;
@@ -1986,11 +1989,11 @@ function kioskCart() {
   </div>`;
   return `<div class="panel" style="padding:24px">
     <h2 style="margin-top:0">สรุปรายการ</h2>
-    ${S.cart.length ? S.cart.map(i => `<div class="row" style="align-items:flex-start"><span style="flex:1"><span>${esc(i.name)}</span><br><span class="tag">${baht(i.price)} × ${i.qty}</span>${i.customLens ? `<div class="tag" style="margin-top:4px">${esc(itemExtraLine(i, 'lens'))}</div>` : ''}${i.type === 'frame' ? `<div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
+    ${S.cart.length ? S.cart.map(i => `<div class="row" style="align-items:flex-start"><span style="flex:1"><span>${esc(i.name)}</span><br><span class="tag">${baht(i.price)} × ${i.qty}</span>${i.type === 'lens' && itemExtraLine(i, 'lens') ? `<div class="tag" style="margin-top:4px">${esc(itemExtraLine(i, 'lens'))}</div>` : ''}${i.type === 'frame' ? `<div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
         <select data-bind="cartframetype:${i.id}" style="width:150px;font-size:12.5px;padding:6px 8px"><option value="">— ประเภทกรอบ —</option>${FRAME_TYPES.map(([k, l]) => `<option value="${k}" ${i.frameType === k ? 'selected' : ''}>${l}</option>`).join('')}</select>
         <input placeholder="รหัสกรอบ" value="${esc(i.code || '')}" data-bind="cartcode:${i.id}" style="width:120px;font-size:12.5px;padding:6px 8px">
         <input placeholder="สีกรอบ" value="${esc(i.color || '')}" data-bind="cartcolor:${i.id}" style="width:120px;font-size:12.5px;padding:6px 8px">
-        <input type="number" min="0" placeholder="ราคาขาย" value="${i.price || ''}" data-bind="cartprice:${i.id}" style="width:120px;font-size:12.5px;padding:6px 8px">
+        <input type="text" inputmode="numeric" placeholder="ราคาขาย" value="${i.price || ''}" data-bind="cartprice:${i.id}" style="width:120px;font-size:12.5px;padding:6px 8px">
       </div>` : ''}</span><span class="qty"><button class="btn line sm" data-act="qty" data-id="${i.id}" data-d="-1">−</button><b>${i.qty}</b><button class="btn line sm" data-act="qty" data-id="${i.id}" data-d="1">+</button></span></div>`).join('') : '<p class="tag">ยังไม่ได้เลือกสินค้า</p>'}
     ${discRow('กรอบแว่น', 'frame', K.discFrame, c.frameSub, c.discFrameAmt)}
     ${discRow('เลนส์', 'lens', K.discLens, c.lensSub, c.discLensAmt)}
@@ -2092,7 +2095,7 @@ function receiptData(forQuoteId) {
     const meta = q.meta || {};
     return {
       customerId: q.customer_id, saved: true,
-      items: items.map(i => ({ name: i.item_name_snapshot, type: i.product_type, qty: i.quantity, price: i.unit_price_thb, lineTotal: i.line_total_thb, productId: i.product_id, code: (i.meta || {}).code || '', color: (i.meta || {}).color || '', frameType: (i.meta || {}).frameType || '', customLens: (i.meta || {}).customLens || null })),
+      items: items.map(i => ({ name: i.item_name_snapshot, type: i.product_type, qty: i.quantity, price: i.unit_price_thb, lineTotal: i.line_total_thb, productId: i.product_id, code: (i.meta || {}).code || '', color: (i.meta || {}).color || '', frameType: (i.meta || {}).frameType || '', tint: (i.meta || {}).tint || '', corridor: (i.meta || {}).corridor || '', lensType: (i.meta || {}).lensType || '', customLens: (i.meta || {}).customLens || null })),
       sub: q.subtotal_thb, discTotal: q.discount_thb, total: q.total_thb,
       defNo: q.quote_number || '', defDate: q.receipt_date || (q.created_at || '').slice(0, 10) || now().slice(0, 10),
       defPay: meta.payment || [], defSig: meta.signature || '', defSeller: meta.seller || ''
@@ -2101,7 +2104,7 @@ function receiptData(forQuoteId) {
   const c = cartCalc();
   return {
     customerId: K.custId, saved: false,
-    items: S.cart.map(i => ({ name: i.name, type: i.type, qty: i.qty, price: i.price, lineTotal: i.price * i.qty, productId: i.productId || i.id, code: i.code || '', color: i.color || '', frameType: i.frameType || '', customLens: i.customLens || null })),
+    items: S.cart.map(i => ({ name: i.name, type: i.type, qty: i.qty, price: i.price, lineTotal: i.price * i.qty, productId: i.productId || i.id, code: i.code || '', color: i.color || '', frameType: i.frameType || '', tint: i.tint || '', corridor: i.corridor || '', lensType: i.lensType || '', customLens: i.customLens || null })),
     sub: c.sub, discTotal: c.discTotal, total: c.total,
     defNo: '', defDate: now().slice(0, 10),
     defPay: [], defSig: '', defSeller: S.activeSeller || ''
@@ -2113,6 +2116,9 @@ function cartItemMeta(i) {
   if (i.code) m.code = i.code;
   if (i.color) m.color = i.color;
   if (i.frameType) m.frameType = i.frameType;
+  if (i.tint) m.tint = i.tint;
+  if (i.corridor) m.corridor = i.corridor;
+  if (i.lensType) m.lensType = i.lensType;
   if (i.customLens) m.customLens = i.customLens;
   return Object.keys(m).length ? m : null;
 }
@@ -2130,7 +2136,7 @@ function itemExtraLine(item, type) {
       const colorLabel = (LENS_COLOR_OPTS.find(([k]) => k === cl.color_change) || [])[1];
       return [cl.brand ? `ยี่ห้อ ${cl.brand}` : '', cl.lens_type ? `ชนิด ${cl.lens_type}` : '', cl.index ? `Index ${cl.index}` : '', cl.corridor ? `Corridor ${cl.corridor}` : '', (colorLabel && cl.color_change !== 'none') ? colorLabel : '', cl.tint_code ? `สี ${cl.tint_code}` : '', cl.params ? `พารามิเตอร์ ${cl.params}` : ''].filter(Boolean).join(' · ');
     }
-    const idx = p ? lensIndexSummary(p) : ''; return [p?.brand ? `ยี่ห้อ ${p.brand}` : '', idx ? `Index ${idx}` : '', p?.sku ? `รหัส ${p.sku}` : ''].filter(Boolean).join(' · ');
+    const idx = p ? lensIndexSummary(p) : ''; return [p?.brand ? `ยี่ห้อ ${p.brand}` : '', idx ? `Index ${idx}` : '', item?.lensType ? `ชนิด ${item.lensType}` : '', item?.corridor ? `Corridor ${item.corridor}` : '', item?.tint ? `สี ${item.tint}` : '', p?.sku ? `รหัส ${p.sku}` : ''].filter(Boolean).join(' · ');
   }
   return '';
 }
@@ -2485,7 +2491,9 @@ document.addEventListener('click', e => {
     const coatVals = [...new Set(variants.map(v => v.coating).filter(Boolean))];
     const colorVals = [...new Set(variants.map(v => v.color_change))];
     const match = variants.find(v => v.index === vp.index && (coatVals.length < 2 || v.coating === vp.coating) && (colorVals.length < 2 || v.color_change === vp.color));
-    if (match) { cartAdd(p, match); closeDlg(); } else toast('ไม่มีชุดตัวเลือกนี้ กรุณาเลือกใหม่');
+    const extra = {};
+    if (vp.tint) extra.tint = vp.tint; if (vp.corridor) extra.corridor = vp.corridor; if (vp.lensType) extra.lensType = vp.lensType;
+    if (match) { cartAdd(p, match, extra); closeDlg(); } else toast('ไม่มีชุดตัวเลือกนี้ กรุณาเลือกใหม่');
   }
   else if (a === 'qty') { const x = S.cart.find(i => i.id === id); x.qty += +b.dataset.d; if (x.qty < 1) S.cart = S.cart.filter(i => i !== x); render(); }
   else if (a === 'mkquote') {
@@ -2792,7 +2800,7 @@ document.addEventListener('change', e => {
 });
 document.addEventListener('input', e => {
   const k = e.target.dataset.bind; if (!k) return;
-  const refocus = () => { const p = e.target.selectionStart; render(); const i = $(`[data-bind=${k}]`); if (i) { i.focus(); i.setSelectionRange(p, p); } };
+  const refocus = () => { const p = e.target.selectionStart; render(); const i = $(`[data-bind="${k}"]`); if (i) { i.focus(); i.setSelectionRange(p, p); } };
   if (k === 'q' || k === 'pq') { S[k] = e.target.value; refocus(); }
   else if (k === 'catq') { S.catQ = e.target.value; refocus(); }
   else if (k === 'kpq') { K.pq = e.target.value; refocus(); }
@@ -2801,7 +2809,10 @@ document.addEventListener('input', e => {
   else if (k.startsWith('cartcode:')) { const x = S.cart.find(i => i.id === k.slice(9)); if (x) x.code = e.target.value; }
   else if (k.startsWith('cartcolor:')) { const x = S.cart.find(i => i.id === k.slice(10)); if (x) x.color = e.target.value; }
   else if (k.startsWith('cartframetype:')) { const x = S.cart.find(i => i.id === k.slice(14)); if (x) x.frameType = e.target.value || null; }
-  else if (k.startsWith('cartprice:')) { const x = S.cart.find(i => i.id === k.slice(10)); if (x) x.price = Math.max(0, +e.target.value || 0); render(); }
+  else if (k.startsWith('cartprice:')) { const x = S.cart.find(i => i.id === k.slice(10)); if (x) x.price = Math.max(0, +e.target.value || 0); refocus(); }
+  else if (k === 'vptint') { if (S.varPick) S.varPick.tint = e.target.value; }
+  else if (k === 'vpcorridor') { if (S.varPick) S.varPick.corridor = e.target.value; }
+  else if (k === 'vptype') { if (S.varPick) S.varPick.lensType = e.target.value; }
 });
 document.addEventListener('keydown', e => {
   if (S.mode !== 'present') return;
