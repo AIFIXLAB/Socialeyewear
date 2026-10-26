@@ -1749,10 +1749,23 @@ function kioskExamIntake() {
 }
 function claimListView() {
   const rows = live('claims').sort((a, b) => b.created_at.localeCompare(a.created_at));
-  const row = x => `<tr><td>${day(x.created_at)}</td><td>${esc(custName(x.customer_id))}</td><td>${x.kind === 'claim' ? 'เคลมประกัน' : 'ซ่อมแว่น'}</td><td>${esc(x.frame_model || '-')}</td><td>${esc(x.frame_code || '-')}</td><td>${esc(x.issue || '-')}</td><td>${x.cost_thb != null ? baht(x.cost_thb) : '-'}</td><td>${x.pickup_date ? day(x.pickup_date) : '-'}</td><td class="noprint">${x.status === 'pending' ? 'รอดำเนินการ' : x.status}</td></tr>`;
-  dialog(`<style>#dlg{width:min(900px,95vw)!important;max-width:95vw!important}</style>
+  const field = (l, v) => v ? `<div class="row" style="border:0;padding:2px 0"><span class="tag">${l}</span><span>${esc(v)}</span></div>` : '';
+  const card = x => `<div class="panel" style="padding:12px 14px;margin-bottom:10px">
+    <div class="row" style="border:0;padding:0"><span><b>${x.kind === 'claim' ? 'เคลมประกัน' : 'ซ่อมแว่น'}</b> <span class="tag">· แจ้งเมื่อ ${day(x.created_at)}</span></span><span class="tag noprint">${x.status === 'pending' ? 'รอดำเนินการ' : x.status}</span></div>
+    <div style="margin-top:6px">
+      ${field('ลูกค้า', custName(x.customer_id))}
+      ${field('รุ่น/ยี่ห้อกรอบ', x.frame_model)}
+      ${field('รหัสสินค้า', x.frame_code)}
+      ${field('อาการ/ปัญหา', x.issue)}
+      ${field('รายการที่ต้องซ่อม', x.repair_items)}
+      ${field('ค่าบริการโดยประมาณ', x.cost_thb != null ? baht(x.cost_thb) : '')}
+      ${field('วันนัดรับสินค้า', x.pickup_date ? day(x.pickup_date) : '')}
+      ${x.notes ? `<div style="margin-top:6px;padding-top:6px;border-top:1px dashed var(--line,#e4ddd2);font-size:12px;color:var(--mute,#69756d)">${esc(x.notes)}</div>` : ''}
+    </div>
+  </div>`;
+  dialog(`<style>#dlg{width:min(760px,95vw)!important;max-width:95vw!important}</style>
   <div class="sheet"><h2>รายการแจ้งซ่อม / เคลมสินค้า</h2><div class="meta">${esc(shop?.name || 'Social Eyewear')} · พิมพ์เมื่อ ${day(now())} · ทั้งหมด ${rows.length} รายการ</div>
-  ${rows.length ? `<div class="wrap"><table><tr><th>วันที่แจ้ง</th><th>ลูกค้า</th><th>ประเภท</th><th>รุ่น/ยี่ห้อกรอบ</th><th>รหัสสินค้า</th><th>อาการ/ปัญหา</th><th>ค่าบริการ</th><th>นัดรับ</th><th class="noprint">สถานะ</th></tr>${rows.map(row).join('')}</table></div>` : '<p class="tag">ยังไม่มีรายการแจ้งซ่อม/เคลม</p>'}
+  ${rows.length ? rows.map(card).join('') : '<p class="tag">ยังไม่มีรายการแจ้งซ่อม/เคลม</p>'}
   </div>
   <div class="foot noprint"><button type="button" class="btn line" data-act="close">ปิด</button><button type="button" class="btn line" data-act="print">สั่งพิมพ์</button></div>`);
 }
@@ -2952,6 +2965,9 @@ document.addEventListener('submit', async e => {
 window.addEventListener('online', () => { setStatus(); sync(); }); window.addEventListener('offline', setStatus);
 setInterval(sync, 60000);
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
+// ล้างรายการ HOYA/Apollo ที่ซ้ำกัน (ชื่อเดียวกันแต่คนละ id) ทันทีทุกครั้งที่เปิดแอป — ไม่ต้องรอซิงก์เสร็จก่อน กันปัญหาเห็นสินค้าซ้ำเต็มหน้าจอ
+dedupeHoyaProducts(new Set(HOYA_LENSES.map(o => o.product_name)));
+dedupeApolloProducts(new Set(APOLLO_LENSES.map(o => o.product_name)));
 if (!sess) { syncHoyaCatalog(); syncApolloCatalog(); } // เครื่องที่ยังไม่ได้ล็อกอิน/ซิงก์คลาวด์ — ซิงก์ HOYA/Apollo จากในเครื่องได้เลยตอนเปิดแอป
 persist(); render(); sync();
 })();
