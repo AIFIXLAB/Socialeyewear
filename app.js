@@ -10,7 +10,7 @@ const baht = n => '฿' + Number(n || 0).toLocaleString('th-TH');
 const num = v => (v === '' || v == null || isNaN(+v)) ? null : +v;
 const toast = m => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2800); };
 const errText = e => { const m = e?.message || String(e); try { return JSON.parse(m).message || m; } catch { return m; } };
-const APP_VERSION = 'v69'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
+const APP_VERSION = 'v70'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
 
 /* ---------- โครงสร้างข้อมูล (ตรงกับ supabase/schema.sql) ---------- */
 const COLS = {
@@ -114,6 +114,8 @@ const persist = () => {
 const live = t => db[t].filter(r => !r.deleted_at);
 const find = (t, id) => db[t].find(r => r.id === id);
 let shop = ls.get('shop', null), sess = ls.get('sess', null), syncing = false, status = '';
+let tableErrors = {}; // {ตาราง: ข้อความ error ล่าสุด} — เก็บ error ตอน "ดึงข้อมูลลงมา" (pull) ที่พลาด ซึ่งแต่ก่อนจะหายไปเงียบๆ (แค่ console.error) มองไม่เห็นในแอปเลย
+// ต่างจาก _err ที่ติดอยู่กับแต่ละแถว (ใช้ตอน "ส่งข้อมูลขึ้น" (push) พลาด) — ตารางที่ pull พลาดจะทำให้ตารางนั้นไม่ได้อัปเดตข้อมูลใหม่เลยทั้งตาราง (เช่น สินค้าทั้งหมดไม่มาเลย) โดยไม่มีแถวไหนติด _err ให้เห็นในหน้า "ดูรายละเอียด" แบบเดิม
 
 function save(t, rec) {
   if (!rec.created_at) rec.created_at = now();
@@ -201,15 +203,16 @@ const retryFailedSync = forceSync; // ชื่อเดิม เผื่อ�
 function setStatus() {
   const el = $('#sync'); if (!el) return; const c = cfg();
   const s = !navigator.onLine ? ['off', 'ออฟไลน์ · บันทึกในเครื่อง'] : !sess ? ['off', 'ยังไม่ได้ล็อกอิน · บันทึกในเครื่อง'] : !c.url || !c.key ? ['off', 'ยังไม่ตั้งค่า Supabase'] : !shop ? ['off', 'ยังไม่มีร้าน'] : ['ok', status || 'เชื่อมต่อแล้ว'];
-  const p = pendingCount(), e = errCount(), canSync = navigator.onLine && sess;
+  const p = pendingCount(), e = errCount(), tErr = Object.keys(tableErrors).length, canSync = navigator.onLine && sess;
   el.className = 'sync ' + s[0];
-  el.innerHTML = `<i></i><span>${esc(s[1])}${p ? ` · รอซิงก์ ${p}` : ''}${e ? ` · ผิดพลาด ${e}` : ''}${canSync ? ' · แตะเพื่อซิงก์ล่าสุด' : ''} · ${APP_VERSION}</span>${e ? ` <button type="button" data-act="syncerrdetail" style="all:unset;cursor:pointer;text-decoration:underline;color:inherit;margin-left:2px">ดูรายละเอียด</button>` : ''}`;
+  el.innerHTML = `<i></i><span>${esc(s[1])}${p ? ` · รอซิงก์ ${p}` : ''}${e ? ` · ผิดพลาด ${e}` : ''}${tErr ? ` · ดึงข้อมูลพลาด ${tErr} ตาราง` : ''}${canSync ? ' · แตะเพื่อซิงก์ล่าสุด' : ''} · ${APP_VERSION}</span>${(e || tErr) ? ` <button type="button" data-act="syncerrdetail" style="all:unset;cursor:pointer;text-decoration:underline;color:inherit;margin-left:2px">ดูรายละเอียด</button>` : ''}`;
   el.style.cursor = canSync ? 'pointer' : '';
   // กันไม่ให้กดปุ่ม "ดูรายละเอียด" แล้วไปเรียก forceSync ซ้อนทับ (ปุ่มอยู่ในกล่องเดียวกันที่กดได้ทั้งกล่อง)
   el.onclick = canSync ? (ev => { if (ev.target.closest('[data-act="syncerrdetail"]')) return; forceSync(); }) : null;
 }
 // รายละเอียดรายการที่ซิงก์ขึ้นเซิร์ฟเวอร์ไม่สำเร็จ (ข้อความ error จริงจากเซิร์ฟเวอร์) — ไว้ส่งให้ผู้พัฒนาระบบตรวจสอบเวลาจำนวน "ผิดพลาด" ไม่ลดลงแม้กดซิงก์ใหม่แล้ว
 function syncErrDetailView() {
+  const tErrRows = Object.entries(tableErrors).map(([t, msg]) => `[ดึงข้อมูลตาราง ${t} ไม่สำเร็จ]\n  ${msg}`);
   const rows = [];
   T.forEach(t => db[t].forEach(r => {
     if (!r._err) return;
@@ -222,10 +225,12 @@ function syncErrDetailView() {
     }
     rows.push({ t, id: r.id, name: r.item_name_snapshot || r.product_name || r.full_name || '', err: r._err + extra });
   }));
+  const tErrNote = tErrRows.length ? `<p class="tag" style="color:#a23b2a">มีตารางที่ "ดึงข้อมูลลงมาจากเซิร์ฟเวอร์" ไม่สำเร็จด้วย ${tErrRows.length} ตาราง — ตารางนั้นจะยังไม่อัปเดตข้อมูลใหม่ในเครื่องนี้เลยจนกว่าจะซิงก์สำเร็จ (เช่น ถ้าเป็นตาราง products แปลว่าสินค้า/กรอบ/เลนส์จะไม่เข้ามาเลย)</p>` : '';
   return `<style>#dlg{width:min(680px,95vw)!important;max-width:95vw!important}</style>
-  <h2>รายการที่ซิงก์ไม่สำเร็จ (${rows.length} รายการ)</h2>
-  <p class="tag">ข้อมูลยังปลอดภัยอยู่ในเครื่องนี้ครบ แต่ยังไม่ขึ้นเซิร์ฟเวอร์ (เครื่องอื่นจะยังไม่เห็น) — คัดลอกข้อความด้านล่างส่งให้ผู้พัฒนาระบบตรวจสอบได้เลย</p>
-  <textarea readonly rows="14" style="font-size:11px;font-family:monospace;white-space:pre">${esc(rows.map(r => `[${r.t}] id=${r.id}${r.name ? ' (' + r.name + ')' : ''}\n  ${r.err}`).join('\n\n') || '(ไม่มี)')}</textarea>
+  <h2>รายการที่ซิงก์ไม่สำเร็จ (${rows.length + tErrRows.length} รายการ)</h2>
+  <p class="tag">ข้อมูลยังปลอดภัยอยู่ในเครื่องนี้ครบ แต่ยังไม่ขึ้นเซิร์ฟเวอร์/ยังไม่ได้ดึงมาครบ (เครื่องอื่นจะยังไม่เห็น) — คัดลอกข้อความด้านล่างส่งให้ผู้พัฒนาระบบตรวจสอบได้เลย</p>
+  ${tErrNote}
+  <textarea readonly rows="14" style="font-size:11px;font-family:monospace;white-space:pre">${esc([...tErrRows, ...rows.map(r => `[${r.t}] id=${r.id}${r.name ? ' (' + r.name + ')' : ''}\n  ${r.err}`)].join('\n\n') || '(ไม่มี)')}</textarea>
   <div class="foot"><button type="button" class="btn line" data-act="close">ปิด</button><button type="button" class="btn" data-act="syncnow">ลองซิงก์ใหม่</button></div>`;
 }
 // ดึงข้อมูลใหม่จากเซิร์ฟเวอร์ก่อน (แก้ล่าสุดชนะ) แล้วจึงส่งรายการที่แก้ในเครื่องขึ้นไป
@@ -238,6 +243,7 @@ async function sync() {
     if (!(await loadShop())) { status = ''; syncing = false; setStatus(); if (!$('#dlg').open) render(); return; }
     const pull = ls.get('pull', {});
     let tableFailed = false;
+    tableErrors = {}; // เริ่มรอบซิงก์ใหม่ ล้าง error ของตารางจากรอบก่อนหน้า (ถ้ารอบนี้ผ่านแล้วจะได้ไม่ค้างข้อความเก่าไว้)
     for (const t of T) {
       // แยก try/catch รายตาราง — กันไม่ให้ตารางหนึ่งซิงก์พลาด (เช่น เน็ตสะดุดตอนดึงข้อมูลสินค้า) แล้วบล็อกตารางถัดไปในลำดับ (เช่น ใบเสนอราคา/รายการสินค้าในบิล) ไม่ให้ได้ซิงก์ไปด้วย — จุดนี้เคยทำให้รายการขายที่เพิ่งทำพลาดคิวซิงก์ไปทั้งที่ตารางอื่นซิงก์สำเร็จ
       try {
@@ -275,7 +281,7 @@ async function sync() {
           try { await post(part); part.forEach(ok); }
           catch { for (const r of part) { try { await post([r]); ok(r); } catch (e) { r._err = errText(e); } } }
         }
-      } catch (e) { tableFailed = true; console.error(`sync table ${t} failed`, e); }
+      } catch (e) { tableFailed = true; tableErrors[t] = errText(e); console.error(`sync table ${t} failed`, e); }
     }
     ls.set('pull', pull); persist();
     syncHoyaCatalog(); // ซิงก์แคตตาล็อก HOYA อัตโนมัติหลังดึงข้อมูลล่าสุดจากเซิร์ฟเวอร์แล้ว (กันรายการซ้ำ) — ไม่ต้องกดปุ่มเอง
