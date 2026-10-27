@@ -82,10 +82,17 @@ async function loadShop() {
 }
 const pendingCount = () => T.reduce((n, t) => n + db[t].filter(r => r._dirty && !r._err).length, 0);
 const errCount = () => T.reduce((n, t) => n + db[t].filter(r => r._err).length, 0);
-// บังคับซิงก์ทันที — ล้างสถานะผิดพลาด (_err) แล้วดึงข้อมูลล่าสุดจากเซิร์ฟเวอร์ + ส่งรายการที่แก้ในเครื่องขึ้นไป
+// ซ่อมข้อมูลสินค้าเก่าที่เคยถูกสร้างโดยไม่มีคอลัมน์ "features" (เช่น จากปุ่มนำเข้ายี่ห้อกรอบ/เลนส์ หรือฟอร์มเพิ่มกรอบแว่นรุ่นก่อนหน้านี้) —
+// เซิร์ฟเวอร์บังคับให้คอลัมน์นี้ห้ามเป็นค่าว่าง (not-null) รายการที่ไม่มีค่านี้เลยจึงส่งขึ้นเซิร์ฟเวอร์ไม่สำเร็จค้างอยู่ตลอด ทำให้บิลที่ขายสินค้านั้นไปด้วยก็ติดไปด้วย (เครื่องอื่นเลยไม่เห็น)
+function repairMissingFeatures() {
+  let n = 0;
+  db.products.forEach(p => { if (p.features == null) { p.features = []; p._dirty = true; p.updated_at = now(); n++; } });
+  return n;
+}
+// บังคับซิงก์ทันที — ซ่อมข้อมูลเก่าที่รู้สาเหตุแล้วว่าทำไมส่งไม่สำเร็จ + ล้างสถานะผิดพลาด (_err) ที่เหลือแล้วดึงข้อมูลล่าสุดจากเซิร์ฟเวอร์ + ส่งรายการที่แก้ในเครื่องขึ้นไป
 // ใช้ตอนแก้ไขข้อมูลหลังบ้านเสร็จแล้วอยากให้หน้าร้าน(เครื่องอื่น)เห็นล่าสุดทันที แทนที่จะรอซิงก์พื้นหลังทุก 60 วิ
 function forceSync() {
-  let n = 0;
+  let n = repairMissingFeatures();
   T.forEach(t => db[t].forEach(r => { if (r._err) { delete r._err; r._dirty = true; r.updated_at = now(); n++; } }));
   if (n) persist();
   if (!navigator.onLine || !sess) { toast('ออฟไลน์อยู่ ไม่สามารถซิงก์ได้ตอนนี้'); return; }
@@ -2817,7 +2824,7 @@ function importFrameBrands() {
   const existing = new Set(live('products').filter(p => p.product_type === 'frame').map(p => p.product_name));
   const toAdd = FRAME_BRAND_CATALOG.filter(([name]) => !existing.has(name));
   toAdd.forEach(([product_name, retail_price_thb]) => {
-    save('products', { id: uid(), product_type: 'frame', product_name, brand: product_name, retail_price_thb, cost_thb: null, stock_qty: null, sku: null, active: true, lens_spec: {}, deleted_at: null });
+    save('products', { id: uid(), product_type: 'frame', product_name, brand: product_name, retail_price_thb, cost_thb: null, stock_qty: null, sku: null, features: [], active: true, lens_spec: {}, deleted_at: null });
   });
   persist();
   return toAdd.length;
@@ -2827,7 +2834,7 @@ function importLensOtherBrands() {
   const existing = new Set(live('products').filter(p => p.product_type === 'lens').map(p => p.product_name));
   const toAdd = LENS_OTHER_BRAND_CATALOG.filter(([name]) => !existing.has(name));
   toAdd.forEach(([product_name, retail_price_thb]) => {
-    save('products', { id: uid(), product_type: 'lens', product_name, brand: product_name, retail_price_thb, cost_thb: null, stock_qty: null, sku: null, active: true, lens_spec: {}, deleted_at: null });
+    save('products', { id: uid(), product_type: 'lens', product_name, brand: product_name, retail_price_thb, cost_thb: null, stock_qty: null, sku: null, features: [], active: true, lens_spec: {}, deleted_at: null });
   });
   persist();
   return toAdd.length;
@@ -3119,7 +3126,7 @@ document.addEventListener('click', e => {
   else if (a === 'impother') {
     const existing = new Set(live('products').map(p => p.product_name));
     const toAdd = OTHER_ITEMS.filter(n => !existing.has(n));
-    toAdd.forEach(product_name => save('products', { id: uid(), product_type: 'other', product_name, retail_price_thb: 0, active: true, deleted_at: null }));
+    toAdd.forEach(product_name => save('products', { id: uid(), product_type: 'other', product_name, retail_price_thb: 0, features: [], active: true, deleted_at: null }));
     commit(); toast(`นำเข้าแล้ว ${toAdd.length} รายการ · อย่าลืมใส่ราคาขายให้ครบ`);
   }
   else if (a === 'impframebrands') {
@@ -3497,7 +3504,7 @@ document.addEventListener('submit', async e => {
       closeDlg(); commit(); toast('บันทึกสินค้าแล้ว');
     } else if (k === 'frame') {
       const o = id ? find('products', id) : {};
-      save('products', { ...o, id: id || uid(), product_type: 'frame', product_name: d.product_name.trim(), brand: (d.brand || '').trim() || null, retail_price_thb: Math.round(+d.retail_price_thb) || 0, cost_thb: mgr() ? num(d.cost_thb) : (o.cost_thb ?? null), active: o.active === false ? false : true, lens_spec: { ...(o.lens_spec || {}), material: (d.material || '').trim() || null, manufacturer: (d.manufacturer || '').trim() || null, frame_type: d.frame_type || null, purchased_at: d.purchased_at || null }, deleted_at: null });
+      save('products', { ...o, id: id || uid(), product_type: 'frame', product_name: d.product_name.trim(), brand: (d.brand || '').trim() || null, retail_price_thb: Math.round(+d.retail_price_thb) || 0, cost_thb: mgr() ? num(d.cost_thb) : (o.cost_thb ?? null), features: o.features || [], active: o.active === false ? false : true, lens_spec: { ...(o.lens_spec || {}), material: (d.material || '').trim() || null, manufacturer: (d.manufacturer || '').trim() || null, frame_type: d.frame_type || null, purchased_at: d.purchased_at || null }, deleted_at: null });
       closeDlg(); commit(); toast('บันทึกกรอบแว่นแล้ว');
     } else if (k === 'quote') {
       const q0 = find('quotes', id);
@@ -3651,5 +3658,6 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) naviga
 dedupeHoyaProducts(new Set(HOYA_LENSES.map(o => o.product_name)));
 dedupeApolloProducts(new Set(APOLLO_LENSES.map(o => o.product_name)));
 if (!sess) { syncHoyaCatalog(); syncApolloCatalog(); } // เครื่องที่ยังไม่ได้ล็อกอิน/ซิงก์คลาวด์ — ซิงก์ HOYA/Apollo จากในเครื่องได้เลยตอนเปิดแอป
+repairMissingFeatures(); // ซ่อมสินค้าเก่าที่ขาดคอลัมน์ features (สาเหตุที่ทำให้บางบิลไม่ขึ้นซิงก์) ทันทีทุกครั้งที่เปิดแอป ไม่ต้องรอกดปุ่ม
 persist(); render(); sync();
 })();
