@@ -96,9 +96,21 @@ function setStatus() {
   const el = $('#sync'); if (!el) return; const c = cfg();
   const s = !navigator.onLine ? ['off', 'ออฟไลน์ · บันทึกในเครื่อง'] : !sess ? ['off', 'ยังไม่ได้ล็อกอิน · บันทึกในเครื่อง'] : !c.url || !c.key ? ['off', 'ยังไม่ตั้งค่า Supabase'] : !shop ? ['off', 'ยังไม่มีร้าน'] : ['ok', status || 'เชื่อมต่อแล้ว'];
   const p = pendingCount(), e = errCount(), canSync = navigator.onLine && sess;
-  el.className = 'sync ' + s[0]; el.innerHTML = `<i></i><span>${esc(s[1])}${p ? ` · รอซิงก์ ${p}` : ''}${e ? ` · ผิดพลาด ${e}` : ''}${canSync ? ' · แตะเพื่อซิงก์ล่าสุด' : ''}</span>`;
+  el.className = 'sync ' + s[0];
+  el.innerHTML = `<i></i><span>${esc(s[1])}${p ? ` · รอซิงก์ ${p}` : ''}${e ? ` · ผิดพลาด ${e}` : ''}${canSync ? ' · แตะเพื่อซิงก์ล่าสุด' : ''}</span>${e ? ` <button type="button" data-act="syncerrdetail" style="all:unset;cursor:pointer;text-decoration:underline;color:inherit;margin-left:2px">ดูรายละเอียด</button>` : ''}`;
   el.style.cursor = canSync ? 'pointer' : '';
-  el.onclick = canSync ? forceSync : null;
+  // กันไม่ให้กดปุ่ม "ดูรายละเอียด" แล้วไปเรียก forceSync ซ้อนทับ (ปุ่มอยู่ในกล่องเดียวกันที่กดได้ทั้งกล่อง)
+  el.onclick = canSync ? (ev => { if (ev.target.closest('[data-act="syncerrdetail"]')) return; forceSync(); }) : null;
+}
+// รายละเอียดรายการที่ซิงก์ขึ้นเซิร์ฟเวอร์ไม่สำเร็จ (ข้อความ error จริงจากเซิร์ฟเวอร์) — ไว้ส่งให้ผู้พัฒนาระบบตรวจสอบเวลาจำนวน "ผิดพลาด" ไม่ลดลงแม้กดซิงก์ใหม่แล้ว
+function syncErrDetailView() {
+  const rows = [];
+  T.forEach(t => db[t].forEach(r => { if (r._err) rows.push({ t, id: r.id, err: r._err }); }));
+  return `<style>#dlg{width:min(680px,95vw)!important;max-width:95vw!important}</style>
+  <h2>รายการที่ซิงก์ไม่สำเร็จ (${rows.length} รายการ)</h2>
+  <p class="tag">ข้อมูลยังปลอดภัยอยู่ในเครื่องนี้ครบ แต่ยังไม่ขึ้นเซิร์ฟเวอร์ (เครื่องอื่นจะยังไม่เห็น) — คัดลอกข้อความด้านล่างส่งให้ผู้พัฒนาระบบตรวจสอบได้เลย</p>
+  <textarea readonly rows="14" style="font-size:11px;font-family:monospace;white-space:pre">${esc(rows.map(r => `[${r.t}] id=${r.id}\n  ${r.err}`).join('\n\n') || '(ไม่มี)')}</textarea>
+  <div class="foot"><button type="button" class="btn line" data-act="close">ปิด</button><button type="button" class="btn" data-act="syncnow">ลองซิงก์ใหม่</button></div>`;
 }
 // ดึงข้อมูลใหม่จากเซิร์ฟเวอร์ก่อน (แก้ล่าสุดชนะ) แล้วจึงส่งรายการที่แก้ในเครื่องขึ้นไป
 async function sync() {
@@ -3176,6 +3188,7 @@ document.addEventListener('click', e => {
   else if (a === 'sellerreport') dialog(sellerReportHTML());
   else if (a === 'integrity') dialog(dataIntegrityReport());
   else if (a === 'saledebuglog') dialog(saleDebugLogView());
+  else if (a === 'syncerrdetail') dialog(syncErrDetailView());
   else if (a === 'custview') { S.custView = id; render(); }
   else if (a === 'splashgo') { S.activeSeller = null; S.mode = 'hub'; render(); }
   else if (a === 'gomode') { if (id === 'kiosk') kioskReset(); S.mode = id; render(); }
