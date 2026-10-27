@@ -86,14 +86,19 @@ const errCount = () => T.reduce((n, t) => n + db[t].filter(r => r._err).length, 
 // เซิร์ฟเวอร์บังคับให้คอลัมน์นี้ห้ามเป็นค่าว่าง (not-null) รายการที่ไม่มีค่านี้เลยจึงส่งขึ้นเซิร์ฟเวอร์ไม่สำเร็จค้างอยู่ตลอด ทำให้บิลที่ขายสินค้านั้นไปด้วยก็ติดไปด้วย (เครื่องอื่นเลยไม่เห็น)
 function repairMissingFeatures() {
   let n = 0;
-  db.products.forEach(p => { if (p.features == null) { p.features = []; p._dirty = true; p.updated_at = now(); n++; } });
+  db.products.forEach(p => { if (p.features == null) { p.features = []; p._dirty = true; p.updated_at = now(); delete p._err; n++; } });
+  return n;
+}
+// ล้างสถานะผิดพลาด (_err) ที่ค้างอยู่ทั้งหมด (รวมรายการที่ติดพ่วงมาจากของที่ซ่อมแล้ว เช่น รายการขายที่อ้างถึงสินค้าที่เพิ่งซ่อม) แล้วทำเครื่องหมายให้ลองส่งใหม่
+function retryAllErrored() {
+  let n = 0;
+  T.forEach(t => db[t].forEach(r => { if (r._err) { delete r._err; r._dirty = true; r.updated_at = now(); n++; } }));
   return n;
 }
 // บังคับซิงก์ทันที — ซ่อมข้อมูลเก่าที่รู้สาเหตุแล้วว่าทำไมส่งไม่สำเร็จ + ล้างสถานะผิดพลาด (_err) ที่เหลือแล้วดึงข้อมูลล่าสุดจากเซิร์ฟเวอร์ + ส่งรายการที่แก้ในเครื่องขึ้นไป
 // ใช้ตอนแก้ไขข้อมูลหลังบ้านเสร็จแล้วอยากให้หน้าร้าน(เครื่องอื่น)เห็นล่าสุดทันที แทนที่จะรอซิงก์พื้นหลังทุก 60 วิ
 function forceSync() {
-  let n = repairMissingFeatures();
-  T.forEach(t => db[t].forEach(r => { if (r._err) { delete r._err; r._dirty = true; r.updated_at = now(); n++; } }));
+  const n = repairMissingFeatures() + retryAllErrored();
   if (n) persist();
   if (!navigator.onLine || !sess) { toast('ออฟไลน์อยู่ ไม่สามารถซิงก์ได้ตอนนี้'); return; }
   toast('กำลังซิงก์ข้อมูลล่าสุด…'); sync();
@@ -3188,7 +3193,6 @@ document.addEventListener('click', e => {
     setTimeout(() => window.print(), 30);
   }
   else if (a === 'close') closeDlg();
-  else if (a === 'syncnow') sync();
   else if (a === 'logout') { if (!pendingCount() || confirm('ยังมีข้อมูลที่ไม่ได้ซิงก์ ออกจากระบบต่อหรือไม่? (ข้อมูลยังอยู่ในเครื่อง)')) { sess = null; ls.set('sess', null); S.staff = null; render(); } }
   else if (a === 'rmstaff') { if (confirm('ถอดพนักงานคนนี้ออกจากร้าน?')) api(`/rest/v1/shop_members?shop_id=eq.${shop.id}&user_id=eq.${id}`, { method: 'DELETE' }).then(loadStaff).catch(err => toast(errText(err))); }
   else if (a === 'delseller') { if (confirm('ลบชื่อพนักงานขายนี้?')) softDelete('sellers', id); }
@@ -3658,6 +3662,6 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) naviga
 dedupeHoyaProducts(new Set(HOYA_LENSES.map(o => o.product_name)));
 dedupeApolloProducts(new Set(APOLLO_LENSES.map(o => o.product_name)));
 if (!sess) { syncHoyaCatalog(); syncApolloCatalog(); } // เครื่องที่ยังไม่ได้ล็อกอิน/ซิงก์คลาวด์ — ซิงก์ HOYA/Apollo จากในเครื่องได้เลยตอนเปิดแอป
-repairMissingFeatures(); // ซ่อมสินค้าเก่าที่ขาดคอลัมน์ features (สาเหตุที่ทำให้บางบิลไม่ขึ้นซิงก์) ทันทีทุกครั้งที่เปิดแอป ไม่ต้องรอกดปุ่ม
+repairMissingFeatures(); retryAllErrored(); // ซ่อมสินค้าเก่าที่ขาดคอลัมน์ features + ลองส่งรายการที่เคยค้างผิดพลาดใหม่ทั้งหมด ทันทีทุกครั้งที่เปิดแอป ไม่ต้องรอกดปุ่ม
 persist(); render(); sync();
 })();
