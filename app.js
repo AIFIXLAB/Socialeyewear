@@ -3062,11 +3062,13 @@ document.addEventListener('click', e => {
   else if (a === 'additem') {
     if (!mgr()) return;
     const q = find('quotes', id); if (!q) return;
-    dialog(`<h2>เพิ่มรายการที่ตกหล่น</h2><p class="tag">ใช้สำหรับแก้ไขบิลเดิมที่มีรายการสินค้าตกหล่นไป (เช่น กรอบแว่นที่ไม่ได้ขึ้นมาในระบบ) — ระบบจะบวกยอดรายการนี้เข้าไปในยอดรวมของใบ ${esc(q.quote_number || '')} ให้อัตโนมัติ</p>
+    const frameNames = live('products').filter(p => p.product_type === 'frame').map(p => p.product_name);
+    dialog(`<h2>เพิ่มรายการที่ตกหล่น</h2><p class="tag">ใช้สำหรับแก้ไขบิลเดิมที่มีกรอบแว่นตกหล่นไป — เลือกจากรายการกรอบที่มีอยู่แล้วในหน้า "สินค้า" เพื่อให้ข้อมูลตรงกัน หรือพิมพ์ชื่อรุ่น/สีใหม่ที่ยังไม่มีในระบบ ระบบจะสร้างสินค้ากรอบรายการนั้นขึ้นในหน้า "สินค้า" ให้อัตโนมัติ แล้วบวกยอดเข้าไปในใบ ${esc(q.quote_number || '')} ให้ด้วย</p>
     <form data-form="additem" data-id="${id}">
-      ${fld('product_name', 'ชื่อสินค้า', '', 'text', 'required')}
-      <div class="two"><label>ประเภท<select name="product_type"><option value="frame">กรอบแว่น</option><option value="lens">เลนส์</option><option value="other">อื่นๆ</option></select></label>${fld('quantity', 'จำนวน', 1, 'number', 'min="1" required')}</div>
-      ${fld('unit_price_thb', 'ราคา/หน่วย (บาท)', '', 'number', 'min="0" step="1" required')}
+      <label>ชื่อกรอบแว่น<input name="product_name" list="additemframelist" required placeholder="เลือกจากรายการเดิม หรือพิมพ์รุ่น/สีใหม่"></label>
+      <datalist id="additemframelist">${frameNames.map(n => `<option value="${esc(n)}">`).join('')}</datalist>
+      <input type="hidden" name="product_type" value="frame">
+      <div class="two">${fld('quantity', 'จำนวน', 1, 'number', 'min="1" required')}${fld('unit_price_thb', 'ราคา/หน่วย (บาท)', '', 'number', 'min="0" step="1" required')}</div>
       <div class="foot"><button type="button" class="btn line" data-act="close">ยกเลิก</button><button class="btn" type="submit">เพิ่มรายการ</button></div>
     </form>`);
   }
@@ -3449,14 +3451,20 @@ document.addEventListener('submit', async e => {
     } else if (k === 'additem') {
       if (!mgr()) return;
       const q = find('quotes', id); if (!q) return;
-      const name = (d.product_name || '').trim(); if (!name) { toast('กรุณาใส่ชื่อสินค้า'); return; }
+      const name = (d.product_name || '').trim(); if (!name) { toast('กรุณาใส่ชื่อกรอบแว่น'); return; }
       const qty = Math.max(1, Math.round(+d.quantity || 1));
       const price = Math.max(0, Math.round(+d.unit_price_thb || 0));
       const lineTotal = qty * price;
-      save('quote_items', { id: uid(), quote_id: id, product_id: null, item_name_snapshot: name, product_type: d.product_type || 'other', quantity: qty, unit_price_thb: price, line_total_thb: lineTotal, meta: null, deleted_at: null });
+      // หาสินค้ากรอบที่ชื่อตรงกันในหน้า "สินค้า" ก่อน (ไม่สนตัวพิมพ์เล็ก/ใหญ่) ถ้าไม่เจอ ให้สร้างสินค้ากรอบใหม่ขึ้นในแคตตาล็อกให้เลย เพื่อให้รุ่น/สีที่เพิ่มไปโผล่ในหน้า "สินค้า" หมวดกรอบด้วย ไม่ใช่แค่เป็นบรรทัดลอยๆ ในบิลนี้
+      let prod = live('products').find(p => p.product_type === 'frame' && p.product_name.trim().toLowerCase() === name.toLowerCase());
+      if (!prod) {
+        prod = { id: uid(), product_type: 'frame', product_name: name, brand: null, sku: null, color: null, description: null, features: [], retail_price_thb: price, cost_thb: null, stock_qty: null, active: true, lens_spec: {}, deleted_at: null };
+        save('products', prod);
+      }
+      save('quote_items', { id: uid(), quote_id: id, product_id: prod.id, item_name_snapshot: name, product_type: 'frame', quantity: qty, unit_price_thb: price, line_total_thb: lineTotal, meta: null, deleted_at: null });
       const fixNote = `[แก้ไข ${day(now())}: เพิ่มรายการที่ตกหล่น — ${name} × ${qty} = ${baht(lineTotal)}]`;
       save('quotes', { ...q, subtotal_thb: (q.subtotal_thb || 0) + lineTotal, total_thb: (q.total_thb || 0) + lineTotal, notes: [q.notes, fixNote].filter(Boolean).join(' · ') });
-      commit(); quoteSheet(id); toast('เพิ่มรายการที่ตกหล่นแล้ว');
+      commit(); quoteSheet(id); toast('เพิ่มรายการที่ตกหล่นแล้ว — กรอบนี้จะอยู่ในหน้า "สินค้า" หมวดกรอบด้วย');
     } else if (k === 'auth') {
       await auth(e.submitter?.value === 'signup' ? 'signup' : 'login', d.email.trim(), d.password); toast('เข้าสู่ระบบแล้ว'); render(); await sync(); if (!shop) S.v = 'settings'; render(); loadStaff();
     } else if (k === 'shop') {
