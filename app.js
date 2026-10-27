@@ -10,6 +10,7 @@ const baht = n => '฿' + Number(n || 0).toLocaleString('th-TH');
 const num = v => (v === '' || v == null || isNaN(+v)) ? null : +v;
 const toast = m => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2800); };
 const errText = e => { const m = e?.message || String(e); try { return JSON.parse(m).message || m; } catch { return m; } };
+const APP_VERSION = 'v65'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
 
 /* ---------- โครงสร้างข้อมูล (ตรงกับ supabase/schema.sql) ---------- */
 const COLS = {
@@ -89,6 +90,14 @@ function repairMissingFeatures() {
   db.products.forEach(p => { if (p.features == null) { p.features = []; p._dirty = true; p.updated_at = now(); delete p._err; n++; } });
   return n;
 }
+// ซ่อม shop_id ที่ไม่ตรงกัน/ขาดหาย ในทุกตาราง — สาเหตุหนึ่งของข้อความ "สินค้าไม่อยู่ในร้านเดียวกัน" ตอนซิงก์รายการขายคือสินค้าที่อ้างถึงมี shop_id ไม่ตรงกับร้านปัจจุบัน
+// (เช่น สร้างไว้ตอนแอปยังโหลดข้อมูลร้านไม่เสร็จ) แก้ให้ตรงกับร้านที่ล็อกอินอยู่เสมอ เพราะแอปนี้ 1 บัญชีมีได้ร้านเดียว
+function repairShopId() {
+  if (!shop || !shop.id) return 0;
+  let n = 0;
+  T.forEach(t => db[t].forEach(r => { if (r.shop_id !== shop.id) { r.shop_id = shop.id; r._dirty = true; r.updated_at = now(); delete r._err; n++; } }));
+  return n;
+}
 // ล้างสถานะผิดพลาด (_err) ที่ค้างอยู่ทั้งหมด (รวมรายการที่ติดพ่วงมาจากของที่ซ่อมแล้ว เช่น รายการขายที่อ้างถึงสินค้าที่เพิ่งซ่อม) แล้วทำเครื่องหมายให้ลองส่งใหม่
 function retryAllErrored() {
   let n = 0;
@@ -98,7 +107,7 @@ function retryAllErrored() {
 // บังคับซิงก์ทันที — ซ่อมข้อมูลเก่าที่รู้สาเหตุแล้วว่าทำไมส่งไม่สำเร็จ + ล้างสถานะผิดพลาด (_err) ที่เหลือแล้วดึงข้อมูลล่าสุดจากเซิร์ฟเวอร์ + ส่งรายการที่แก้ในเครื่องขึ้นไป
 // ใช้ตอนแก้ไขข้อมูลหลังบ้านเสร็จแล้วอยากให้หน้าร้าน(เครื่องอื่น)เห็นล่าสุดทันที แทนที่จะรอซิงก์พื้นหลังทุก 60 วิ
 function forceSync() {
-  const n = repairMissingFeatures() + retryAllErrored();
+  const n = repairMissingFeatures() + repairShopId() + retryAllErrored();
   if (n) persist();
   if (!navigator.onLine || !sess) { toast('ออฟไลน์อยู่ ไม่สามารถซิงก์ได้ตอนนี้'); return; }
   toast('กำลังซิงก์ข้อมูลล่าสุด…'); sync();
@@ -109,7 +118,7 @@ function setStatus() {
   const s = !navigator.onLine ? ['off', 'ออฟไลน์ · บันทึกในเครื่อง'] : !sess ? ['off', 'ยังไม่ได้ล็อกอิน · บันทึกในเครื่อง'] : !c.url || !c.key ? ['off', 'ยังไม่ตั้งค่า Supabase'] : !shop ? ['off', 'ยังไม่มีร้าน'] : ['ok', status || 'เชื่อมต่อแล้ว'];
   const p = pendingCount(), e = errCount(), canSync = navigator.onLine && sess;
   el.className = 'sync ' + s[0];
-  el.innerHTML = `<i></i><span>${esc(s[1])}${p ? ` · รอซิงก์ ${p}` : ''}${e ? ` · ผิดพลาด ${e}` : ''}${canSync ? ' · แตะเพื่อซิงก์ล่าสุด' : ''}</span>${e ? ` <button type="button" data-act="syncerrdetail" style="all:unset;cursor:pointer;text-decoration:underline;color:inherit;margin-left:2px">ดูรายละเอียด</button>` : ''}`;
+  el.innerHTML = `<i></i><span>${esc(s[1])}${p ? ` · รอซิงก์ ${p}` : ''}${e ? ` · ผิดพลาด ${e}` : ''}${canSync ? ' · แตะเพื่อซิงก์ล่าสุด' : ''} · ${APP_VERSION}</span>${e ? ` <button type="button" data-act="syncerrdetail" style="all:unset;cursor:pointer;text-decoration:underline;color:inherit;margin-left:2px">ดูรายละเอียด</button>` : ''}`;
   el.style.cursor = canSync ? 'pointer' : '';
   // กันไม่ให้กดปุ่ม "ดูรายละเอียด" แล้วไปเรียก forceSync ซ้อนทับ (ปุ่มอยู่ในกล่องเดียวกันที่กดได้ทั้งกล่อง)
   el.onclick = canSync ? (ev => { if (ev.target.closest('[data-act="syncerrdetail"]')) return; forceSync(); }) : null;
@@ -117,11 +126,21 @@ function setStatus() {
 // รายละเอียดรายการที่ซิงก์ขึ้นเซิร์ฟเวอร์ไม่สำเร็จ (ข้อความ error จริงจากเซิร์ฟเวอร์) — ไว้ส่งให้ผู้พัฒนาระบบตรวจสอบเวลาจำนวน "ผิดพลาด" ไม่ลดลงแม้กดซิงก์ใหม่แล้ว
 function syncErrDetailView() {
   const rows = [];
-  T.forEach(t => db[t].forEach(r => { if (r._err) rows.push({ t, id: r.id, err: r._err }); }));
+  T.forEach(t => db[t].forEach(r => {
+    if (!r._err) return;
+    let extra = '';
+    if (t === 'quote_items') {
+      const p = r.product_id ? find('products', r.product_id) : null;
+      extra = !r.product_id ? ' (รายการนี้ไม่ได้ผูกกับสินค้าใดเลย)'
+        : !p ? ` (หาไม่เจอสินค้า product_id=${r.product_id} ในเครื่องนี้แล้ว — อาจถูกลบไปก่อนหน้านี้)`
+        : ` (สินค้า "${p.product_name}" shop_id=${p.shop_id || '(ไม่มี)'} ของบิลนี้ shop_id=${r.shop_id || '(ไม่มี)'}${p.features == null ? ' · features ยังว่าง' : ''})`;
+    }
+    rows.push({ t, id: r.id, name: r.item_name_snapshot || r.product_name || r.full_name || '', err: r._err + extra });
+  }));
   return `<style>#dlg{width:min(680px,95vw)!important;max-width:95vw!important}</style>
   <h2>รายการที่ซิงก์ไม่สำเร็จ (${rows.length} รายการ)</h2>
   <p class="tag">ข้อมูลยังปลอดภัยอยู่ในเครื่องนี้ครบ แต่ยังไม่ขึ้นเซิร์ฟเวอร์ (เครื่องอื่นจะยังไม่เห็น) — คัดลอกข้อความด้านล่างส่งให้ผู้พัฒนาระบบตรวจสอบได้เลย</p>
-  <textarea readonly rows="14" style="font-size:11px;font-family:monospace;white-space:pre">${esc(rows.map(r => `[${r.t}] id=${r.id}\n  ${r.err}`).join('\n\n') || '(ไม่มี)')}</textarea>
+  <textarea readonly rows="14" style="font-size:11px;font-family:monospace;white-space:pre">${esc(rows.map(r => `[${r.t}] id=${r.id}${r.name ? ' (' + r.name + ')' : ''}\n  ${r.err}`).join('\n\n') || '(ไม่มี)')}</textarea>
   <div class="foot"><button type="button" class="btn line" data-act="close">ปิด</button><button type="button" class="btn" data-act="syncnow">ลองซิงก์ใหม่</button></div>`;
 }
 // ดึงข้อมูลใหม่จากเซิร์ฟเวอร์ก่อน (แก้ล่าสุดชนะ) แล้วจึงส่งรายการที่แก้ในเครื่องขึ้นไป
@@ -3672,6 +3691,6 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) naviga
 dedupeHoyaProducts(new Set(HOYA_LENSES.map(o => o.product_name)));
 dedupeApolloProducts(new Set(APOLLO_LENSES.map(o => o.product_name)));
 if (!sess) { syncHoyaCatalog(); syncApolloCatalog(); } // เครื่องที่ยังไม่ได้ล็อกอิน/ซิงก์คลาวด์ — ซิงก์ HOYA/Apollo จากในเครื่องได้เลยตอนเปิดแอป
-repairMissingFeatures(); retryAllErrored(); // ซ่อมสินค้าเก่าที่ขาดคอลัมน์ features + ลองส่งรายการที่เคยค้างผิดพลาดใหม่ทั้งหมด ทันทีทุกครั้งที่เปิดแอป ไม่ต้องรอกดปุ่ม
+repairMissingFeatures(); repairShopId(); retryAllErrored(); // ซ่อมสินค้าเก่าที่ขาดคอลัมน์ features/shop_id ไม่ตรง + ลองส่งรายการที่เคยค้างผิดพลาดใหม่ทั้งหมด ทันทีทุกครั้งที่เปิดแอป ไม่ต้องรอกดปุ่ม
 persist(); render(); sync();
 })();
