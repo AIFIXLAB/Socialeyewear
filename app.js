@@ -2493,7 +2493,7 @@ function quoteSheet(id) {
   const lockPickup = payStatus === 'paid';
   dialog(`<style>#dlg{width:min(720px,96vw)!important;max-width:96vw!important}@media print{#dlg{width:100%!important;max-width:100%!important;margin:0!important;padding:14px!important}}</style>
   <div class="sheet"><h2>ใบเสนอราคา ${esc(q.quote_number || '')}</h2><div class="meta">${esc(shop?.name || 'Social Eyewear')} · ${day(q.created_at)} · ลูกค้า: ${esc(custName(q.customer_id))}${q.valid_until ? ` · ใช้ได้ถึง ${day(q.valid_until)}` : ''}${(q.meta && q.meta.pickupDate) ? ` · นัดรับ: ${day(q.meta.pickupDate)}` : ''}</div>
-  <table><tr><th>รายการ</th><th>จำนวน</th><th>ราคา/หน่วย</th><th style="text-align:right">รวม</th></tr>${items.map(i => `<tr><td>${esc(i.item_name_snapshot)}</td><td>${i.quantity}</td><td>${baht(i.unit_price_thb)}</td><td style="text-align:right">${baht(i.line_total_thb)}</td></tr>`).join('')}</table>
+  <table><tr><th>รายการ</th><th>จำนวน</th><th>ราคา/หน่วย</th><th style="text-align:right">รวม</th>${mgr() ? '<th class="noprint"></th>' : ''}</tr>${items.map(i => `<tr><td>${esc(i.item_name_snapshot)}</td><td>${i.quantity}</td><td>${baht(i.unit_price_thb)}</td><td style="text-align:right">${baht(i.line_total_thb)}</td>${mgr() ? `<td class="noprint act"><button type="button" class="btn line sm bad" data-act="delqitem" data-id="${i.id}" data-qid="${id}">ลบ</button></td>` : ''}</tr>`).join('')}</table>
   ${mgr() ? `<div class="noprint" style="margin:8px 0"><button type="button" class="btn line sm" data-act="additem" data-id="${id}">+ เพิ่มรายการที่ตกหล่น (แก้ไขข้อมูลเดิม)</button></div>` : ''}
   <div class="row"><span>รวม</span><span>${baht(q.subtotal_thb)}</span></div>${q.discount_thb ? `<div class="row"><span>ส่วนลด</span><span>-${baht(q.discount_thb)}</span></div>` : ''}
   <div class="row"><b>รวมสุทธิ</b><span class="total">${baht(q.total_thb)}</span></div>
@@ -3163,6 +3163,16 @@ document.addEventListener('click', e => {
       <div class="two">${fld('quantity', 'จำนวน', 1, 'number', 'min="1" required')}${fld('unit_price_thb', 'ราคา/หน่วย (บาท)', '', 'number', 'min="0" step="1" required')}</div>
       <div class="foot"><button type="button" class="btn line" data-act="close">ยกเลิก</button><button class="btn" type="submit">เพิ่มรายการ</button></div>
     </form>`);
+  }
+  else if (a === 'delqitem') {
+    if (!mgr()) return;
+    const qid = b.dataset.qid, item = find('quote_items', id); if (!item) return;
+    const q = find('quotes', qid); if (!q) return;
+    if (!confirm(`ลบรายการ "${item.item_name_snapshot}" × ${item.quantity} ออกจากบิลนี้?`)) return;
+    softDelete('quote_items', id);
+    const fixNote = `[แก้ไข ${day(now())}: ลบรายการซ้ำ/ผิดพลาด — ${item.item_name_snapshot} × ${item.quantity} = -${baht(item.line_total_thb)}]`;
+    save('quotes', { ...q, subtotal_thb: Math.max(0, (q.subtotal_thb || 0) - item.line_total_thb), total_thb: Math.max(0, (q.total_thb || 0) - item.line_total_thb), notes: [q.notes, fixNote].filter(Boolean).join(' · ') });
+    commit(); quoteSheet(qid); toast('ลบรายการแล้ว');
   }
   else if (a === 'delq') { if (confirm('ลบใบเสนอราคานี้?')) softDelete('quotes', id); }
   else if (a === 'csvcust') download('customers.csv', csv([['รหัส', 'ชื่อ', 'โทรศัพท์', 'งบ', 'ไลฟ์สไตล์', 'ยินยอม'], ...live('customer_profiles').map(c => [c.customer_code, c.full_name, c.phone, c.budget_thb, c.lifestyle, c.consent_recorded_at ? 'ใช่' : 'ไม่'])]));
