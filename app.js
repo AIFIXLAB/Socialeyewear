@@ -547,6 +547,31 @@ function quotePayStatus(q) {
   if (quoteBalance(q) <= 0.004) return 'paid';
   return 'partial';
 }
+// ตรวจความผิดปกติของบิล: หมายเหตุบอกว่ามีส่วนลดกรอบ/เลนส์ แต่ไม่มีรายการสินค้าประเภทนั้นอยู่ในบิลเลย — สัญญาณว่ารายการสินค้าตกหล่นไปจากการบันทึก/ซิงก์
+function quoteFlags(q, items) {
+  const notes = q.notes || '';
+  const m = /ส่วนลด\s*—\s*กรอบ:\s*(.+?)\s*\/\s*เลนส์:\s*([^·]+)/.exec(notes);
+  if (!m) return [];
+  const flags = [];
+  const frameDiscPresent = m[1].trim() && m[1].trim() !== '-';
+  const lensDiscPresent = m[2].trim() && m[2].trim() !== '-';
+  const hasFrame = items.some(i => i.product_type === 'frame');
+  const hasLens = items.some(i => i.product_type === 'lens');
+  if (frameDiscPresent && !hasFrame) flags.push('มีส่วนลดกรอบในหมายเหตุ แต่ไม่มีรายการกรอบแว่นในบิล');
+  if (lensDiscPresent && !hasLens) flags.push('มีส่วนลดเลนส์ในหมายเหตุ แต่ไม่มีรายการเลนส์ในบิล');
+  return flags;
+}
+function dataIntegrityReport() {
+  const rows = live('quotes').map(q => ({ q, items: live('quote_items').filter(i => i.quote_id === q.id) })).map(({ q, items }) => ({ q, flags: quoteFlags(q, items) })).filter(x => x.flags.length).sort((a, b) => b.q.created_at.localeCompare(a.q.created_at));
+  return `<style>#dlg{width:min(760px,95vw)!important;max-width:95vw!important}</style>
+  <h2>ตรวจสอบรายการผิดปกติ</h2>
+  <p class="tag">สแกนทุกใบเสนอราคาที่หมายเหตุมีการระบุส่วนลดกรอบ/เลนส์ แต่ไม่มีรายการสินค้าประเภทนั้นอยู่ในบิล (สัญญาณว่ารายการตกหล่นไปตอนบันทึก/ซิงก์) พบทั้งหมด ${rows.length} ใบ</p>
+  ${rows.length ? `<div style="display:flex;flex-direction:column;gap:10px;max-height:60vh;overflow:auto">${rows.map(({ q, flags }) => `<div class="panel" style="padding:12px 14px">
+    <div class="row" style="border:0;padding:0"><span><b>${esc(q.quote_number || 'รอออกเลข')}</b> <span class="tag">· ${day(q.created_at)} · ${esc(custName(q.customer_id))}</span></span><span style="display:flex;align-items:center;gap:8px"><b>${baht(q.total_thb)}</b><button type="button" class="btn line sm" data-act="viewq" data-id="${q.id}">เปิด/แก้ไข</button></span></div>
+    <div style="margin-top:6px">${flags.map(f => `<div class="tag" style="color:var(--bad,#a23b2a)">⚠ ${esc(f)}</div>`).join('')}</div>
+  </div>`).join('')}</div>` : '<p class="tag">ไม่พบความผิดปกติในรูปแบบนี้</p>'}
+  <div class="foot"><button class="btn line" type="button" data-act="close">ปิด</button></div>`;
+}
 // IMPORT-HELPERS-END
 let IMP = null;
 const TEMPLATE = [['รหัสลูกค้า', 'ชื่อ-นามสกุล', 'โทรศัพท์', 'งบประมาณ', 'ไลฟ์สไตล์', 'หมายเหตุ', 'วันที่ตรวจ', 'ขวา SPH', 'ขวา CYL', 'ขวา AXIS', 'ซ้าย SPH', 'ซ้าย CYL', 'ซ้าย AXIS', 'PD', 'ADD'], ['C0001', 'สมชาย ใจดี', '0812345678', '8000', 'ทำงานหน้าจอ', '', '2026-10-01', '-1.25', '-0.50', '90', '-1.00', '', '', '62', '']];
@@ -985,7 +1010,7 @@ const views = {
   },
   quotes() {
     const rows = live('quotes').sort((a, b) => b.created_at.localeCompare(a.created_at));
-    return `<div class="bar"><div><h1>ใบเสนอราคา</h1><p class="sub" style="margin:0">เปลี่ยนสถานะได้ทันที พิมพ์หรือบันทึกเป็น PDF ได้</p></div><button class="btn line" data-act="csvq">ส่งออก CSV</button></div>
+    return `<div class="bar"><div><h1>ใบเสนอราคา</h1><p class="sub" style="margin:0">เปลี่ยนสถานะได้ทันที พิมพ์หรือบันทึกเป็น PDF ได้</p></div><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn line" data-act="integrity">ตรวจสอบรายการผิดปกติ</button><button class="btn line" data-act="csvq">ส่งออก CSV</button></div></div>
     ${rows.length ? `<div class="panel wrap"><table><tr><th>เลขที่</th><th>วันที่</th><th>ลูกค้า</th><th>ยอดสุทธิ</th><th>สถานะ</th><th>การชำระเงิน</th><th></th></tr>${rows.map(q => { const payStatus = quotePayStatus(q), bal = quoteBalance(q); return `<tr><td>${esc(q.quote_number || 'รอออกเลข')}</td><td>${day(q.created_at)}</td><td>${esc(custName(q.customer_id))}</td><td>${baht(q.total_thb)}</td><td><select class="st-sel ${q.status}" data-bind="qstatus" data-id="${q.id}">${Object.entries(QST).map(([k, l]) => `<option value="${k}" ${q.status === k ? 'selected' : ''}>${l}</option>`).join('')}</select></td><td><span class="st ${payStatus}">${PAY_STATUS_LABEL[payStatus]}</span>${payStatus === 'partial' ? `<br><span class="tag">ค้าง ${baht(bal)}</span>` : ''}</td><td class="act"><button class="btn line sm" data-act="viewq" data-id="${q.id}">เปิด/พิมพ์</button>${bal > 0.004 ? ` <button class="btn line sm" data-act="openpay" data-id="${q.id}" data-kind="${payStatus === 'unpaid' ? 'deposit' : 'final'}">${payStatus === 'unpaid' ? 'รับมัดจำ' : 'รับชำระส่วนที่เหลือ'}</button>` : ''} <button class="btn line sm bad" data-act="delq" data-id="${q.id}">ลบ</button></td></tr>`; }).join('')}</table></div>` : empty('ยังไม่มีใบเสนอราคา ไปที่ Sales Studio เพื่อสร้างใบแรก', '<button class="btn" data-act="go" data-id="studio">ไปที่ Sales Studio</button>')}`;
   },
   insights() {
@@ -3072,6 +3097,7 @@ document.addEventListener('click', e => {
   else if (a === 'rmstaff') { if (confirm('ถอดพนักงานคนนี้ออกจากร้าน?')) api(`/rest/v1/shop_members?shop_id=eq.${shop.id}&user_id=eq.${id}`, { method: 'DELETE' }).then(loadStaff).catch(err => toast(errText(err))); }
   else if (a === 'delseller') { if (confirm('ลบชื่อพนักงานขายนี้?')) softDelete('sellers', id); }
   else if (a === 'sellerreport') dialog(sellerReportHTML());
+  else if (a === 'integrity') dialog(dataIntegrityReport());
   else if (a === 'custview') { S.custView = id; render(); }
   else if (a === 'splashgo') { S.activeSeller = null; S.mode = 'hub'; render(); }
   else if (a === 'gomode') { if (id === 'kiosk') kioskReset(); S.mode = id; render(); }
