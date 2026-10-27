@@ -10,7 +10,7 @@ const baht = n => '฿' + Number(n || 0).toLocaleString('th-TH');
 const num = v => (v === '' || v == null || isNaN(+v)) ? null : +v;
 const toast = m => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2800); };
 const errText = e => { const m = e?.message || String(e); try { return JSON.parse(m).message || m; } catch { return m; } };
-const APP_VERSION = 'v70'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
+const APP_VERSION = 'v71'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
 
 /* ---------- โครงสร้างข้อมูล (ตรงกับ supabase/schema.sql) ---------- */
 const COLS = {
@@ -255,9 +255,17 @@ async function sync() {
         // ทำดัชนี id -> ตำแหน่งในอาเรย์ไว้ล่วงหน้า (แทนการไล่หาทีละแถวด้วย findIndex ซึ่งยิ่งตารางมีข้อมูลเยอะยิ่งช้าแบบทวีคูณ —
         // เคยทำให้เครื่องรุ่นเก่าที่เพิ่งล็อกอินครั้งแรกและต้องดึงบิล/ใบเสนอราคาย้อนหลังหลายพันแถว หน้าจอค้างนานผิดปกติตอนประมวลผล)
         const idx = new Map(); db[t].forEach((r, i) => idx.set(r.id, i));
+        let pageLimit = 200; // ขนาดหน้าเริ่มต้น (ลดจาก 1000) — ลดภาระต่อคำสั่งค้นหาแต่ละครั้งที่ฐานข้อมูล กันโดน "statement timeout" ถ้าตารางนั้นมีข้อมูลหนัก/ค้นหาช้าผิดปกติ
         for (;;) {
           const filter = `or=(updated_at.gt.${encodeURIComponent(cur.ts)},and(updated_at.eq.${encodeURIComponent(cur.ts)},id.gt.${cur.id}))`;
-          const rows = await api(`/rest/v1/${t}?${filter}&order=updated_at.asc,id.asc&limit=1000`) || [];
+          let rows;
+          for (;;) { // ถ้าคำสั่งนี้ timeout ให้ลดขนาดหน้าลงแล้วลองใหม่ทันที (กันค้างถาวรถ้าฐานข้อมูลช้าผิดปกติเฉพาะบางตาราง แทนที่จะล้มทั้งตารางไปเลย)
+            try { rows = await api(`/rest/v1/${t}?${filter}&order=updated_at.asc,id.asc&limit=${pageLimit}`) || []; break; }
+            catch (e) {
+              if (pageLimit <= 20 || !/timeout/i.test(errText(e))) throw e;
+              pageLimit = Math.max(20, Math.floor(pageLimit / 4));
+            }
+          }
           for (const row of rows) {
             // กันข้อมูลรูปภาพเก่า (ถ้ามีติดมาจากเซิร์ฟเวอร์จากเวอร์ชันก่อนหน้า) ไม่ให้มาเปลืองพื้นที่เก็บข้อมูลในเครื่องซ้ำ — แอปดึงรูปสดจาก HOYA_LENSES/APOLLO_LENSES ในโค้ดอยู่แล้ว ไม่ต้องเก็บในฐานข้อมูล
             if (t === 'products' && row.lens_spec && (row.lens_spec.photos || row.lens_spec.photo_url)) {
@@ -269,7 +277,7 @@ async function sync() {
             }
           }
           if (rows.length) { const last = rows[rows.length - 1]; cur = { ts: last.updated_at, id: last.id }; }
-          if (rows.length < 1000) break;
+          if (rows.length < pageLimit) break;
         }
         pull[t] = cur;
         const dirty = db[t].filter(r => r._dirty && !r._err);
