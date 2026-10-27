@@ -992,8 +992,32 @@ const views = {
     const cnt = {}; live('quote_items').forEach(i => { const p = find('quotes', i.quote_id); if (p && !p.deleted_at) cnt[i.item_name_snapshot] = (cnt[i.item_name_snapshot] || 0) + i.quantity; });
     const top = Object.entries(cnt).sort((a, b) => b[1] - a[1]).slice(0, 5), max = top[0]?.[1] || 1;
     const low = live('products').filter(p => p.stock_qty != null && p.stock_qty <= 2 && p.active !== false);
+    const thisMonth = now().slice(0, 7);
+    const monthLabel = new Date().toLocaleDateString('th-TH', { month: 'long', year: 'numeric' });
+    const monthQuotes = won.filter(x => (x.created_at || '').slice(0, 7) === thisMonth);
+    const monthRev = monthQuotes.reduce((n, x) => n + x.total_thb, 0);
+    const monthItems = {};
+    live('quote_items').forEach(i => {
+      const p = find('quotes', i.quote_id);
+      if (p && !p.deleted_at && ['accepted', 'converted'].includes(p.status) && (p.created_at || '').slice(0, 7) === thisMonth) {
+        const key = i.item_name_snapshot;
+        if (!monthItems[key]) monthItems[key] = { qty: 0, total: 0 };
+        monthItems[key].qty += i.quantity;
+        monthItems[key].total += i.line_total_thb;
+      }
+    });
+    const monthRows = Object.entries(monthItems).sort((a, b) => b[1].total - a[1].total);
     return `<h1>ภาพรวม</h1><p class="sub">สรุปจากข้อมูลที่อยู่ในเครื่องนี้</p>
     <div class="grid stats"><div class="panel stat"><span class="tag">ยอดที่ลูกค้าตกลง</span><b>${baht(rev)}</b></div><div class="panel stat"><span class="tag">ใบเสนอราคา</span><b>${q.length}</b></div><div class="panel stat"><span class="tag">อัตราปิดการขาย</span><b>${q.length ? Math.round(won.length / q.length * 100) : 0}%</b></div><div class="panel stat"><span class="tag">ยอดเฉลี่ยต่อใบ</span><b>${baht(won.length ? Math.round(rev / won.length) : 0)}</b></div></div>
+    <div class="panel" style="margin-top:16px">
+      <div class="bar" style="margin-bottom:12px"><h2 style="margin:0">สรุปยอดขายเดือนนี้ — ${esc(monthLabel)}</h2><button class="btn line sm" data-act="csvmonth">ส่งออก CSV</button></div>
+      <div class="grid stats" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
+        <div class="panel stat"><span class="tag">จำนวนบิลที่ขายได้</span><b>${monthQuotes.length}</b></div>
+        <div class="panel stat"><span class="tag">ยอดขายรวมเดือนนี้</span><b>${baht(monthRev)}</b></div>
+        <div class="panel stat"><span class="tag">ยอดเฉลี่ยต่อบิล</span><b>${baht(monthQuotes.length ? Math.round(monthRev / monthQuotes.length) : 0)}</b></div>
+      </div>
+      ${monthRows.length ? `<div class="wrap" style="margin-top:14px"><table><tr><th>สินค้า</th><th style="text-align:right">จำนวนที่ขาย</th><th style="text-align:right">ยอดขาย</th></tr>${monthRows.map(([n, v]) => `<tr><td>${esc(n)}</td><td style="text-align:right">${v.qty}</td><td style="text-align:right">${baht(v.total)}</td></tr>`).join('')}</table></div>` : '<p class="tag" style="margin-top:14px">ยังไม่มีรายการขายในเดือนนี้</p>'}
+    </div>
     <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr));margin-top:16px">
       <div class="panel"><h2>ยอดขายรายเดือน (6 เดือน)</h2>${chart}</div>
       <div class="panel"><h2>สินค้าที่ถูกเสนอบ่อยที่สุด</h2>${top.map(([n, c]) => `<div style="margin-bottom:12px"><div class="row" style="border:0;padding:0"><span>${esc(n)}</span><span>${c}</span></div><div class="meter"><i style="width:${c / max * 100}%"></i></div></div>`).join('') || '<p class="tag">ยังไม่มีข้อมูล</p>'}
@@ -1521,10 +1545,11 @@ function custView(id) {
     return `<tr><td>${day(r.exam_date || r.created_at)}</td><td class="tag">${esc(r.examiner || '-')}</td><td>${fmtP(r.od_sph)} / ${fmtP(r.od_cyl)} / ${r.od_axis ?? '-'}</td><td class="tag">${fmtP(r.od_add ?? r.add_power)} / ${r.od_pd ?? r.pd ?? '-'}</td><td>${fmtP(r.os_sph)} / ${fmtP(r.os_cyl)} / ${r.os_axis ?? '-'}</td><td class="tag">${fmtP(r.os_add ?? r.add_power)} / ${r.os_pd ?? r.pd ?? '-'}</td><td class="tag">${esc(extra || '-')}</td><td style="white-space:nowrap">${hasHealth ? `<button class="btn line sm" data-act="printrxhealth" data-id="${r.id}" data-cid="${id}">พิมพ์</button> ` : ''}${mgr() ? `<button class="btn line sm bad" data-act="delrx" data-id="${r.id}" data-cid="${id}">ลบ</button>` : ''}</td></tr>`;
   }).join('')}</table></div>` : '<p class="tag">ยังไม่มีค่าสายตา</p>'}
   <h3 style="margin-top:18px">ประวัติการซื้อ</h3>
+  <p class="tag" style="margin-top:-10px">กดแถวรายการเพื่อดูรายละเอียดคำสั่งซื้อย้อนหลัง</p>
   <div style="display:flex;flex-direction:column;gap:10px">${qs.length ? qs.slice().sort((a, b) => b.created_at.localeCompare(a.created_at)).map(q => {
     const items = live('quote_items').filter(i => i.quote_id === q.id);
     const itemRows = items.length ? `<div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--line,#e4ddd2);display:flex;flex-direction:column;gap:4px">${items.map(i => `<div class="row" style="border:0;padding:0"><span>${esc(i.item_name_snapshot)} <span class="tag">× ${i.quantity}</span></span><span class="tag">${baht(i.unit_price_thb)}</span></div>`).join('')}</div>` : '';
-    return `<div class="panel" style="padding:12px 14px">
+    return `<div class="panel" style="padding:12px 14px;cursor:pointer" data-act="viewq" data-id="${q.id}">
       <div class="row" style="border:0;padding:0"><span><b>${esc(q.quote_number || 'รอออกเลข')}</b> <span class="tag">· ${day(q.created_at)}</span></span><span style="display:flex;align-items:center;gap:8px"><b>${baht(q.total_thb)}</b> <span class="st ${q.status}">${QST[q.status]}</span>${mgr() ? `<button class="btn line sm bad" data-act="delquote" data-id="${q.id}" data-cid="${id}">ลบ</button>` : ''}</span></div>
       ${itemRows}
     </div>`;
@@ -1533,7 +1558,7 @@ function custView(id) {
       <div class="row" style="border:0;padding:0"><span><b>${x.kind === 'claim' ? 'เคลมประกัน' : 'ซ่อมแว่น'}</b> <span class="tag">· ${day(x.created_at)}${x.frame_model ? ' · ' + esc(x.frame_model) : ''}</span></span><span style="display:flex;align-items:center;gap:8px">${x.cost_thb != null ? baht(x.cost_thb) : '-'} <span class="st">${x.status === 'pending' ? 'รอดำเนินการ' : x.status}</span>${mgr() ? `<button class="btn line sm bad" data-act="delclaim" data-id="${x.id}" data-cid="${id}">ลบ</button>` : ''}</span></div>
       ${x.issue ? `<div class="tag" style="margin-top:6px">${esc(x.issue)}</div>` : ''}${x.repair_items ? `<div class="tag">${esc(x.repair_items)}</div>` : ''}${x.pickup_date ? `<div class="tag">นัดรับ: ${day(x.pickup_date)}</div>` : ''}${x.notes ? `<div class="tag">หมายเหตุ: ${esc(x.notes)}</div>` : ''}
     </div>`).join('')}</div>` : ''}
-  <div class="foot"><button class="btn line" data-act="close">ปิด</button><button class="btn line" data-act="editcust" data-id="${id}">แก้ไขข้อมูล</button><button class="btn" data-act="newrx" data-id="${id}">เพิ่มค่าสายตา</button></div>`);
+  <div class="foot"><button class="btn line" data-act="close">ปิด</button><button class="btn" data-act="editcust" data-id="${id}">แก้ไขข้อมูล</button></div>`);
 }
 const knownBrands = type => { const used = live('products').filter(p => !type || p.product_type === type).map(p => p.brand).filter(Boolean); const base = type === 'frame' ? LOOKUPS.frameBrands : type === 'lens' ? [...LOOKUPS.lensBrands, ...LOOKUPS.contactBrands] : [...LOOKUPS.frameBrands, ...LOOKUPS.lensBrands, ...LOOKUPS.contactBrands]; return [...new Set([...base, ...used])]; };
 const TAN_FORM_STYLE = `<style>
@@ -3000,6 +3025,21 @@ document.addEventListener('click', e => {
   else if (a === 'delq') { if (confirm('ลบใบเสนอราคานี้?')) softDelete('quotes', id); }
   else if (a === 'csvcust') download('customers.csv', csv([['รหัส', 'ชื่อ', 'โทรศัพท์', 'งบ', 'ไลฟ์สไตล์', 'ยินยอม'], ...live('customer_profiles').map(c => [c.customer_code, c.full_name, c.phone, c.budget_thb, c.lifestyle, c.consent_recorded_at ? 'ใช่' : 'ไม่'])]));
   else if (a === 'csvq') download('quotes.csv', csv([['เลขที่', 'วันที่', 'ลูกค้า', 'รวม', 'ส่วนลด', 'สุทธิ', 'สถานะ'], ...live('quotes').map(q => [q.quote_number, q.created_at.slice(0, 10), custName(q.customer_id), q.subtotal_thb, q.discount_thb, q.total_thb, QST[q.status]])]));
+  else if (a === 'csvmonth') {
+    const thisMonth = now().slice(0, 7);
+    const monthItems = {};
+    live('quote_items').forEach(i => {
+      const p = find('quotes', i.quote_id);
+      if (p && !p.deleted_at && ['accepted', 'converted'].includes(p.status) && (p.created_at || '').slice(0, 7) === thisMonth) {
+        const key = i.item_name_snapshot;
+        if (!monthItems[key]) monthItems[key] = { qty: 0, total: 0 };
+        monthItems[key].qty += i.quantity;
+        monthItems[key].total += i.line_total_thb;
+      }
+    });
+    const rows = Object.entries(monthItems).sort((a, b) => b[1].total - a[1].total);
+    download(`ยอดขาย-${thisMonth}.csv`, csv([['สินค้า', 'จำนวนที่ขาย', 'ยอดขาย'], ...rows.map(([n, v]) => [n, v.qty, v.total])]));
+  }
   else if (a === 'backup') download('smart-optic-backup-' + now().slice(0, 10) + '.json', JSON.stringify(db, null, 1), 'application/json');
   else if (a === 'print') window.print();
   else if (a === 'printrcpt') {
