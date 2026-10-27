@@ -108,41 +108,45 @@ async function sync() {
   try {
     if (!(await loadShop())) { status = ''; syncing = false; setStatus(); if (!$('#dlg').open) render(); return; }
     const pull = ls.get('pull', {});
+    let tableFailed = false;
     for (const t of T) {
-      // cursor = {ts, id}: many bulk-imported rows share the exact same updated_at,
-      // so paging by timestamp alone (updated_at > since) can skip rows beyond page 1.
-      // Tie-break with id so every row with an equal timestamp still gets fetched.
-      let raw = pull[t], cur = (raw && typeof raw === 'object') ? raw
-        : { ts: raw ? new Date(Date.parse(raw) - 10000).toISOString() : '1970-01-01T00:00:00Z', id: '00000000-0000-0000-0000-000000000000' };
-      for (;;) {
-        const filter = `or=(updated_at.gt.${encodeURIComponent(cur.ts)},and(updated_at.eq.${encodeURIComponent(cur.ts)},id.gt.${cur.id}))`;
-        const rows = await api(`/rest/v1/${t}?${filter}&order=updated_at.asc,id.asc&limit=1000`) || [];
-        for (const row of rows) {
-          // กันข้อมูลรูปภาพเก่า (ถ้ามีติดมาจากเซิร์ฟเวอร์จากเวอร์ชันก่อนหน้า) ไม่ให้มาเปลืองพื้นที่เก็บข้อมูลในเครื่องซ้ำ — แอปดึงรูปสดจาก HOYA_LENSES/APOLLO_LENSES ในโค้ดอยู่แล้ว ไม่ต้องเก็บในฐานข้อมูล
-          if (t === 'products' && row.lens_spec && (row.lens_spec.photos || row.lens_spec.photo_url)) {
-            const { photos, photo_url, ...rest } = row.lens_spec; row.lens_spec = rest;
+      // แยก try/catch รายตาราง — กันไม่ให้ตารางหนึ่งซิงก์พลาด (เช่น เน็ตสะดุดตอนดึงข้อมูลสินค้า) แล้วบล็อกตารางถัดไปในลำดับ (เช่น ใบเสนอราคา/รายการสินค้าในบิล) ไม่ให้ได้ซิงก์ไปด้วย — จุดนี้เคยทำให้รายการขายที่เพิ่งทำพลาดคิวซิงก์ไปทั้งที่ตารางอื่นซิงก์สำเร็จ
+      try {
+        // cursor = {ts, id}: many bulk-imported rows share the exact same updated_at,
+        // so paging by timestamp alone (updated_at > since) can skip rows beyond page 1.
+        // Tie-break with id so every row with an equal timestamp still gets fetched.
+        let raw = pull[t], cur = (raw && typeof raw === 'object') ? raw
+          : { ts: raw ? new Date(Date.parse(raw) - 10000).toISOString() : '1970-01-01T00:00:00Z', id: '00000000-0000-0000-0000-000000000000' };
+        for (;;) {
+          const filter = `or=(updated_at.gt.${encodeURIComponent(cur.ts)},and(updated_at.eq.${encodeURIComponent(cur.ts)},id.gt.${cur.id}))`;
+          const rows = await api(`/rest/v1/${t}?${filter}&order=updated_at.asc,id.asc&limit=1000`) || [];
+          for (const row of rows) {
+            // กันข้อมูลรูปภาพเก่า (ถ้ามีติดมาจากเซิร์ฟเวอร์จากเวอร์ชันก่อนหน้า) ไม่ให้มาเปลืองพื้นที่เก็บข้อมูลในเครื่องซ้ำ — แอปดึงรูปสดจาก HOYA_LENSES/APOLLO_LENSES ในโค้ดอยู่แล้ว ไม่ต้องเก็บในฐานข้อมูล
+            if (t === 'products' && row.lens_spec && (row.lens_spec.photos || row.lens_spec.photo_url)) {
+              const { photos, photo_url, ...rest } = row.lens_spec; row.lens_spec = rest;
+            }
+            const i = db[t].findIndex(r => r.id === row.id), l = db[t][i];
+            if (!(l && l._dirty && !l._err && l.updated_at > row.updated_at)) i < 0 ? db[t].push(row) : db[t][i] = row;
           }
-          const i = db[t].findIndex(r => r.id === row.id), l = db[t][i];
-          if (!(l && l._dirty && !l._err && l.updated_at > row.updated_at)) i < 0 ? db[t].push(row) : db[t][i] = row;
+          if (rows.length) { const last = rows[rows.length - 1]; cur = { ts: last.updated_at, id: last.id }; }
+          if (rows.length < 1000) break;
         }
-        if (rows.length) { const last = rows[rows.length - 1]; cur = { ts: last.updated_at, id: last.id }; }
-        if (rows.length < 1000) break;
-      }
-      pull[t] = cur;
-      const dirty = db[t].filter(r => r._dirty && !r._err);
-      const body = r => { const o = {}; COLS[t].forEach(k => o[k] = r[k] === undefined ? null : r[k]); o.shop_id = o.shop_id || shop.id; return o; };
-      const post = rows => api(`/rest/v1/${t}?on_conflict=id`, { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(rows.map(body)) });
-      const ok = r => { delete r._dirty; r.shop_id = r.shop_id || shop.id; };
-      for (let i = 0; i < dirty.length; i += 500) {
-        const part = dirty.slice(i, i + 500);
-        try { await post(part); part.forEach(ok); }
-        catch { for (const r of part) { try { await post([r]); ok(r); } catch (e) { r._err = errText(e); } } }
-      }
+        pull[t] = cur;
+        const dirty = db[t].filter(r => r._dirty && !r._err);
+        const body = r => { const o = {}; COLS[t].forEach(k => o[k] = r[k] === undefined ? null : r[k]); o.shop_id = o.shop_id || shop.id; return o; };
+        const post = rows => api(`/rest/v1/${t}?on_conflict=id`, { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(rows.map(body)) });
+        const ok = r => { delete r._dirty; r.shop_id = r.shop_id || shop.id; };
+        for (let i = 0; i < dirty.length; i += 500) {
+          const part = dirty.slice(i, i + 500);
+          try { await post(part); part.forEach(ok); }
+          catch { for (const r of part) { try { await post([r]); ok(r); } catch (e) { r._err = errText(e); } } }
+        }
+      } catch (e) { tableFailed = true; console.error(`sync table ${t} failed`, e); }
     }
     ls.set('pull', pull); persist();
     syncHoyaCatalog(); // ซิงก์แคตตาล็อก HOYA อัตโนมัติหลังดึงข้อมูลล่าสุดจากเซิร์ฟเวอร์แล้ว (กันรายการซ้ำ) — ไม่ต้องกดปุ่มเอง
     syncApolloCatalog(); // ซิงก์แคตตาล็อก Apollo แบบเดียวกัน
-    status = errCount() ? 'บางรายการซิงก์ไม่สำเร็จ' : 'ซิงก์แล้ว ' + new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
+    status = errCount() ? 'บางรายการซิงก์ไม่สำเร็จ' : tableFailed ? 'ซิงก์บางส่วนไม่สำเร็จ จะลองใหม่อัตโนมัติ' : 'ซิงก์แล้ว ' + new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
   } catch (e) { status = 'ซิงก์ไม่สำเร็จ จะลองใหม่อัตโนมัติ'; console.error(e); }
   syncing = false; setStatus(); if (!$('#dlg').open) render();
 }
@@ -2374,6 +2378,7 @@ function quoteSheet(id) {
   dialog(`<style>#dlg{width:min(720px,96vw)!important;max-width:96vw!important}@media print{#dlg{width:100%!important;max-width:100%!important;margin:0!important;padding:14px!important}}</style>
   <div class="sheet"><h2>ใบเสนอราคา ${esc(q.quote_number || '')}</h2><div class="meta">${esc(shop?.name || 'Social Eyewear')} · ${day(q.created_at)} · ลูกค้า: ${esc(custName(q.customer_id))}${q.valid_until ? ` · ใช้ได้ถึง ${day(q.valid_until)}` : ''}${(q.meta && q.meta.pickupDate) ? ` · นัดรับ: ${day(q.meta.pickupDate)}` : ''}</div>
   <table><tr><th>รายการ</th><th>จำนวน</th><th>ราคา/หน่วย</th><th style="text-align:right">รวม</th></tr>${items.map(i => `<tr><td>${esc(i.item_name_snapshot)}</td><td>${i.quantity}</td><td>${baht(i.unit_price_thb)}</td><td style="text-align:right">${baht(i.line_total_thb)}</td></tr>`).join('')}</table>
+  ${mgr() ? `<div class="noprint" style="margin:8px 0"><button type="button" class="btn line sm" data-act="additem" data-id="${id}">+ เพิ่มรายการที่ตกหล่น (แก้ไขข้อมูลเดิม)</button></div>` : ''}
   <div class="row"><span>รวม</span><span>${baht(q.subtotal_thb)}</span></div>${q.discount_thb ? `<div class="row"><span>ส่วนลด</span><span>-${baht(q.discount_thb)}</span></div>` : ''}
   <div class="row"><b>รวมสุทธิ</b><span class="total">${baht(q.total_thb)}</span></div>
   <div class="row"><span>ชำระแล้วสะสม</span><span>${baht(paid)}</span></div>
@@ -3022,6 +3027,17 @@ document.addEventListener('click', e => {
   else if (a === 'viewq') quoteSheet(id);
   else if (a === 'openpay') openPaymentForm(id, b.dataset.kind);
   else if (a === 'viewdeposit') openDepositReceipt(id, b.dataset.pid);
+  else if (a === 'additem') {
+    if (!mgr()) return;
+    const q = find('quotes', id); if (!q) return;
+    dialog(`<h2>เพิ่มรายการที่ตกหล่น</h2><p class="tag">ใช้สำหรับแก้ไขบิลเดิมที่มีรายการสินค้าตกหล่นไป (เช่น กรอบแว่นที่ไม่ได้ขึ้นมาในระบบ) — ระบบจะบวกยอดรายการนี้เข้าไปในยอดรวมของใบ ${esc(q.quote_number || '')} ให้อัตโนมัติ</p>
+    <form data-form="additem" data-id="${id}">
+      ${fld('product_name', 'ชื่อสินค้า', '', 'text', 'required')}
+      <div class="two"><label>ประเภท<select name="product_type"><option value="frame">กรอบแว่น</option><option value="lens">เลนส์</option><option value="other">อื่นๆ</option></select></label>${fld('quantity', 'จำนวน', 1, 'number', 'min="1" required')}</div>
+      ${fld('unit_price_thb', 'ราคา/หน่วย (บาท)', '', 'number', 'min="0" step="1" required')}
+      <div class="foot"><button type="button" class="btn line" data-act="close">ยกเลิก</button><button class="btn" type="submit">เพิ่มรายการ</button></div>
+    </form>`);
+  }
   else if (a === 'delq') { if (confirm('ลบใบเสนอราคานี้?')) softDelete('quotes', id); }
   else if (a === 'csvcust') download('customers.csv', csv([['รหัส', 'ชื่อ', 'โทรศัพท์', 'งบ', 'ไลฟ์สไตล์', 'ยินยอม'], ...live('customer_profiles').map(c => [c.customer_code, c.full_name, c.phone, c.budget_thb, c.lifestyle, c.consent_recorded_at ? 'ใช่' : 'ไม่'])]));
   else if (a === 'csvq') download('quotes.csv', csv([['เลขที่', 'วันที่', 'ลูกค้า', 'รวม', 'ส่วนลด', 'สุทธิ', 'สถานะ'], ...live('quotes').map(q => [q.quote_number, q.created_at.slice(0, 10), custName(q.customer_id), q.subtotal_thb, q.discount_thb, q.total_thb, QST[q.status]])]));
@@ -3397,6 +3413,17 @@ document.addEventListener('submit', async e => {
       } finally {
         PAY_BUSY = false;
       }
+    } else if (k === 'additem') {
+      if (!mgr()) return;
+      const q = find('quotes', id); if (!q) return;
+      const name = (d.product_name || '').trim(); if (!name) { toast('กรุณาใส่ชื่อสินค้า'); return; }
+      const qty = Math.max(1, Math.round(+d.quantity || 1));
+      const price = Math.max(0, Math.round(+d.unit_price_thb || 0));
+      const lineTotal = qty * price;
+      save('quote_items', { id: uid(), quote_id: id, product_id: null, item_name_snapshot: name, product_type: d.product_type || 'other', quantity: qty, unit_price_thb: price, line_total_thb: lineTotal, meta: null, deleted_at: null });
+      const fixNote = `[แก้ไข ${day(now())}: เพิ่มรายการที่ตกหล่น — ${name} × ${qty} = ${baht(lineTotal)}]`;
+      save('quotes', { ...q, subtotal_thb: (q.subtotal_thb || 0) + lineTotal, total_thb: (q.total_thb || 0) + lineTotal, notes: [q.notes, fixNote].filter(Boolean).join(' · ') });
+      commit(); quoteSheet(id); toast('เพิ่มรายการที่ตกหล่นแล้ว');
     } else if (k === 'auth') {
       await auth(e.submitter?.value === 'signup' ? 'signup' : 'login', d.email.trim(), d.password); toast('เข้าสู่ระบบแล้ว'); render(); await sync(); if (!shop) S.v = 'settings'; render(); loadStaff();
     } else if (k === 'shop') {
@@ -3453,6 +3480,10 @@ document.addEventListener('submit', async e => {
   } catch (err) { toast(errText(err)); }
 });
 window.addEventListener('online', () => { setStatus(); sync(); }); window.addEventListener('offline', setStatus);
+// เตือนก่อนปิด/รีเฟรชหน้าถ้ายังมีรายการที่บันทึกในเครื่องแล้วแต่ยังส่งขึ้นเซิร์ฟเวอร์ไม่สำเร็จ — กันข้อมูลที่เพิ่งขาย (เช่น รายการสินค้าในบิล) หายไปถ้าปิดหน้าเร็วเกินไปก่อนซิงก์เสร็จ
+window.addEventListener('beforeunload', e => {
+  if (pendingCount() > 0) { e.preventDefault(); e.returnValue = ''; return ''; }
+});
 setInterval(sync, 60000);
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
 // ล้างรายการ HOYA/Apollo ที่ซ้ำกัน (ชื่อเดียวกันแต่คนละ id) ทันทีทุกครั้งที่เปิดแอป — ไม่ต้องรอซิงก์เสร็จก่อน กันปัญหาเห็นสินค้าซ้ำเต็มหน้าจอ
