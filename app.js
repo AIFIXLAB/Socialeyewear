@@ -10,7 +10,7 @@ const baht = n => '฿' + Number(n || 0).toLocaleString('th-TH');
 const num = v => (v === '' || v == null || isNaN(+v)) ? null : +v;
 const toast = m => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2800); };
 const errText = e => { const m = e?.message || String(e); try { return JSON.parse(m).message || m; } catch { return m; } };
-const APP_VERSION = 'v68'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
+const APP_VERSION = 'v69'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
 
 /* ---------- โครงสร้างข้อมูล (ตรงกับ supabase/schema.sql) ---------- */
 const COLS = {
@@ -246,6 +246,9 @@ async function sync() {
         // Tie-break with id so every row with an equal timestamp still gets fetched.
         let raw = pull[t], cur = (raw && typeof raw === 'object') ? raw
           : { ts: raw ? new Date(Date.parse(raw) - 10000).toISOString() : '1970-01-01T00:00:00Z', id: '00000000-0000-0000-0000-000000000000' };
+        // ทำดัชนี id -> ตำแหน่งในอาเรย์ไว้ล่วงหน้า (แทนการไล่หาทีละแถวด้วย findIndex ซึ่งยิ่งตารางมีข้อมูลเยอะยิ่งช้าแบบทวีคูณ —
+        // เคยทำให้เครื่องรุ่นเก่าที่เพิ่งล็อกอินครั้งแรกและต้องดึงบิล/ใบเสนอราคาย้อนหลังหลายพันแถว หน้าจอค้างนานผิดปกติตอนประมวลผล)
+        const idx = new Map(); db[t].forEach((r, i) => idx.set(r.id, i));
         for (;;) {
           const filter = `or=(updated_at.gt.${encodeURIComponent(cur.ts)},and(updated_at.eq.${encodeURIComponent(cur.ts)},id.gt.${cur.id}))`;
           const rows = await api(`/rest/v1/${t}?${filter}&order=updated_at.asc,id.asc&limit=1000`) || [];
@@ -254,8 +257,10 @@ async function sync() {
             if (t === 'products' && row.lens_spec && (row.lens_spec.photos || row.lens_spec.photo_url)) {
               const { photos, photo_url, ...rest } = row.lens_spec; row.lens_spec = rest;
             }
-            const i = db[t].findIndex(r => r.id === row.id), l = db[t][i];
-            if (!(l && l._dirty && !l._err && l.updated_at > row.updated_at)) i < 0 ? db[t].push(row) : db[t][i] = row;
+            const i = idx.has(row.id) ? idx.get(row.id) : -1, l = i < 0 ? undefined : db[t][i];
+            if (!(l && l._dirty && !l._err && l.updated_at > row.updated_at)) {
+              if (i < 0) { idx.set(row.id, db[t].length); db[t].push(row); } else { db[t][i] = row; }
+            }
           }
           if (rows.length) { const last = rows[rows.length - 1]; cur = { ts: last.updated_at, id: last.id }; }
           if (rows.length < 1000) break;
