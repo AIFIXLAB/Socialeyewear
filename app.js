@@ -976,7 +976,7 @@ const views = {
       : `<button class="btn line bad" data-act="apolloimport">${apolloHave === 0 ? `นำเข้าเลนส์ Apollo ${APOLLO_LENSES.length} รายการ` : apolloHave > APOLLO_LENSES.length ? `ล้างเลนส์ Apollo ที่ซ้ำกัน — มีอยู่ ${apolloHave} ควรมี ${APOLLO_LENSES.length}` : `ซิงก์เลนส์ Apollo ใหม่ — ข้อมูลไม่ครบ (${apolloHave}/${APOLLO_LENSES.length})`}</button>`;
     const apolloRestoreBtn = apolloDeleted ? `<button class="btn line" data-act="apollorestore">กู้คืนสินค้า Apollo ที่ลบไป ${apolloDeleted} รายการ</button>` : '';
     const apolloCleanBtn = (apolloLegacy && apolloUpToDate) ? `<button class="btn line bad" data-act="apollocleanlegacy">ลบรายการ Apollo เก่าซ้ำซ้อน ${apolloLegacy} รายการ</button>` : '';
-    const rowHtml = p => `<tr><td>${esc(p.product_name)}<br><span class="tag">${esc([p.sku, p.brand].filter(Boolean).join(' · '))}</span></td><td>${TYPES[p.product_type]}</td><td>${priceLabel(p)}</td>${mgr() ? `<td>${p.cost_thb != null ? baht(p.cost_thb) : '-'}</td>` : ''}<td>${p.stock_qty == null ? '-' : `<span class="${p.stock_qty <= 2 ? 'warn' : ''}">${p.stock_qty}</span>`}</td><td>${p.active === false ? '<span class="st">ปิดขาย</span>' : '<span class="st accepted">ขายอยู่</span>'}</td><td class="act"><button class="btn line sm" data-act="editprod" data-id="${p.id}">แก้ไข</button>${mgr() ? ` <button class="btn line sm bad" data-act="delprod" data-id="${p.id}">ลบ</button>` : ''}</td></tr>`;
+    const rowHtml = p => `<tr><td>${esc(p.product_name)}<br><span class="tag">${esc([p.sku, p.brand].filter(Boolean).join(' · '))}</span></td><td>${TYPES[p.product_type]}</td><td>${priceLabel(p)}</td>${mgr() ? `<td>${p.cost_thb != null ? baht(p.cost_thb) : '-'}</td>` : ''}<td>${p.stock_qty == null ? '-' : `<span class="${p.stock_qty <= 2 ? 'warn' : ''}">${p.stock_qty}</span>`}</td><td>${p.active === false ? '<span class="st">ปิดขาย</span>' : '<span class="st accepted">ขายอยู่</span>'}</td><td class="act">${p.active !== false ? `<button class="btn line sm" data-act="addtocart" data-id="${p.id}">+ ใส่ตะกร้าขาย</button> ` : ''}<button class="btn line sm" data-act="editprod" data-id="${p.id}">แก้ไข</button>${mgr() ? ` <button class="btn line sm bad" data-act="delprod" data-id="${p.id}">ลบ</button>` : ''}</td></tr>`;
     const colCount = 6 + (mgr() ? 1 : 0);
     const brandNav = (S.ptype === 'lens' || S.ptype === 'frame');
     let brandBarHtml = '', bodyHtml;
@@ -2924,6 +2924,13 @@ document.addEventListener('click', e => {
     const p = find('products', id); if (!p) return;
     const variants = p.product_type === 'lens' ? lensVariants(p) : [{ price: p.retail_price_thb }];
     if (variants.length <= 1) cartAdd(p, variants[0]); else openVariantPicker(id);
+  }
+  else if (a === 'addtocart') {
+    // ใช้ตอนกดจากหน้า "สินค้า" (หลังบ้าน) — แค่เพิ่ม/แก้ไขสินค้าในแคตตาล็อกไม่ได้แปลว่าเข้าไปอยู่ในบิลขายโดยอัตโนมัติ ต้องกดปุ่มนี้เพื่อใส่ลงตะกร้าจริงๆ ก่อนไปออกบิลที่ Sales Studio
+    const p = find('products', id); if (!p) return;
+    const variants = p.product_type === 'lens' ? lensVariants(p) : [{ price: p.retail_price_thb }];
+    if (variants.length <= 1) { cartAdd(p, variants[0]); S.v = 'studio'; render(); toast(`ใส่ "${p.product_name}" ลงตะกร้าแล้ว — ไปที่ Sales Studio เพื่อออกบิล`); }
+    else openVariantPicker(id);
   }
   else if (a === 'addvariantconfirm') {
     const p = find('products', id); if (!p) return;
