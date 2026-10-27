@@ -10,7 +10,7 @@ const baht = n => '฿' + Number(n || 0).toLocaleString('th-TH');
 const num = v => (v === '' || v == null || isNaN(+v)) ? null : +v;
 const toast = m => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2800); };
 const errText = e => { const m = e?.message || String(e); try { return JSON.parse(m).message || m; } catch { return m; } };
-const APP_VERSION = 'v65'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
+const APP_VERSION = 'v66'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
 
 /* ---------- โครงสร้างข้อมูล (ตรงกับ supabase/schema.sql) ---------- */
 const COLS = {
@@ -98,6 +98,17 @@ function repairShopId() {
   T.forEach(t => db[t].forEach(r => { if (r.shop_id !== shop.id) { r.shop_id = shop.id; r._dirty = true; r.updated_at = now(); delete r._err; n++; } }));
   return n;
 }
+// ซ่อมรายการขาย (quote_items) ที่อ้างถึงสินค้าที่ไม่มีอยู่ในเครื่องนี้แล้ว (product_id หาไม่เจอ — มักเป็นสินค้าที่เคยติดปัญหา features/shop_id ค้างจนสุดท้ายถูกลบไปก่อนจะซ่อมสำเร็จ)
+// สร้างสินค้าทดแทนขึ้นใหม่ด้วย id เดิม จากชื่อ/ราคาที่บันทึกไว้ในบิลนั้น (item_name_snapshot) ให้รายการขายอ้างอิงได้ถูกต้องอีกครั้ง แล้วค่อยไปแก้รายละเอียดสินค้าเพิ่มทีหลังได้ที่หน้า "สินค้า"
+function repairOrphanProductRefs() {
+  let n = 0;
+  db.quote_items.forEach(i => {
+    if (!i._err || !i.product_id || find('products', i.product_id)) return;
+    save('products', { id: i.product_id, product_type: i.product_type || 'other', product_name: i.item_name_snapshot || 'สินค้าที่กู้คืน (โปรดตรวจสอบ)', brand: null, sku: null, color: null, description: 'กู้คืนอัตโนมัติจากรายการขายที่ซิงก์ไม่สำเร็จ — โปรดตรวจสอบราคา/รายละเอียดอีกครั้ง', features: [], retail_price_thb: i.unit_price_thb || 0, cost_thb: null, stock_qty: null, active: true, lens_spec: {}, deleted_at: null });
+    n++;
+  });
+  return n;
+}
 // ล้างสถานะผิดพลาด (_err) ที่ค้างอยู่ทั้งหมด (รวมรายการที่ติดพ่วงมาจากของที่ซ่อมแล้ว เช่น รายการขายที่อ้างถึงสินค้าที่เพิ่งซ่อม) แล้วทำเครื่องหมายให้ลองส่งใหม่
 function retryAllErrored() {
   let n = 0;
@@ -107,7 +118,7 @@ function retryAllErrored() {
 // บังคับซิงก์ทันที — ซ่อมข้อมูลเก่าที่รู้สาเหตุแล้วว่าทำไมส่งไม่สำเร็จ + ล้างสถานะผิดพลาด (_err) ที่เหลือแล้วดึงข้อมูลล่าสุดจากเซิร์ฟเวอร์ + ส่งรายการที่แก้ในเครื่องขึ้นไป
 // ใช้ตอนแก้ไขข้อมูลหลังบ้านเสร็จแล้วอยากให้หน้าร้าน(เครื่องอื่น)เห็นล่าสุดทันที แทนที่จะรอซิงก์พื้นหลังทุก 60 วิ
 function forceSync() {
-  const n = repairMissingFeatures() + repairShopId() + retryAllErrored();
+  const n = repairMissingFeatures() + repairShopId() + repairOrphanProductRefs() + retryAllErrored();
   if (n) persist();
   if (!navigator.onLine || !sess) { toast('ออฟไลน์อยู่ ไม่สามารถซิงก์ได้ตอนนี้'); return; }
   toast('กำลังซิงก์ข้อมูลล่าสุด…'); sync();
@@ -3691,6 +3702,6 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) naviga
 dedupeHoyaProducts(new Set(HOYA_LENSES.map(o => o.product_name)));
 dedupeApolloProducts(new Set(APOLLO_LENSES.map(o => o.product_name)));
 if (!sess) { syncHoyaCatalog(); syncApolloCatalog(); } // เครื่องที่ยังไม่ได้ล็อกอิน/ซิงก์คลาวด์ — ซิงก์ HOYA/Apollo จากในเครื่องได้เลยตอนเปิดแอป
-repairMissingFeatures(); repairShopId(); retryAllErrored(); // ซ่อมสินค้าเก่าที่ขาดคอลัมน์ features/shop_id ไม่ตรง + ลองส่งรายการที่เคยค้างผิดพลาดใหม่ทั้งหมด ทันทีทุกครั้งที่เปิดแอป ไม่ต้องรอกดปุ่ม
+repairMissingFeatures(); repairShopId(); repairOrphanProductRefs(); retryAllErrored(); // ซ่อมสินค้าเก่าที่ขาดคอลัมน์ features/shop_id ไม่ตรง/สินค้าที่หายไปจากรายการขาย + ลองส่งรายการที่เคยค้างผิดพลาดใหม่ทั้งหมด ทันทีทุกครั้งที่เปิดแอป ไม่ต้องรอกดปุ่ม
 persist(); render(); sync();
 })();
