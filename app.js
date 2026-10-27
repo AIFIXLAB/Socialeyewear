@@ -250,6 +250,29 @@ function examIntakeHasData(m) {
   if (!m) return false;
   return Object.keys(m).some(k => { const v = m[k]; if (Array.isArray(v)) return v.length > 0; if (v && typeof v === 'object') return Object.keys(v).length > 0; return v != null && v !== ''; });
 }
+// แปลงค่าสายตาที่บันทึกไว้แล้ว (prescriptions.meta) กลับเป็นร่างฟอร์ม (K.examDraft) เพื่อเปิดแก้ไขซ้ำได้
+function rxDraftFromMeta(m) {
+  m = m || {};
+  const dr = {};
+  const simple = ['exam_date', 'examiner', 'patient_code', 'cust_fullname', 'cust_age', 'cust_phone', 'comp_hours', 'tablet_hours', 'usage_other', 'last_doctor_visit', 'last_doctor_clinic', 'blur_distance', 'accident_detail', 'accident_clinic', 'accident_treat', 'last_va_check_where', 'last_va_check_by', 'last_va_check_other', 'cl_freq', 'cl_r', 'cl_l', 'cl_duration', 'old_glasses_r', 'old_glasses_l', 'old_glasses_duration', 'lens_name', 'lens_index', 'lens_color_change', 'lens_corridor', 'lens_pd_r', 'lens_pd_l', 'lens_problem', 'autoref_od', 'autoref_os', 'pdref_od', 'pdref_os', 'lens_marking', 'lens_brand_model', 'dominant_eye', 'dominant_hand', 'purpose_type', 'purpose_other', 'examiner_role', 'notes2'];
+  simple.forEach(k => { if (m[k] != null) dr[k] = m[k]; });
+  if (m.disease_other_text != null) dr.disease_other = m.disease_other_text;
+  (m.diseases || []).forEach(x => { if (x.on) dr['chk_' + x.key] = true; if (x.meds) dr['med_' + x.key] = x.meds; if (x.years != null) dr['yr_' + x.key] = x.years; });
+  (m.eye_disease_rows || []).forEach((row, i) => { const n = i + 1; if (row.name) dr['ed' + n + '_name'] = row.name; if (row.clinic) dr['ed' + n + '_clinic'] = row.clinic; if (row.treat) dr['ed' + n + '_treat'] = row.treat; });
+  const flattenGrid = (g, prefix) => { Object.entries(g || {}).forEach(([rk, row]) => { Object.entries(row || {}).forEach(([ck, v]) => { dr[`${prefix}_${rk}_${ck}`] = v; }); }); };
+  flattenGrid(m.va, 'va'); flattenGrid(m.sub, 'sub');
+  return dr;
+}
+// ดึงอาการ (CC) ที่ติ๊กไว้ของบันทึกเดิม — บันทึกใหม่จะมี meta.cc ตรงๆ, บันทึกเก่าให้พยายามอ่านจากหมายเหตุ (notes) แทน
+function ccFromRx(r) {
+  const m = r.meta || {};
+  if (Array.isArray(m.cc)) return { cc: m.cc.slice(), other: m.cc_other || '' };
+  const mt = /CC:\s*([^·]+)/.exec(r.notes || '');
+  if (!mt) return { cc: [], other: '' };
+  const parts = mt[1].trim().split('/');
+  const cc = (parts[0] || '').trim() ? parts[0].trim().split(',').map(s => s.trim()).filter(Boolean) : [];
+  return { cc, other: (parts[1] || '').trim() };
+}
 const DOM_EYE_LABEL = { od: 'ขวา', os: 'ซ้าย' }, DOM_HAND_LABEL = { right: 'ขวา', left: 'ซ้าย' }, PURPOSE_LABEL = { distance: 'มองไกล', near: 'มองใกล้', other: 'อื่นๆ' }, VABY_LABEL = { od: 'OD', optician: 'Optician', other: 'อื่น' };
 // หน้าพิมพ์ "ประวัติสุขภาพ/ผลตรวจสายตา" ใส่กระดาษ A4 — ใช้ได้ทั้งก่อนบันทึก (จากหน้าซักประวัติ) และหลังบันทึกแล้ว (จากประวัติลูกค้า)
 function examIntakePrintView(custId, ccText, ccOther, m) {
@@ -319,8 +342,25 @@ const NAV = [['customers', 'ลูกค้า'], ['products', 'สินค้�
 const S = { v: 'customers', need: 'general', cart: [], cust: '', disc: 0, notes: '', q: '', pq: '', ptype: 'all', pbrand: '', staff: null, mode: 'splash', custView: 'all', custFrom: '', custTo: '', catQ: '', catCompare: [], catDetail: null, catReturn: '', catDesign: '', catMain: '', activeSeller: null, varPick: null, knSel: [], knIdx: 0 };
 const freshLR = () => ({ purpose: [], other: '', vision: [], lenstype: [], brand: [], level: [], lensIndex: [], coating: [], photochromic: [], age: '', budget: '', occupation: '', notes: '' });
 const freshDisc = () => ({ type: 'amt', val: 0 });
-let K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, discFrame: freshDisc(), discLens: freshDisc(), lensFilterOn: true, examMeta: null, examDraft: {}, pickupDate: '' };
-const kioskReset = () => { K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, detailProdId: null, discFrame: freshDisc(), discLens: freshDisc(), lensFilterOn: true, examMeta: null, examDraft: {}, pickupDate: '' }; };
+let K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, discFrame: freshDisc(), discLens: freshDisc(), lensFilterOn: true, examMeta: null, examDraft: {}, pickupDate: '', editRxId: null, editRxFrom: null };
+const kioskReset = () => { K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, detailProdId: null, discFrame: freshDisc(), discLens: freshDisc(), lensFilterOn: true, examMeta: null, examDraft: {}, pickupDate: '', editRxId: null, editRxFrom: null }; };
+// เปิดฟอร์มแก้ไขผลตรวจสายตาที่บันทึกไว้แล้ว — ดึงข้อมูลเดิมทั้งหมดกลับเข้าฟอร์ม ไม่ว่าจะกดมาจากหน้าลูกค้า (หลังบ้าน) หรือหน้าประวัติการใช้บริการ (ฝั่งหน้าร้าน)
+function openEditExam(id, from) {
+  const r = find('prescriptions', id); if (!r) return;
+  const cco = ccFromRx(r);
+  K.editRxId = r.id; K.editRxFrom = from; K.custId = r.customer_id;
+  K.cc = cco.cc; K.ccOther = cco.other; K.ccNew = ''; K.examMeta = null;
+  K.examDraft = rxDraftFromMeta(r.meta || {}); K.hist = [];
+  closeDlg(); S.mode = 'kiosk'; K.step = 'examintake'; render();
+  toast('กำลังแก้ไขผลตรวจสายตา — แก้ไขช่องที่ต้องการแล้วกด "บันทึกการแก้ไข"');
+}
+// ออกจากโหมดแก้ไขผลตรวจสายตาโดยไม่บันทึก — กลับไปจุดที่กดเข้ามา (หน้าประวัติการใช้บริการ หรือหน้าลูกค้าในหลังบ้าน)
+function exitEditExam() {
+  const cid = K.custId, from = K.editRxFrom;
+  K.editRxId = null; K.editRxFrom = null; K.examDraft = {}; K.cc = []; K.ccOther = '';
+  if (from === 'kiosk') { K.step = 'history'; K.hist = []; render(); }
+  else { S.mode = ''; render(); custView(cid); }
+}
 
 /* ---------- จับคู่เลนส์กับความต้องการลูกค้า (หน้าบริการลูกค้า ขั้นตอนที่ 1-3) ---------- */
 // ขั้นตอนที่ 3 ใช้ชุดตัวเลือกเดียวกับ LENS_DESIGN ที่หลังบ้านเป๊ะ ๆ (ไม่แยกชุดคำศัพท์กันสองที่)
@@ -386,6 +426,23 @@ function cartCalc() {
   const sub = frameSub + lensSub + otherSub;
   const discTotal = discFrameAmt + discLensAmt;
   return { frameSub, lensSub, otherSub, discFrameAmt, discLensAmt, sub, discTotal, total: sub - discTotal };
+}
+// บันทึก "ดีบักการขาย" ไว้ทุกครั้งที่ปิดบิล — เก็บสภาพตะกร้าตอนกดบันทึกจริง ๆ และจำนวนรายการที่บันทึกลงเครื่องได้สำเร็จ
+// เผื่อปัญหารายการสินค้าหายเกิดขึ้นอีก จะมีหลักฐานชัดว่าตอนกดบันทึกตะกร้ามีอะไรอยู่ และบันทึกลงเครื่องได้ครบหรือไม่ (เก็บไว้ 40 บิลล่าสุด)
+function logSaleDebug(qid, cartBefore, savedCount) {
+  try {
+    const log = ls.get('saleDebugLog', []);
+    log.unshift({ at: now(), qid, cartCount: cartBefore.length, savedCount, cart: cartBefore.map(i => ({ type: i.type, name: i.name, price: i.price, qty: i.qty })) });
+    ls.set('saleDebugLog', log.slice(0, 40));
+  } catch {}
+}
+// ตรวจทันทีหลังบันทึกว่ารายการที่บันทึกลง quote_items ครบตามตะกร้าหรือไม่ — ถ้าไม่ครบ เตือนทันทีแบบที่พลาดไม่ได้ (alert บล็อกหน้าจอ) และเก็บบันทึกไว้
+function verifySaleItems(qid, cartBefore) {
+  const savedCount = db.quote_items.filter(i => i.quote_id === qid && !i.deleted_at).length;
+  logSaleDebug(qid, cartBefore, savedCount);
+  if (savedCount !== cartBefore.length) {
+    alert(`⚠ พบความผิดปกติ: ตะกร้ามี ${cartBefore.length} รายการ แต่บันทึกลงเครื่องได้ ${savedCount} รายการ สำหรับบิลนี้ (${qid})\nกรุณาแจ้งร้าน/ผู้พัฒนาระบบทันที พร้อมแจ้งเลขที่บิลนี้ อย่าปิดหรือรีเฟรชหน้าจอก่อนแจ้ง`);
+  }
 }
 const latestRx = cid => db.prescriptions.filter(r => !r.deleted_at && r.customer_id === cid).sort((a, b) => (b.exam_date || b.created_at).localeCompare(a.exam_date || a.created_at))[0];
 const rxText = r => r ? `ขวา ${fmtP(r.od_sph)}${r.od_cyl != null ? '/' + fmtP(r.od_cyl) + '×' + (r.od_axis ?? '-') : ''} · ซ้าย ${fmtP(r.os_sph)}${r.os_cyl != null ? '/' + fmtP(r.os_cyl) + '×' + (r.os_axis ?? '-') : ''}` : 'ยังไม่มีค่าสายตา';
@@ -570,7 +627,16 @@ function dataIntegrityReport() {
     <div class="row" style="border:0;padding:0"><span><b>${esc(q.quote_number || 'รอออกเลข')}</b> <span class="tag">· ${day(q.created_at)} · ${esc(custName(q.customer_id))}</span></span><span style="display:flex;align-items:center;gap:8px"><b>${baht(q.total_thb)}</b><button type="button" class="btn line sm" data-act="viewq" data-id="${q.id}">เปิด/แก้ไข</button></span></div>
     <div style="margin-top:6px">${flags.map(f => `<div class="tag" style="color:var(--bad,#a23b2a)">⚠ ${esc(f)}</div>`).join('')}</div>
   </div>`).join('')}</div>` : '<p class="tag">ไม่พบความผิดปกติในรูปแบบนี้</p>'}
-  <div class="foot"><button class="btn line" type="button" data-act="close">ปิด</button></div>`;
+  <div class="foot"><button type="button" class="btn line" data-act="saledebuglog">ดูบันทึกดีบักการขายล่าสุด</button><button class="btn line" type="button" data-act="close">ปิด</button></div>`;
+}
+// หน้าดูบันทึกดีบักการขาย (ไว้ตรวจสอบตอนปัญหารายการตกหล่นเกิดขึ้นอีก) — แสดงสภาพตะกร้าจริงตอนกดบันทึกของแต่ละบิลล่าสุด เทียบกับจำนวนที่บันทึกลงเครื่องได้จริง
+function saleDebugLogView() {
+  const log = ls.get('saleDebugLog', []);
+  return `<style>#dlg{width:min(720px,95vw)!important;max-width:95vw!important}</style>
+  <h2>บันทึกดีบักการขายล่าสุด</h2>
+  <p class="tag">เก็บไว้ ${log.length} บิลล่าสุด (เฉพาะที่ขายจากหน้าร้าน/มัดจำ) — ถ้าเจอบิลที่ "จำนวนที่บันทึกได้" น้อยกว่า "จำนวนในตะกร้า" ให้คัดลอกข้อความด้านล่างส่งให้ผู้พัฒนาระบบ</p>
+  <textarea readonly rows="14" style="font-size:11px;font-family:monospace;white-space:pre">${esc(JSON.stringify(log, null, 1))}</textarea>
+  <div class="foot"><button type="button" class="btn line" data-act="close">ปิด</button></div>`;
 }
 // IMPORT-HELPERS-END
 let IMP = null;
@@ -1571,7 +1637,7 @@ function custView(id) {
       (m.os_ph != null || m.os_seg != null || m.os_param) ? `ซ้าย: ${[m.os_ph != null ? 'PH ' + m.os_ph : '', m.os_seg != null ? 'สูงถ้วย ' + m.os_seg : '', m.os_param || ''].filter(Boolean).join(' · ')}` : ''
     ].filter(Boolean).join(' / ');
     const hasHealth = examIntakeHasData(m);
-    return `<tr><td>${day(r.exam_date || r.created_at)}</td><td class="tag">${esc(r.examiner || '-')}</td><td>${fmtP(r.od_sph)} / ${fmtP(r.od_cyl)} / ${r.od_axis ?? '-'}</td><td class="tag">${fmtP(r.od_add ?? r.add_power)} / ${r.od_pd ?? r.pd ?? '-'}</td><td>${fmtP(r.os_sph)} / ${fmtP(r.os_cyl)} / ${r.os_axis ?? '-'}</td><td class="tag">${fmtP(r.os_add ?? r.add_power)} / ${r.os_pd ?? r.pd ?? '-'}</td><td class="tag">${esc(extra || '-')}</td><td style="white-space:nowrap">${hasHealth ? `<button class="btn line sm" data-act="printrxhealth" data-id="${r.id}" data-cid="${id}">พิมพ์</button> ` : ''}${mgr() ? `<button class="btn line sm bad" data-act="delrx" data-id="${r.id}" data-cid="${id}">ลบ</button>` : ''}</td></tr>`;
+    return `<tr><td>${day(r.exam_date || r.created_at)}</td><td class="tag">${esc(r.examiner || '-')}</td><td>${fmtP(r.od_sph)} / ${fmtP(r.od_cyl)} / ${r.od_axis ?? '-'}</td><td class="tag">${fmtP(r.od_add ?? r.add_power)} / ${r.od_pd ?? r.pd ?? '-'}</td><td>${fmtP(r.os_sph)} / ${fmtP(r.os_cyl)} / ${r.os_axis ?? '-'}</td><td class="tag">${fmtP(r.os_add ?? r.add_power)} / ${r.os_pd ?? r.pd ?? '-'}</td><td class="tag">${esc(extra || '-')}</td><td style="white-space:nowrap">${hasHealth ? `<button class="btn line sm" data-act="editexam" data-id="${r.id}">แก้ไข</button> <button class="btn line sm" data-act="printrxhealth" data-id="${r.id}" data-cid="${id}">พิมพ์</button> ` : ''}${mgr() ? `<button class="btn line sm bad" data-act="delrx" data-id="${r.id}" data-cid="${id}">ลบ</button>` : ''}</td></tr>`;
   }).join('')}</table></div>` : '<p class="tag">ยังไม่มีค่าสายตา</p>'}
   <h3 style="margin-top:18px">ประวัติการซื้อ</h3>
   <p class="tag" style="margin-top:-10px">กดแถวรายการเพื่อดูรายละเอียดคำสั่งซื้อย้อนหลัง</p>
@@ -1955,7 +2021,8 @@ function kioskExamIntake() {
     ${rows.map(([rk, rl]) => `<tr><th style="text-align:left;white-space:nowrap;font-size:11.5px">${rl}</th>${cols.map(([ck]) => { const nm = `${prefix}_${rk}_${ck}`; return `<td style="padding:3px"><input name="${nm}" value="${esc(dr[nm] || '')}" style="width:${cellW}px;padding:5px 4px;font-size:11.5px;text-align:center"></td>`; }).join('')}</tr>`).join('')}
     </table></div>`;
   return `<div class="panel" style="padding:20px 22px;width:100%;box-sizing:border-box">
-    <h2 style="margin-top:0">ซักประวัติก่อนตรวจสายตา</h2>
+    <h2 style="margin-top:0">${K.editRxId ? 'แก้ไขผลตรวจสายตา' : 'ซักประวัติก่อนตรวจสายตา'}</h2>
+    ${K.editRxId ? '<p class="tag" style="margin-top:-8px;color:var(--bad,#a23b2a)">กำลังแก้ไขรายการที่บันทึกไว้แล้ว — แก้ไขเฉพาะช่องที่ต้องการแล้วกด "บันทึก" ด้านล่าง</p>' : ''}
     <form data-form="examintake">
     <div style="display:grid;grid-template-columns:1fr 1fr 2fr 1fr 1.3fr;gap:12px;margin-bottom:4px">
       ${uw('รหัสลูกค้า', 'patient_code', '', 'text', '', c && c.customer_code || '')}
@@ -2048,7 +2115,7 @@ function kioskExamIntake() {
       </div>
       <label style="margin-top:10px">หมายเหตุเพิ่มเติม${ta('notes2', 2)}</label>`)}
 
-      <div class="foot"><button type="button" class="btn line" data-act="kioskback">ย้อนกลับ</button><button type="button" class="btn line" data-act="printexam">พิมพ์แบบฟอร์ม</button><button class="btn" type="submit">บันทึกผลตรวจ</button></div>
+      <div class="foot"><button type="button" class="btn line" data-act="kioskback">ย้อนกลับ</button><button type="button" class="btn line" data-act="printexam">พิมพ์แบบฟอร์ม</button><button class="btn" type="submit">${K.editRxId ? 'บันทึกการแก้ไข' : 'บันทึกผลตรวจ'}</button></div>
     </form>
   </div>`;
 }
@@ -2966,6 +3033,7 @@ document.addEventListener('click', e => {
   else if (a === 'delclaim') { if (confirm('ลบรายการแจ้งซ่อม/เคลมนี้?')) { softDelete('claims', id); if (b.dataset.cid) custView(b.dataset.cid); else claimListView(); } }
   else if (a === 'delquote') { if (confirm('ลบประวัติการซื้อรายการนี้? (รวมรายการสินค้าในบิลนี้ด้วย)')) { softDelete('quotes', id); live('quote_items').filter(i => i.quote_id === id).forEach(i => softDelete('quote_items', i.id)); custView(b.dataset.cid); } }
   else if (a === 'printrxhealth') { const r = find('prescriptions', id); examIntakePrintView(b.dataset.cid, '', '', r.meta || {}); }
+  else if (a === 'editexam') openEditExam(id, 'custview');
   else if (a === 'newprod') prodForm(); else if (a === 'newframe') frameForm();
   else if (a === 'addhlt') { const draft = readProdDraft(b.closest('form')); draft.lens_spec.highlights.push({ title: '', desc: '' }); prodForm(draft); }
   else if (a === 'rmhlt') { const draft = readProdDraft(b.closest('form')); draft.lens_spec.highlights.splice(+b.dataset.idx, 1); if (!draft.lens_spec.highlights.length) draft.lens_spec.highlights.push({ title: '', desc: '' }); prodForm(draft); }
@@ -3107,11 +3175,15 @@ document.addEventListener('click', e => {
   else if (a === 'delseller') { if (confirm('ลบชื่อพนักงานขายนี้?')) softDelete('sellers', id); }
   else if (a === 'sellerreport') dialog(sellerReportHTML());
   else if (a === 'integrity') dialog(dataIntegrityReport());
+  else if (a === 'saledebuglog') dialog(saleDebugLogView());
   else if (a === 'custview') { S.custView = id; render(); }
   else if (a === 'splashgo') { S.activeSeller = null; S.mode = 'hub'; render(); }
   else if (a === 'gomode') { if (id === 'kiosk') kioskReset(); S.mode = id; render(); }
   else if (a === 'gokeynote') { S.mode = 'admin'; S.v = 'keynote'; render(); }
-  else if (a === 'kioskexit') { const viaPin = !!S.activeSeller; S.activeSeller = null; S.mode = viaPin ? 'splash' : 'hub'; render(); }
+  else if (a === 'kioskexit') {
+    if (K.editRxId) exitEditExam();
+    else { const viaPin = !!S.activeSeller; S.activeSeller = null; S.mode = viaPin ? 'splash' : 'hub'; render(); }
+  }
   else if (a === 'syncnow') forceSync();
   else if (a === 'opencatalog') { S.catReturn = id || ''; S.catDetail = null; S.mode = 'lenscat'; render(); }
   else if (a === 'closecatalog') { S.mode = S.catReturn || ''; S.catReturn = ''; render(); }
@@ -3120,6 +3192,7 @@ document.addEventListener('click', e => {
   else if (a === 'kioskback') {
     const prev = K.hist.pop();
     if (prev) { K.step = prev; if (prev === 'lookup') { K.custId = null; K.photo = null; } render(); }
+    else if (K.editRxId) exitEditExam();
     else { S.mode = 'hub'; render(); }
   }
   else if (a === 'kioskcat') { K.pcat = id; K.pq = ''; render(); }
@@ -3144,7 +3217,11 @@ document.addEventListener('click', e => {
   else if (a === 'histopen') {
     const kind = b.dataset.kind;
     if (kind === 'quote') quoteSheet(id);
-    else if (kind === 'rx') { const r = find('prescriptions', id); dialog(`<h2>ประวัติตรวจสายตา</h2><p class="tag">${day(r.exam_date || r.created_at)}${r.examiner ? ' · ผู้ตรวจ: ' + esc(r.examiner) : ''}</p><p>ขวา ${fmtP(r.od_sph)}/${fmtP(r.od_cyl)}×${r.od_axis ?? '-'} · ADD ${fmtP(r.od_add ?? r.add_power)} · PD ${r.od_pd ?? r.pd ?? '-'}<br>ซ้าย ${fmtP(r.os_sph)}/${fmtP(r.os_cyl)}×${r.os_axis ?? '-'} · ADD ${fmtP(r.os_add ?? r.add_power)} · PD ${r.os_pd ?? r.pd ?? '-'}</p>${r.notes ? `<p class="tag">${esc(r.notes)}</p>` : ''}<div class="foot"><button class="btn line" data-act="close">ปิด</button></div>`); }
+    else if (kind === 'rx') {
+      const r = find('prescriptions', id);
+      if (r && examIntakeHasData(r.meta)) openEditExam(id, 'kiosk');
+      else dialog(`<h2>ประวัติตรวจสายตา</h2><p class="tag">${day(r.exam_date || r.created_at)}${r.examiner ? ' · ผู้ตรวจ: ' + esc(r.examiner) : ''}</p><p>ขวา ${fmtP(r.od_sph)}/${fmtP(r.od_cyl)}×${r.od_axis ?? '-'} · ADD ${fmtP(r.od_add ?? r.add_power)} · PD ${r.od_pd ?? r.pd ?? '-'}<br>ซ้าย ${fmtP(r.os_sph)}/${fmtP(r.os_cyl)}×${r.os_axis ?? '-'} · ADD ${fmtP(r.os_add ?? r.add_power)} · PD ${r.os_pd ?? r.pd ?? '-'}</p>${r.notes ? `<p class="tag">${esc(r.notes)}</p>` : ''}<div class="foot"><button class="btn line" data-act="close">ปิด</button></div>`);
+    }
     else if (kind === 'claim') { const x = find('claims', id); dialog(`<h2>${x.kind === 'claim' ? 'เคลมประกัน' : 'ซ่อมแว่น'}</h2><p class="tag">${day(x.created_at)}${x.frame_model ? ' · ' + esc(x.frame_model) : ''}</p>${x.issue ? `<p>${esc(x.issue)}</p>` : ''}${x.repair_items ? `<p class="tag">${esc(x.repair_items)}</p>` : ''}${x.pickup_date ? `<p class="tag">นัดรับ: ${day(x.pickup_date)}</p>` : ''}${x.cost_thb != null ? `<p><b>${baht(x.cost_thb)}</b></p>` : ''}<div class="foot"><button class="btn line" data-act="close">ปิด</button></div>`); }
   }
   else if (a === 'cctoggle') { K.cc = K.cc.includes(id) ? K.cc.filter(x => x !== id) : [...K.cc, id]; render(); }
@@ -3166,7 +3243,9 @@ document.addEventListener('click', e => {
     const lrNote = lrSummary();
     const discNote = c.discTotal ? `ส่วนลด — กรอบ: ${c.discFrameAmt ? baht(c.discFrameAmt) : '-'} / เลนส์: ${c.discLensAmt ? baht(c.discLensAmt) : '-'}` : '';
     save('quotes', { id: qid, customer_id: S.cust || null, quote_number: nextReceiptNo(), status: 'converted', subtotal_thb: c.sub, discount_thb: c.discTotal, total_thb: c.total, notes: [lrNote ? `ความต้องการลูกค้า: ${lrNote}` : '', discNote].filter(Boolean).join(' · ') || null, valid_until: null, receipt_date: now().slice(0, 10), meta: { payment: [], signature: '', seller: S.activeSeller || '' }, deleted_at: null });
-    S.cart.forEach(i => save('quote_items', { id: uid(), quote_id: qid, product_id: i.productId || i.id, item_name_snapshot: i.name, product_type: i.type, quantity: i.qty, unit_price_thb: i.price, line_total_thb: i.price * i.qty, meta: cartItemMeta(i), deleted_at: null }));
+    const cartBefore = S.cart.slice();
+    cartBefore.forEach(i => save('quote_items', { id: uid(), quote_id: qid, product_id: i.productId || i.id, item_name_snapshot: i.name, product_type: i.type, quantity: i.qty, unit_price_thb: i.price, line_total_thb: i.price * i.qty, meta: cartItemMeta(i), deleted_at: null }));
+    verifySaleItems(qid, cartBefore);
     S.cart = []; K.step = 'done'; K.hist = []; K.lr = freshLR(); K.lastQuoteId = qid; K.discFrame = freshDisc(); K.discLens = freshDisc(); K.pickupDate = ''; commit(); render(); toast('บันทึกการสั่งซื้อแล้ว');
   }
   else if (a === 'kioskdeposit') {
@@ -3176,7 +3255,9 @@ document.addEventListener('click', e => {
     const lrNote = lrSummary();
     const discNote = c.discTotal ? `ส่วนลด — กรอบ: ${c.discFrameAmt ? baht(c.discFrameAmt) : '-'} / เลนส์: ${c.discLensAmt ? baht(c.discLensAmt) : '-'}` : '';
     save('quotes', { id: qid, customer_id: S.cust || null, quote_number: null, status: 'accepted', subtotal_thb: c.sub, discount_thb: c.discTotal, total_thb: c.total, notes: [lrNote ? `ความต้องการลูกค้า: ${lrNote}` : '', discNote].filter(Boolean).join(' · ') || null, valid_until: null, receipt_date: null, meta: { payment: [], signature: '', seller: S.activeSeller || '', pickupDate: K.pickupDate || null }, deleted_at: null });
-    S.cart.forEach(i => save('quote_items', { id: uid(), quote_id: qid, product_id: i.productId || i.id, item_name_snapshot: i.name, product_type: i.type, quantity: i.qty, unit_price_thb: i.price, line_total_thb: i.price * i.qty, meta: cartItemMeta(i), deleted_at: null }));
+    const cartBefore = S.cart.slice();
+    cartBefore.forEach(i => save('quote_items', { id: uid(), quote_id: qid, product_id: i.productId || i.id, item_name_snapshot: i.name, product_type: i.type, quantity: i.qty, unit_price_thb: i.price, line_total_thb: i.price * i.qty, meta: cartItemMeta(i), deleted_at: null }));
+    verifySaleItems(qid, cartBefore);
     S.cart = []; K.lr = freshLR(); K.discFrame = freshDisc(); K.discLens = freshDisc(); K.pickupDate = ''; K.lastQuoteId = qid; commit();
     openPaymentForm(qid, 'deposit');
   }
@@ -3499,17 +3580,25 @@ document.addEventListener('submit', async e => {
       const notes = [ccText && `CC: ${ccText}`, diseaseText && `โรคประจำตัว: ${diseaseText}`, health.disease_other_text && `อื่นๆ: ${health.disease_other_text}`].filter(Boolean).join(' · ');
       const fo = health.sub.final_od || {}, fs = health.sub.final_os || {};
       const prismTxt = r => [r.prism1 && `Prism1 ${r.prism1}${r.base1 ? ' Base ' + r.base1 : ''}`, r.prism2 && `Prism2 ${r.prism2}${r.base2 ? ' Base ' + r.base2 : ''}`].filter(Boolean).join(' / ') || null;
-      const meta = { ...health };
+      const meta = { ...health, cc: K.cc.slice(), cc_other: (K.ccOther || '').trim() || null };
+      const editId = K.editRxId;
+      const existing = editId ? find('prescriptions', editId) : null;
       save('prescriptions', {
-        id: uid(), customer_id: K.custId, exam_date: d.exam_date || null, examiner: health.examiner,
+        ...(existing || {}),
+        id: editId || uid(), customer_id: K.custId, exam_date: d.exam_date || null, examiner: health.examiner,
         od_sph: num(fo.sph), od_cyl: num(fo.cyl), od_axis: num(fo.axis), od_add: num(fo.add), od_pd: num(fo.distpd),
         os_sph: num(fs.sph), os_cyl: num(fs.cyl), os_axis: num(fs.axis), os_add: num(fs.add), os_pd: num(fs.distpd),
         pd: null, add_power: null,
         meta: { ...meta, od_ph: num(fo.fh), os_ph: num(fs.fh), od_seg: num(fo.sh), os_seg: num(fs.sh), od_param: prismTxt(fo), os_param: prismTxt(fs) },
         notes: notes || null, deleted_at: null
       });
-      K.cc = []; K.ccOther = ''; K.ccNew = ''; K.examMeta = null; K.examDraft = {}; K.hist = [];
-      commit(); K.step = 'done'; render(); toast('บันทึกผลตรวจสายตาแล้ว');
+      const wasEdit = !!editId, editCustId = K.custId, editFrom = K.editRxFrom;
+      K.cc = []; K.ccOther = ''; K.ccNew = ''; K.examMeta = null; K.examDraft = {}; K.hist = []; K.editRxId = null; K.editRxFrom = null;
+      commit();
+      if (wasEdit) {
+        if (editFrom === 'kiosk') { K.custId = editCustId; K.step = 'history'; render(); toast('บันทึกการแก้ไขผลตรวจสายตาแล้ว'); }
+        else { S.mode = ''; render(); custView(editCustId); toast('บันทึกการแก้ไขผลตรวจสายตาแล้ว'); }
+      } else { K.step = 'done'; render(); toast('บันทึกผลตรวจสายตาแล้ว'); }
     } else if (k === 'claimform') {
       const claimNote = 'หมายเหตุ: ระยะเวลาการเคลมสินค้าอาจมีระยะนานกว่าที่นัด เนื่องจากอะไหล่บางประเภทต้องรอสั่งนอก และอาจไม่ตรงรุ่น เนื่องจากไม่มีผลิต หากมีปัญหาดังกล่าวทางร้านจะมีการแจ้งให้ลูกค้าทราบอีกครั้ง';
       save('claims', { id: uid(), customer_id: K.custId, kind: d.kind, frame_model: d.frame_model.trim() || null, frame_code: d.frame_code.trim() || null, issue: d.issue.trim() || null, repair_items: d.repair_items.trim() || null, cost_thb: num(d.cost_thb), pickup_date: d.pickup_date || null, photo: K.photo || null, status: 'pending', signed_at: null, notes: claimNote, deleted_at: null });
@@ -3524,6 +3613,24 @@ window.addEventListener('online', () => { setStatus(); sync(); }); window.addEve
 // เตือนก่อนปิด/รีเฟรชหน้าถ้ายังมีรายการที่บันทึกในเครื่องแล้วแต่ยังส่งขึ้นเซิร์ฟเวอร์ไม่สำเร็จ — กันข้อมูลที่เพิ่งขาย (เช่น รายการสินค้าในบิล) หายไปถ้าปิดหน้าเร็วเกินไปก่อนซิงก์เสร็จ
 window.addEventListener('beforeunload', e => {
   if (pendingCount() > 0) { e.preventDefault(); e.returnValue = ''; return ''; }
+});
+// ถ้าเปิดแอปนี้พร้อมกันหลายแท็บ/หน้าต่างในเครื่องเดียวกัน (เช่น แท็บหนึ่งเปิดหน้าร้านขายของ อีกแท็บเปิดหลังบ้านจัดการสินค้า) —
+// แต่ละแท็บเก็บสำเนาข้อมูล (db) ไว้ในหน่วยจำของตัวเองตอนเปิดหน้า ถ้าไม่รีเฟรชสำเนานี้เลย แท็บที่ข้อมูลเก่ากว่าอาจบันทึกทับ
+// ข้อมูลที่อีกแท็บเพิ่งบันทึกไปสดๆ (เช่น รายการขายที่เพิ่งทำ) ได้โดยไม่รู้ตัว — ฟังอีเวนต์ storage กันไว้ ให้ทุกแท็บดึงข้อมูลล่าสุด
+// จากแท็บอื่นมาผสานเข้าหน่วยจำของตัวเองทันทีที่มีการบันทึก (เก็บรายการที่แท็บนี้เองกำลังแก้ไขอยู่ (dirty) ไว้ไม่ให้หาย)
+window.addEventListener('storage', e => {
+  if (!e.key || !e.key.startsWith('db_')) return;
+  const t = e.key.slice(3);
+  if (!T.includes(t) || e.newValue == null) return;
+  try {
+    const fresh = JSON.parse(e.newValue);
+    if (!Array.isArray(fresh)) return;
+    const mine = db[t].filter(r => r._dirty);
+    const merged = fresh.slice();
+    mine.forEach(r => { const i = merged.findIndex(x => x.id === r.id); i < 0 ? merged.push(r) : merged[i] = r; });
+    db[t] = merged;
+    if (!$('#dlg').open) render();
+  } catch (err) { console.error('storage merge failed', t, err); }
 });
 setInterval(sync, 60000);
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
