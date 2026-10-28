@@ -10,7 +10,7 @@ const baht = n => '฿' + Number(n || 0).toLocaleString('th-TH');
 const num = v => (v === '' || v == null || isNaN(+v)) ? null : +v;
 const toast = m => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2800); };
 const errText = e => { const m = e?.message || String(e); try { return JSON.parse(m).message || m; } catch { return m; } };
-const APP_VERSION = 'v71'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
+const APP_VERSION = 'v72'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
 
 /* ---------- โครงสร้างข้อมูล (ตรงกับ supabase/schema.sql) ---------- */
 const COLS = {
@@ -352,7 +352,7 @@ function lrSummary() {
   return parts.join(' · ');
 }
 const CC_SEED = ["ตาพร่ามัว", "มองไกลไม่ชัด", "มองใกล้ไม่ชัด", "ปวดตา/ปวดกระบอกตา", "ตาแห้ง", "คันตา/ระคายเคือง", "ตาแดง", "น้ำตาไหล", "เห็นภาพซ้อน", "แพ้แสง/สู้แสงไม่ได้", "ปวดศีรษะบ่อย", "สายตาล้า/เพลีย", "แว่นเก่าชำรุด/อยากเปลี่ยนใหม่", "ตรวจสายตาประจำปี"];
-const knownCC = () => [...new Set([...CC_SEED, ...ls.get('ccSeed', [])])];
+const knownCC = () => { const removed = new Set(ls.get('ccSeedRemoved', [])); return [...new Set([...CC_SEED, ...ls.get('ccSeed', [])])].filter(s => !removed.has(s)); };
 // รายการโรคประจำตัวแบบติ๊กในหน้าซักประวัติ — key ใช้ตั้งชื่อ field ในฟอร์ม (chk_/med_/yr_ + key) และเก็บใน prescriptions.meta.diseases
 const CHRONIC_DISEASES = [['diabetes', 'เบาหวาน'], ['htn', 'ความดันโลหิตสูง'], ['chol', 'ไขมันในเลือดสูง'], ['allergy', 'ภูมิแพ้'], ['sle', 'SLE / รูมาตอยด์'], ['other', 'อื่นๆ']];
 const EYE_DISEASE_ROWS = [1, 2, 3, 4]; // แถวโรคตา/รักษา/ผ่าตัด ตามแบบฟอร์มกระดาษ (4 แถว)
@@ -460,10 +460,10 @@ function examIntakePrintView(custId, ccText, ccOther, m) {
   ${row('แว่นเดิม', (m.old_glasses_r || m.old_glasses_l) ? `R ${m.old_glasses_r || '-'} L ${m.old_glasses_l || '-'} · ใช้มา ${m.old_glasses_duration || '-'}` : '')}
   ${row('เลนส์เดิม', m.lens_name)}${row('Index', m.lens_index)}${row('เปลี่ยนสี', m.lens_color_change)}
   ${row('Corridor', m.lens_corridor)}${row('PD เลนส์เดิม', (m.lens_pd_r || m.lens_pd_l) ? `R ${m.lens_pd_r || '-'} L ${m.lens_pd_l || '-'}` : '')}${row('ปัญหาการใช้แว่น', m.lens_problem)}
+  ${row('สัญลักษณ์บนเลนส์เดิม', m.lens_marking)}${row('ยี่ห้อ/รุ่นแว่นเดิม', m.lens_brand_model)}
   <h3 style="margin-top:14px">ข้อมูลตรวจเบื้องต้น</h3>
   ${row('Auto-Ref ขวา (OD)', m.autoref_od)}${row('Auto-Ref ซ้าย (OS)', m.autoref_os)}
   ${row('PD (Ref) ขวา', m.pdref_od)}${row('PD (Ref) ซ้าย', m.pdref_os)}
-  ${row('สัญลักษณ์บนเลนส์เดิม', m.lens_marking)}${row('ยี่ห้อ/รุ่นแว่นเดิม', m.lens_brand_model)}
   <h3 style="margin-top:14px">VA</h3>
   ${gridTbl(m.va, VA_ROWS, VA_COLS) || '<div class="tag">ไม่มีข้อมูล</div>'}
   ${row('ตาข้างที่ถนัด', DOM_EYE_LABEL[m.dominant_eye] || m.dominant_eye)}${row('มือข้างที่ถนัด', DOM_HAND_LABEL[m.dominant_hand] || m.dominant_hand)}
@@ -2136,11 +2136,10 @@ function kioskExamIntake() {
   const dr = K.examDraft; // ค่าร่างที่พิมพ์ไว้ล่าสุด (กันข้อมูลหายตอน render ซ้ำ เช่น ตอนซิงก์พื้นหลัง)
   const chip = s => {
     const on = K.cc.includes(s);
-    const custom = !CC_SEED.includes(s);
     return `<span style="display:inline-flex;align-items:center;gap:2px">
       <button type="button" data-act="cctoggle" data-id="${esc(s)}" style="display:inline-flex;align-items:center;gap:7px;padding:8px 13px;border-radius:999px;border:1px solid ${on ? '#1f6f43' : 'rgba(0,0,0,.18)'};background:${on ? '#1f6f43' : '#fff'};color:${on ? '#fff' : '#23262a'};font-size:12.5px;cursor:pointer;transition:.12s">
         <span style="display:inline-block;width:14px;height:14px;border-radius:4px;border:1.5px solid ${on ? '#fff' : 'rgba(0,0,0,.35)'};line-height:11px;font-size:10px;text-align:center">${on ? '✓' : ''}</span>${esc(s)}
-      </button>${custom ? `<button type="button" data-act="ccdelseed" data-id="${esc(s)}" title="ลบอาการนี้ออกจากรายการ" style="width:22px;height:22px;flex:none;border-radius:50%;border:1px solid rgba(0,0,0,.15);background:#fff;color:#a23b2a;font-size:11px;cursor:pointer;line-height:20px;text-align:center;padding:0">✕</button>` : ''}
+      </button><button type="button" data-act="ccdelseed" data-id="${esc(s)}" title="ลบอาการนี้ออกจากรายการ" style="width:22px;height:22px;flex:none;border-radius:50%;border:1px solid rgba(0,0,0,.15);background:#fff;color:#a23b2a;font-size:11px;cursor:pointer;line-height:20px;text-align:center;padding:0">✕</button>
     </span>`;
   };
   // กรอบ/หัวข้อ จำลองสไตล์แบบฟอร์มกระดาษ — เส้นกรอบบาง มีเลขหัวข้อ
@@ -2181,8 +2180,8 @@ function kioskExamIntake() {
     </div>
 
     ${box('ลักษณะการใช้สายตา/การใช้แว่น', `<div style="display:grid;grid-template-columns:1fr 1fr 2fr;gap:12px">
-      ${uw('คอมพิวเตอร์/โน้ตบุ๊ค (ชม./วัน)', 'comp_hours', '', 'number', 'step="0.5" min="0"')}
-      ${uw('แทปเลต/มือถือ (ชม./วัน)', 'tablet_hours', '', 'number', 'step="0.5" min="0"')}
+      ${uw('คอมพิวเตอร์/โน้ตบุ๊ค (ชม./วัน)', 'comp_hours', '', 'text', 'inputmode="decimal"')}
+      ${uw('แทปเลต/มือถือ (ชม./วัน)', 'tablet_hours', '', 'text', 'inputmode="decimal"')}
       ${uw('อื่นๆ ระบุ', 'usage_other')}
     </div>`)}
 
@@ -2195,7 +2194,7 @@ function kioskExamIntake() {
       </div>`)}
 
     ${box('อาการทางตา', `
-      <p class="tag" style="margin:0 0 8px">แตะติ๊กอาการที่ลูกค้าแจ้งได้เลย ถ้ายังไม่มีในรายการให้พิมพ์เพิ่มด้านล่าง — จะถูกบันทึกไว้ให้เลือกในครั้งถัดไปด้วย (กด ✕ เพื่อลบอาการที่พิมพ์เพิ่มเองออกจากรายการได้)</p>
+      <p class="tag" style="margin:0 0 8px">แตะติ๊กอาการที่ลูกค้าแจ้งได้เลย ถ้ายังไม่มีในรายการให้พิมพ์เพิ่มด้านล่าง — จะถูกบันทึกไว้ให้เลือกในครั้งถัดไปด้วย (กด ✕ เพื่อลบอาการที่ไม่ได้ใช้ออกจากรายการได้ ไม่กระทบประวัติที่บันทึกไปแล้ว)</p>
       <div style="display:flex;flex-wrap:wrap;gap:7px;margin:0 0 10px">${list.map(chip).join('')}</div>
       <div style="display:flex;gap:10px;margin-bottom:10px">
         <input placeholder="พิมพ์อาการใหม่ที่ไม่มีในรายการ แล้วกด +" data-bind="ccnew" value="${esc(K.ccNew || '')}" style="flex:1">
@@ -2227,6 +2226,10 @@ function kioskExamIntake() {
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1.4fr;gap:12px;margin-top:10px">
         ${uw('Corridor', 'lens_corridor')}${uw('PD เดิม R', 'lens_pd_r')}${uw('PD เดิม L', 'lens_pd_l')}${uw('ปัญหาการใช้แว่น', 'lens_problem')}
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px">
+        ${uw('สัญลักษณ์บนเลนส์เดิม', 'lens_marking')}
+        ${uw('ยี่ห้อ/รุ่นแว่นเดิม', 'lens_brand_model')}
       </div>`)}
 
     ${box('ข้อมูลตรวจเบื้องต้น', `
@@ -2237,10 +2240,6 @@ function kioskExamIntake() {
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px">
         ${uw('PD ref. R', 'pdref_od', '', 'number', 'step="0.5"')}
         ${uw('PD ref. L', 'pdref_os', '', 'number', 'step="0.5"')}
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px">
-        ${uw('สัญลักษณ์บนเลนส์เดิม', 'lens_marking')}
-        ${uw('ยี่ห้อ/รุ่นแว่นเดิม', 'lens_brand_model')}
       </div>`)}
 
     ${box('VA', `${gridTable(VA_ROWS, VA_COLS, 'va')}
@@ -2718,6 +2717,9 @@ function receiptHTML() {
   const d = receiptData(RCPT_FOR);
   const cust = d.customerId ? find('customer_profiles', d.customerId) : null;
   const rx = d.customerId ? latestRx(d.customerId) : null;
+  const rcptQ = RCPT_FOR ? find('quotes', RCPT_FOR) : null; // ใบเสร็จที่เปิดจากบิลที่บันทึกแล้ว (ไม่ใช่แค่ดูตัวอย่างก่อนขาย) จะมีแถวนี้ให้ติดตามสถานะการชำระเงินได้
+  const rcptBalance = rcptQ ? quoteBalance(rcptQ) : 0;
+  const rcptPayStatus = rcptQ ? quotePayStatus(rcptQ) : null;
   const lensDetail = d.items.filter(i => i.type === 'lens').map(i => { const ex = itemExtraLine(i, 'lens'); return ex ? `รุ่น ${i.name} (${ex})` : `รุ่น ${i.name}`; }).join(', ') || '-';
   const frameDetail = d.items.filter(i => i.type === 'frame').map(i => { const ex = itemExtraLine(i, 'frame'); return ex ? `${i.name} (${ex})` : i.name; }).join(', ') || '-';
   const rxRow = (label, sph, cyl, axis, add, pd) => `<tr><td style="padding:2px 12px 2px 0;font-weight:600;white-space:nowrap">${label}</td><td style="padding:2px 10px">SPH ${fmtP(sph)}</td><td style="padding:2px 10px">CYL ${fmtP(cyl)}</td><td style="padding:2px 10px">AXIS ${axis ?? '-'}</td><td style="padding:2px 10px">ADD ${fmtP(add)}</td><td style="padding:2px 0">PD ${pd ?? '-'}</td></tr>`;
@@ -2735,11 +2737,13 @@ function receiptHTML() {
     <div style="margin:4px 0"><b>ค่าสายตาที่ตัด:</b>${rxLine}</div>
     <p style="margin:4px 0"><b>เลนส์ที่ตัด:</b> ${esc(lensDetail)}</p>
     <p style="margin:4px 0 12px"><b>กรอบแว่น:</b> ${esc(frameDetail)}</p>
+    ${rx && rx.meta && rx.meta.purpose_type ? `<p style="margin:4px 0 12px"><b>แว่นสำหรับ:</b> ${esc((PURPOSE_LABEL[rx.meta.purpose_type] || rx.meta.purpose_type) + (rx.meta.purpose_other ? ' · ' + rx.meta.purpose_other : ''))}</p>` : ''}
     <table><tr><th>รายการ</th><th>จำนวน</th><th>ราคา/หน่วย</th><th style="text-align:right">รวม</th></tr>${d.items.map(i => { const ex = itemExtraLine(i, i.type); return `<tr><td>${esc(i.name)}${ex ? `<br><span class="tag">${esc(ex)}</span>` : ''}</td><td>${i.qty}</td><td>${baht(i.price)}</td><td style="text-align:right">${baht(i.lineTotal)}</td></tr>`; }).join('')}</table>
     <div class="row"><span>รวม</span><span>${baht(d.sub)}</span></div>
     ${d.discTotal ? `<div class="row"><span>ส่วนลด</span><span>-${baht(d.discTotal)}</span></div>` : ''}
     <div class="row" style="border:0"><b>รวมสุทธิ</b><span class="total">${baht(d.total)}</span></div>
     <p style="margin:10px 0 4px"><b>ชำระโดย:</b> ${RCPT.pay.length ? esc(RCPT.pay.map(k => PAY_LABELS[k] || k).join(' + ')) : '(ยังไม่ระบุ)'}</p>
+    ${rcptPayStatus ? `<p style="margin:4px 0"><b>สถานะการชำระเงิน:</b> ${esc(PAY_STATUS_LABEL[rcptPayStatus])}${rcptPayStatus !== 'paid' ? ` (ยอดคงเหลือ ${baht(rcptBalance)})` : ''}</p>` : ''}
     <div style="margin-top:6px">
       <div class="tag">ลายเซ็นลูกค้า</div>
       ${RCPT.sig ? `<img src="${esc(RCPT.sig)}" style="height:64px;border-bottom:1px solid #999;margin-top:2px">` : `<div class="noprint tag" style="margin-top:2px">(ยังไม่ได้เซ็น)</div>`}
@@ -2760,6 +2764,7 @@ function receiptHTML() {
       <div class="foot">
         <button type="button" class="btn line" data-act="close">ปิด</button>
         <button type="submit" class="btn line">อัปเดตตัวอย่าง</button>
+        ${RCPT_FOR && rcptBalance > 0.004 ? `<button type="button" class="btn line" data-act="rcptmarkpaid" data-id="${RCPT_FOR}">ชำระแล้ว (บันทึกไม่มียอดค้าง)</button>` : ''}
         <button type="button" class="btn" data-act="printrcpt">พิมพ์ใบเสร็จ</button>
       </div>
     </form>
@@ -3326,6 +3331,22 @@ document.addEventListener('click', e => {
     }
     setTimeout(() => window.print(), 30);
   }
+  else if (a === 'rcptmarkpaid') {
+    const q = find('quotes', id);
+    if (!q) return;
+    const balance = quoteBalance(q);
+    if (balance <= 0.004) { toast('รายการนี้ชำระครบแล้ว'); return; }
+    if (!confirm(`ยืนยันว่าลูกค้าชำระเงินครบ ${baht(balance)} แล้วใช่ไหม? ระบบจะบันทึกว่าไม่มียอดค้างชำระ`)) return;
+    const methodVals = RCPT.pay.slice();
+    const pay = { id: uid(), kind: 'final', amount: balance, date: RCPT.date || now().slice(0, 10), methods: methodVals, note: 'ทำเครื่องหมายชำระแล้วจากหน้าตัวอย่างใบเสร็จ', seller: RCPT.seller || null, docNo: nextDepositNo(), at: now() };
+    const meta = { ...(q.meta || {}) };
+    meta.payments = [...(Array.isArray(meta.payments) ? meta.payments : []), pay];
+    const newStatus = ['draft', 'presented'].includes(q.status) ? 'accepted' : q.status;
+    save('quotes', { ...q, status: newStatus, meta });
+    commit();
+    dialog(receiptHTML());
+    toast('บันทึกว่าชำระครบแล้ว — ไม่มียอดค้างชำระ');
+  }
   else if (a === 'close') closeDlg();
   else if (a === 'logout') { if (!pendingCount() || confirm('ยังมีข้อมูลที่ไม่ได้ซิงก์ ออกจากระบบต่อหรือไม่? (ข้อมูลยังอยู่ในเครื่อง)')) { sess = null; ls.set('sess', null); S.staff = null; render(); } }
   else if (a === 'rmstaff') { if (confirm('ถอดพนักงานคนนี้ออกจากร้าน?')) api(`/rest/v1/shop_members?shop_id=eq.${shop.id}&user_id=eq.${id}`, { method: 'DELETE' }).then(loadStaff).catch(err => toast(errText(err))); }
@@ -3387,10 +3408,17 @@ document.addEventListener('click', e => {
     const v = (K.ccNew || '').trim();
     if (!v) return;
     if (!knownCC().includes(v)) ls.set('ccSeed', [...ls.get('ccSeed', []), v]);
+    if (ls.get('ccSeedRemoved', []).includes(v)) ls.set('ccSeedRemoved', ls.get('ccSeedRemoved', []).filter(x => x !== v));
     if (!K.cc.includes(v)) K.cc = [...K.cc, v];
     K.ccNew = ''; render();
   }
-  else if (a === 'ccdelseed') { ls.set('ccSeed', ls.get('ccSeed', []).filter(x => x !== id)); K.cc = K.cc.filter(x => x !== id); render(); }
+  else if (a === 'ccdelseed') {
+    if (!confirm(`ลบอาการ "${id}" ออกจากรายการที่แตะเลือกได้? (ไม่กระทบประวัติที่บันทึกไปแล้ว เพิ่มกลับมาได้โดยพิมพ์ชื่อเดิมแล้วกด + เพิ่มอาการ)`)) return;
+    ls.set('ccSeed', ls.get('ccSeed', []).filter(x => x !== id));
+    if (CC_SEED.includes(id)) ls.set('ccSeedRemoved', [...new Set([...ls.get('ccSeedRemoved', []), id])]);
+    K.cc = K.cc.filter(x => x !== id);
+    render();
+  }
   else if (a === 'kioskaddprod') kioskQuickAddProd(id);
   else if (a === 'kioskdelprod') { if (confirm('ลบสินค้านี้?')) { S.cart = S.cart.filter(i => i.id !== id && i.productId !== id); softDelete('products', id); render(); } }
   else if (a === 'kioskproddetail') { S.catReturn = 'kiosk'; S.catDetail = id; S.mode = 'lenscat'; render(); }
