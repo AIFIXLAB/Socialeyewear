@@ -10,7 +10,7 @@ const baht = n => '฿' + Number(n || 0).toLocaleString('th-TH');
 const num = v => (v === '' || v == null || isNaN(+v)) ? null : +v;
 const toast = m => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2800); };
 const errText = e => { const m = e?.message || String(e); try { return JSON.parse(m).message || m; } catch { return m; } };
-const APP_VERSION = 'v72'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
+const APP_VERSION = 'v73'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
 
 /* ---------- โครงสร้างข้อมูล (ตรงกับ supabase/schema.sql) ---------- */
 const COLS = {
@@ -490,8 +490,8 @@ const NAV = [['customers', 'ลูกค้า'], ['products', 'สินค้�
 const S = { v: 'customers', need: 'general', cart: [], cust: '', disc: 0, notes: '', q: '', pq: '', ptype: 'all', pbrand: '', staff: null, mode: 'splash', custView: 'all', custFrom: '', custTo: '', catQ: '', catCompare: [], catDetail: null, catReturn: '', catDesign: '', catMain: '', activeSeller: null, varPick: null, knSel: [], knIdx: 0 };
 const freshLR = () => ({ purpose: [], other: '', vision: [], lenstype: [], brand: [], level: [], lensIndex: [], coating: [], photochromic: [], age: '', budget: '', occupation: '', notes: '' });
 const freshDisc = () => ({ type: 'amt', val: 0 });
-let K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, discFrame: freshDisc(), discLens: freshDisc(), lensFilterOn: true, examMeta: null, examDraft: {}, pickupDate: '', editRxId: null, editRxFrom: null };
-const kioskReset = () => { K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, detailProdId: null, discFrame: freshDisc(), discLens: freshDisc(), lensFilterOn: true, examMeta: null, examDraft: {}, pickupDate: '', editRxId: null, editRxFrom: null }; };
+let K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, discFrame: freshDisc(), discLens: freshDisc(), lensFilterOn: true, examMeta: null, examDraft: {}, pickupDate: '', paidFull: false, editRxId: null, editRxFrom: null };
+const kioskReset = () => { K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, detailProdId: null, discFrame: freshDisc(), discLens: freshDisc(), lensFilterOn: true, examMeta: null, examDraft: {}, pickupDate: '', paidFull: false, editRxId: null, editRxFrom: null }; RCPT = null; RCPT_FOR = null; };
 // เปิดฟอร์มแก้ไขผลตรวจสายตาที่บันทึกไว้แล้ว — ดึงข้อมูลเดิมทั้งหมดกลับเข้าฟอร์ม ไม่ว่าจะกดมาจากหน้าลูกค้า (หลังบ้าน) หรือหน้าประวัติการใช้บริการ (ฝั่งหน้าร้าน)
 function openEditExam(id, from) {
   const r = find('prescriptions', id); if (!r) return;
@@ -2671,7 +2671,8 @@ function receiptData(forQuoteId) {
       items: items.map(i => ({ name: i.item_name_snapshot, type: i.product_type, qty: i.quantity, price: i.unit_price_thb, lineTotal: i.line_total_thb, productId: i.product_id, code: (i.meta || {}).code || '', color: (i.meta || {}).color || '', frameType: (i.meta || {}).frameType || '', tint: (i.meta || {}).tint || '', corridor: (i.meta || {}).corridor || '', lensType: (i.meta || {}).lensType || '', customLens: (i.meta || {}).customLens || null })),
       sub: q.subtotal_thb, discTotal: q.discount_thb, total: q.total_thb,
       defNo: q.quote_number || '', defDate: q.receipt_date || (q.created_at || '').slice(0, 10) || now().slice(0, 10),
-      defPay: meta.payment || [], defSig: meta.signature || '', defSeller: meta.seller || ''
+      defPay: meta.payment || [], defSig: meta.signature || '', defSeller: meta.seller || '',
+      pickup: meta.pickupDate || '', defPaidFull: quotePayStatus(q) === 'paid'
     };
   }
   const c = cartCalc();
@@ -2680,7 +2681,8 @@ function receiptData(forQuoteId) {
     items: S.cart.map(i => ({ name: i.name, type: i.type, qty: i.qty, price: i.price, lineTotal: i.price * i.qty, productId: i.productId || i.id, code: i.code || '', color: i.color || '', frameType: i.frameType || '', tint: i.tint || '', corridor: i.corridor || '', lensType: i.lensType || '', customLens: i.customLens || null })),
     sub: c.sub, discTotal: c.discTotal, total: c.total,
     defNo: '', defDate: now().slice(0, 10),
-    defPay: [], defSig: '', defSeller: S.activeSeller || ''
+    defPay: [], defSig: '', defSeller: S.activeSeller || '',
+    pickup: K.pickupDate || '', defPaidFull: !!K.paidFull
   };
 }
 // เก็บรายละเอียดส่วนตัวของแต่ละบรรทัดในตะกร้า (รหัส/สี/ประเภทกรอบ/เลนส์ที่กรอกเอง) ลงใน quote_items.meta ตอนบันทึกบิล
@@ -2734,6 +2736,7 @@ function receiptHTML() {
     <h2 style="margin:0 0 2px">ใบเสร็จรับเงิน</h2>
     <div class="meta">เลขที่ ${esc(RCPT.no || '(ยังไม่ระบุ)')} · วันที่ ${day(RCPT.date)}${RCPT.seller ? ` · ผู้ขาย: ${esc(RCPT.seller)}` : ''}</div>
     <p style="margin:4px 0"><b>ชื่อ-นามสกุล:</b> ${esc(cust?.full_name || 'ลูกค้าทั่วไป')}${cust?.customer_code ? ` <span class="tag">(${esc(cust.customer_code)})</span>` : ''}</p>
+    ${d.pickup ? `<p style="margin:4px 0"><b>วันนัดรับสินค้า:</b> ${day(d.pickup)}</p>` : ''}
     <div style="margin:4px 0"><b>ค่าสายตาที่ตัด:</b>${rxLine}</div>
     <p style="margin:4px 0"><b>เลนส์ที่ตัด:</b> ${esc(lensDetail)}</p>
     <p style="margin:4px 0 12px"><b>กรอบแว่น:</b> ${esc(frameDetail)}</p>
@@ -2743,7 +2746,7 @@ function receiptHTML() {
     ${d.discTotal ? `<div class="row"><span>ส่วนลด</span><span>-${baht(d.discTotal)}</span></div>` : ''}
     <div class="row" style="border:0"><b>รวมสุทธิ</b><span class="total">${baht(d.total)}</span></div>
     <p style="margin:10px 0 4px"><b>ชำระโดย:</b> ${RCPT.pay.length ? esc(RCPT.pay.map(k => PAY_LABELS[k] || k).join(' + ')) : '(ยังไม่ระบุ)'}</p>
-    ${rcptPayStatus ? `<p style="margin:4px 0"><b>สถานะการชำระเงิน:</b> ${esc(PAY_STATUS_LABEL[rcptPayStatus])}${rcptPayStatus !== 'paid' ? ` (ยอดคงเหลือ ${baht(rcptBalance)})` : ''}</p>` : ''}
+    ${(rcptPayStatus || RCPT.paidFull) ? `<p style="margin:4px 0"><b>สถานะการชำระเงิน:</b> ${esc((RCPT.paidFull || rcptPayStatus === 'paid') ? PAY_STATUS_LABEL.paid : PAY_STATUS_LABEL[rcptPayStatus])}${(!RCPT.paidFull && rcptPayStatus && rcptPayStatus !== 'paid') ? ` (ยอดคงเหลือ ${baht(rcptBalance)})` : ''}</p>` : ''}
     <div style="margin-top:6px">
       <div class="tag">ลายเซ็นลูกค้า</div>
       ${RCPT.sig ? `<img src="${esc(RCPT.sig)}" style="height:64px;border-bottom:1px solid #999;margin-top:2px">` : `<div class="noprint tag" style="margin-top:2px">(ยังไม่ได้เซ็น)</div>`}
@@ -2755,16 +2758,15 @@ function receiptHTML() {
       <div class="two"><label>เลขที่ใบเสร็จ<input name="receipt_no" value="${esc(RCPT.no)}" placeholder="เว้นว่าง = รันให้อัตโนมัติตอนพิมพ์"></label><label>วันที่ออกใบเสร็จ<input type="date" name="receipt_date" value="${esc(RCPT.date)}"></label></div>
       <label>พนักงานขาย<select name="seller"><option value="">— เลือกพนักงาน —</option>${live('sellers').map(s => `<option value="${esc(s.name)}" ${RCPT.seller === s.name ? 'selected' : ''}>${esc(s.name)}${s.role ? ` (${esc(ROLE_LABEL[s.role] || s.role)})` : ''}</option>`).join('')}</select>${!live('sellers').length ? '<span class="tag">ยังไม่มีรายชื่อ ไปเพิ่มที่ ตั้งค่า &gt; พนักงานขาย</span>' : ''}</label>
       <label><span class="lbl" style="display:block;font-size:13px;color:var(--mute,#69756d);margin-bottom:6px">ช่องทางชำระเงิน (เลือกได้มากกว่า 1)</span></label>
-      <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px">${Object.entries(PAY_LABELS).map(([k, l]) => `<label class="chk" style="margin:0"><input type="checkbox" name="pay" value="${k}" ${RCPT.pay.includes(k) ? 'checked' : ''}> ${l}</label>`).join('')}</div>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px">${Object.entries(PAY_LABELS).map(([k, l]) => `<label class="chk" style="margin:0"><input type="checkbox" name="pay" value="${k}" ${RCPT.pay.includes(k) ? 'checked' : ''}> ${l}</label>`).join('')}<label class="chk" style="margin:0;font-weight:600;color:#1f6f43"><input type="checkbox" name="paidfull" ${(rcptQ && rcptBalance <= 0.004) ? 'checked disabled' : (RCPT.paidFull ? 'checked' : '')}> ชำระครบแล้ว (ไม่มียอดค้าง)</label></div>
       <div class="foot" style="justify-content:flex-start;margin-bottom:4px">
         <button type="button" class="btn line sm" data-act="opensigpad">${RCPT.sig ? 'แก้ลายเซ็น' : 'ขอลายเซ็นลูกค้า'}</button>
         ${RCPT.sig ? `<button type="button" class="btn line sm bad" data-act="sigremove">ลบลายเซ็น</button>` : ''}
       </div>
-      <p class="tag">แก้ข้อมูลแล้วกด "อัปเดตตัวอย่าง" เพื่อให้ใบเสร็จด้านบนเปลี่ยนตาม ก่อนสั่งพิมพ์</p>
+      <p class="tag">แก้ข้อมูลแล้วกด "อัปเดตตัวอย่าง" เพื่อให้ใบเสร็จด้านบนเปลี่ยนตาม ก่อนสั่งพิมพ์ — ติ๊ก "ชำระครบแล้ว" แล้วกด "อัปเดตตัวอย่าง" ระบบจะบันทึกว่าไม่มียอดค้างชำระทันที</p>
       <div class="foot">
         <button type="button" class="btn line" data-act="close">ปิด</button>
         <button type="submit" class="btn line">อัปเดตตัวอย่าง</button>
-        ${RCPT_FOR && rcptBalance > 0.004 ? `<button type="button" class="btn line" data-act="rcptmarkpaid" data-id="${RCPT_FOR}">ชำระแล้ว (บันทึกไม่มียอดค้าง)</button>` : ''}
         <button type="button" class="btn" data-act="printrcpt">พิมพ์ใบเสร็จ</button>
       </div>
     </form>
@@ -2773,7 +2775,7 @@ function receiptHTML() {
 function openReceipt(forQuoteId) {
   RCPT_FOR = forQuoteId || null;
   const d = receiptData(RCPT_FOR);
-  RCPT = { no: d.defNo, date: d.defDate, pay: d.defPay.slice(), sig: d.defSig, seller: d.defSeller };
+  RCPT = { no: d.defNo, date: d.defDate, pay: d.defPay.slice(), sig: d.defSig, seller: d.defSeller, paidFull: d.defPaidFull };
   dialog(receiptHTML());
 }
 // ===== ระบบรับเงินมัดจำ / รับชำระส่วนที่เหลือ =====
@@ -3331,22 +3333,6 @@ document.addEventListener('click', e => {
     }
     setTimeout(() => window.print(), 30);
   }
-  else if (a === 'rcptmarkpaid') {
-    const q = find('quotes', id);
-    if (!q) return;
-    const balance = quoteBalance(q);
-    if (balance <= 0.004) { toast('รายการนี้ชำระครบแล้ว'); return; }
-    if (!confirm(`ยืนยันว่าลูกค้าชำระเงินครบ ${baht(balance)} แล้วใช่ไหม? ระบบจะบันทึกว่าไม่มียอดค้างชำระ`)) return;
-    const methodVals = RCPT.pay.slice();
-    const pay = { id: uid(), kind: 'final', amount: balance, date: RCPT.date || now().slice(0, 10), methods: methodVals, note: 'ทำเครื่องหมายชำระแล้วจากหน้าตัวอย่างใบเสร็จ', seller: RCPT.seller || null, docNo: nextDepositNo(), at: now() };
-    const meta = { ...(q.meta || {}) };
-    meta.payments = [...(Array.isArray(meta.payments) ? meta.payments : []), pay];
-    const newStatus = ['draft', 'presented'].includes(q.status) ? 'accepted' : q.status;
-    save('quotes', { ...q, status: newStatus, meta });
-    commit();
-    dialog(receiptHTML());
-    toast('บันทึกว่าชำระครบแล้ว — ไม่มียอดค้างชำระ');
-  }
   else if (a === 'close') closeDlg();
   else if (a === 'logout') { if (!pendingCount() || confirm('ยังมีข้อมูลที่ไม่ได้ซิงก์ ออกจากระบบต่อหรือไม่? (ข้อมูลยังอยู่ในเครื่อง)')) { sess = null; ls.set('sess', null); S.staff = null; render(); } }
   else if (a === 'rmstaff') { if (confirm('ถอดพนักงานคนนี้ออกจากร้าน?')) api(`/rest/v1/shop_members?shop_id=eq.${shop.id}&user_id=eq.${id}`, { method: 'DELETE' }).then(loadStaff).catch(err => toast(errText(err))); }
@@ -3428,11 +3414,16 @@ document.addEventListener('click', e => {
     const c = cartCalc(), qid = uid();
     const lrNote = lrSummary();
     const discNote = c.discTotal ? `ส่วนลด — กรอบ: ${c.discFrameAmt ? baht(c.discFrameAmt) : '-'} / เลนส์: ${c.discLensAmt ? baht(c.discLensAmt) : '-'}` : '';
-    save('quotes', { id: qid, customer_id: S.cust || null, quote_number: nextReceiptNo(), status: 'converted', subtotal_thb: c.sub, discount_thb: c.discTotal, total_thb: c.total, notes: [lrNote ? `ความต้องการลูกค้า: ${lrNote}` : '', discNote].filter(Boolean).join(' · ') || null, valid_until: null, receipt_date: now().slice(0, 10), meta: { payment: [], signature: '', seller: S.activeSeller || '' }, deleted_at: null });
+    const payVals = RCPT ? RCPT.pay.slice() : [];
+    const meta = { payment: payVals, signature: RCPT ? (RCPT.sig || '') : '', seller: S.activeSeller || '', pickupDate: K.pickupDate || null };
+    if (K.paidFull && c.total > 0.004) {
+      meta.payments = [{ id: uid(), kind: 'final', amount: c.total, date: now().slice(0, 10), methods: payVals, note: 'ติ๊กชำระครบแล้วจากหน้าตัวอย่างใบเสร็จก่อนยืนยันสั่งซื้อ', seller: S.activeSeller || null, docNo: nextDepositNo(), at: now() }];
+    }
+    save('quotes', { id: qid, customer_id: S.cust || null, quote_number: nextReceiptNo(), status: 'converted', subtotal_thb: c.sub, discount_thb: c.discTotal, total_thb: c.total, notes: [lrNote ? `ความต้องการลูกค้า: ${lrNote}` : '', discNote].filter(Boolean).join(' · ') || null, valid_until: null, receipt_date: now().slice(0, 10), meta, deleted_at: null });
     const cartBefore = S.cart.slice();
     cartBefore.forEach(i => save('quote_items', { id: uid(), quote_id: qid, product_id: i.productId || i.id, item_name_snapshot: i.name, product_type: i.type, quantity: i.qty, unit_price_thb: i.price, line_total_thb: i.price * i.qty, meta: cartItemMeta(i), deleted_at: null }));
     verifySaleItems(qid, cartBefore);
-    S.cart = []; K.step = 'done'; K.hist = []; K.lr = freshLR(); K.lastQuoteId = qid; K.discFrame = freshDisc(); K.discLens = freshDisc(); K.pickupDate = ''; commit(); render(); toast('บันทึกการสั่งซื้อแล้ว');
+    S.cart = []; K.step = 'done'; K.hist = []; K.lr = freshLR(); K.lastQuoteId = qid; K.discFrame = freshDisc(); K.discLens = freshDisc(); K.pickupDate = ''; K.paidFull = false; RCPT = null; RCPT_FOR = null; commit(); render(); toast('บันทึกการสั่งซื้อแล้ว');
   }
   else if (a === 'kioskdeposit') {
     if (!S.cart.length) return toast('เลือกสินค้าอย่างน้อย 1 รายการก่อน');
@@ -3687,8 +3678,25 @@ document.addEventListener('submit', async e => {
       commit(); quoteSheet(id); toast('บันทึกใบเสนอราคาแล้ว');
     } else if (k === 'receiptmeta') {
       const payVals = [...f.querySelectorAll('[name="pay"]:checked')].map(x => x.value);
-      RCPT = { no: (d.receipt_no || '').trim(), date: d.receipt_date || now().slice(0, 10), pay: payVals, sig: RCPT.sig, seller: (d.seller || '').trim() };
-      if (RCPT_FOR) { const q = find('quotes', RCPT_FOR); save('quotes', { ...q, quote_number: RCPT.no || null, receipt_date: RCPT.date, meta: { ...(q.meta || {}), payment: payVals, seller: RCPT.seller } }); commit(); }
+      const paidFullChecked = !!f.querySelector('[name="paidfull"]:checked');
+      RCPT = { no: (d.receipt_no || '').trim(), date: d.receipt_date || now().slice(0, 10), pay: payVals, sig: RCPT.sig, seller: (d.seller || '').trim(), paidFull: paidFullChecked };
+      if (RCPT_FOR) {
+        const q = find('quotes', RCPT_FOR);
+        const meta = { ...(q.meta || {}), payment: payVals, seller: RCPT.seller };
+        let newStatus = q.status;
+        if (paidFullChecked) {
+          const balance = quoteBalance({ ...q, meta });
+          if (balance > 0.004) {
+            const pay = { id: uid(), kind: 'final', amount: balance, date: RCPT.date || now().slice(0, 10), methods: payVals, note: 'ติ๊กชำระครบแล้วจากหน้าตัวอย่างใบเสร็จ', seller: RCPT.seller || null, docNo: nextDepositNo(), at: now() };
+            meta.payments = [...(Array.isArray(meta.payments) ? meta.payments : []), pay];
+            newStatus = ['draft', 'presented'].includes(q.status) ? 'accepted' : q.status;
+          }
+        }
+        save('quotes', { ...q, status: newStatus, quote_number: RCPT.no || null, receipt_date: RCPT.date, meta });
+        commit();
+      } else {
+        K.paidFull = paidFullChecked; // ยังไม่มีบิลจริง (ดูตัวอย่างก่อนยืนยันสั่งซื้อ) — เก็บไว้ใช้ตอนกด "ยืนยันสั่งซื้อ"
+      }
       dialog(receiptHTML());
     } else if (k === 'payrecv') {
       if (PAY_BUSY) return;
