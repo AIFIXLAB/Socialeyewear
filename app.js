@@ -10,7 +10,7 @@ const baht = n => '฿' + Number(n || 0).toLocaleString('th-TH');
 const num = v => (v === '' || v == null || isNaN(+v)) ? null : +v;
 const toast = m => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2800); };
 const errText = e => { const m = e?.message || String(e); try { return JSON.parse(m).message || m; } catch { return m; } };
-const APP_VERSION = 'v74'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
+const APP_VERSION = 'v75'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
 
 /* ---------- โครงสร้างข้อมูล (ตรงกับ supabase/schema.sql) ---------- */
 const COLS = {
@@ -360,6 +360,8 @@ const VA_ROWS = [['od', 'OD (ขวา)'], ['os', 'OS (ซ้าย)'], ['ou', '
 const VA_COLS = [['sc', 'SC Distance'], ['near', 'VA Near'], ['ph', 'VA PH'], ['vadist', 'VA แว่น Distance'], ['vanear', 'VA แว่น Near']];
 const SUB_ROWS = [['bva_od', 'BVA OD'], ['bva_os', 'BVA OS'], ['final_od', 'FINAL OD'], ['final_os', 'FINAL OS']];
 const SUB_COLS = [['sph', 'SPH'], ['cyl', 'CYL'], ['axis', 'AXIS'], ['prism1', 'PRISM1'], ['base1', 'BASE1'], ['prism2', 'PRISM2'], ['base2', 'BASE2'], ['add', 'ADD'], ['vacc', 'VA cc'], ['distpd', 'Dist PD'], ['nearpd', 'Near PD'], ['fh', 'FH'], ['sh', 'SH']];
+// คอลัมน์ขนาดที่วัดของกรอบแว่นแต่ละตัวที่ลอง (เพิ่ม/แก้/ลบกรอบได้ไม่จำกัดจำนวนในหน้าซักประวัติ) — เก็บเป็น prescriptions.meta.frames (array ของ object ตาม id)
+const FRAME_COLS = [['pd_od', 'PD (OD)'], ['pd_os', 'PD (OS)'], ['fh_od', 'FH (OD)'], ['fh_os', 'FH (OS)'], ['a', 'A'], ['b', 'B'], ['dbl', 'DBL'], ['ed', 'ED'], ['ffa', 'FFA'], ['pt', 'PT']];
 // อ่านค่าตาราง grid (VA / SUBJECTIVE) จาก form object d ตาม prefix เช่น 'va' หรือ 'sub'
 function readGrid(d, rows, cols, prefix) {
   const out = {};
@@ -391,7 +393,12 @@ function examIntakeDataFromForm(d) {
     dominant_eye: d.dominant_eye || null, dominant_hand: d.dominant_hand || null,
     sub: readGrid(d, SUB_ROWS, SUB_COLS, 'sub'),
     purpose_type: d.purpose_type || null, purpose_other: t(d.purpose_other),
-    examiner_role: t(d.examiner_role), notes2: t(d.notes2)
+    examiner_role: t(d.examiner_role), notes2: t(d.notes2),
+    frames: (K.frames || []).map(fid => {
+      const row = { id: fid, label: t(d['frame_' + fid + '_label']) };
+      FRAME_COLS.forEach(([ck]) => { row[ck] = t(d['frame_' + fid + '_' + ck]); });
+      return row;
+    }).filter(row => row.label || FRAME_COLS.some(([ck]) => row[ck]))
   };
 }
 function examIntakeHasData(m) {
@@ -409,6 +416,12 @@ function rxDraftFromMeta(m) {
   (m.eye_disease_rows || []).forEach((row, i) => { const n = i + 1; if (row.name) dr['ed' + n + '_name'] = row.name; if (row.clinic) dr['ed' + n + '_clinic'] = row.clinic; if (row.treat) dr['ed' + n + '_treat'] = row.treat; });
   const flattenGrid = (g, prefix) => { Object.entries(g || {}).forEach(([rk, row]) => { Object.entries(row || {}).forEach(([ck, v]) => { dr[`${prefix}_${rk}_${ck}`] = v; }); }); };
   flattenGrid(m.va, 'va'); flattenGrid(m.sub, 'sub');
+  dr._frameIds = (Array.isArray(m.frames) ? m.frames : []).map(fr => {
+    const fid = fr.id || uid();
+    if (fr.label) dr['frame_' + fid + '_label'] = fr.label;
+    FRAME_COLS.forEach(([ck]) => { if (fr[ck] != null) dr['frame_' + fid + '_' + ck] = fr[ck]; });
+    return fid;
+  });
   return dr;
 }
 // ดึงอาการ (CC) ที่ติ๊กไว้ของบันทึกเดิม — บันทึกใหม่จะมี meta.cc ตรงๆ, บันทึกเก่าให้พยายามอ่านจากหมายเหตุ (notes) แทน
@@ -471,6 +484,7 @@ function examIntakePrintView(custId, ccText, ccOther, m) {
   ${gridTbl(m.sub, SUB_ROWS, SUB_COLS) || '<div class="tag">ไม่มีข้อมูล</div>'}
   <h3 style="margin-top:14px">สรุป</h3>
   ${row('แว่นสำหรับ', m.purpose_type ? (PURPOSE_LABEL[m.purpose_type] || m.purpose_type) + (m.purpose_other ? ' · ' + m.purpose_other : '') : '')}
+  ${(m.frames || []).length ? `<div class="tag" style="margin:4px 0 2px">กรอบที่ลองวัด</div><div class="wrap" style="overflow-x:auto;margin:0 0 6px"><table><tr><th>กรอบ</th>${FRAME_COLS.map(([, l]) => `<th style="font-size:10.5px">${l}</th>`).join('')}</tr>${m.frames.map((fr, i) => `<tr><th style="text-align:left;white-space:nowrap;font-size:11.5px">${esc(fr.label || 'ตัวที่ ' + (i + 1))}</th>${FRAME_COLS.map(([ck]) => `<td style="text-align:center;font-size:11.5px">${esc(fr[ck] || '-')}</td>`).join('')}</tr>`).join('')}</table></div>` : ''}
   ${row('ผู้ตรวจ', m.examiner)}${row('ตำแหน่ง', m.examiner_role)}
   ${m.notes2 ? `<div style="margin-top:10px;padding-top:8px;border-top:1px dashed var(--line,#e4ddd2)">${esc(m.notes2)}</div>` : ''}
   </div>
@@ -490,8 +504,8 @@ const NAV = [['customers', 'ลูกค้า'], ['products', 'สินค้�
 const S = { v: 'customers', need: 'general', cart: [], cust: '', disc: 0, notes: '', q: '', pq: '', ptype: 'all', pbrand: '', staff: null, mode: 'splash', custView: 'all', custFrom: '', custTo: '', catQ: '', catCompare: [], catDetail: null, catReturn: '', catDesign: '', catMain: '', activeSeller: null, varPick: null, knSel: [], knIdx: 0 };
 const freshLR = () => ({ purpose: [], other: '', vision: [], lenstype: [], brand: [], level: [], lensIndex: [], coating: [], photochromic: [], age: '', budget: '', occupation: '', notes: '' });
 const freshDisc = () => ({ type: 'amt', val: 0 });
-let K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, discFrame: freshDisc(), discLens: freshDisc(), lensFilterOn: true, examMeta: null, examDraft: {}, pickupDate: '', paidFull: false, editRxId: null, editRxFrom: null };
-const kioskReset = () => { K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, detailProdId: null, discFrame: freshDisc(), discLens: freshDisc(), lensFilterOn: true, examMeta: null, examDraft: {}, pickupDate: '', paidFull: false, editRxId: null, editRxFrom: null }; RCPT = null; RCPT_FOR = null; };
+let K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, discFrame: freshDisc(), discLens: freshDisc(), lensFilterOn: true, examMeta: null, examDraft: {}, frames: [], pickupDate: '', paidFull: false, editRxId: null, editRxFrom: null };
+const kioskReset = () => { K = { step: 'lookup', custId: null, phone: '', photo: null, pcat: 'frame', pq: '', cc: [], ccOther: '', ccNew: '', hist: [], lr: freshLR(), lookupResults: [], lastQuoteId: null, detailProdId: null, discFrame: freshDisc(), discLens: freshDisc(), lensFilterOn: true, examMeta: null, examDraft: {}, frames: [], pickupDate: '', paidFull: false, editRxId: null, editRxFrom: null }; RCPT = null; RCPT_FOR = null; };
 // เปิดฟอร์มแก้ไขผลตรวจสายตาที่บันทึกไว้แล้ว — ดึงข้อมูลเดิมทั้งหมดกลับเข้าฟอร์ม ไม่ว่าจะกดมาจากหน้าลูกค้า (หลังบ้าน) หรือหน้าประวัติการใช้บริการ (ฝั่งหน้าร้าน)
 function openEditExam(id, from) {
   const r = find('prescriptions', id); if (!r) return;
@@ -499,13 +513,14 @@ function openEditExam(id, from) {
   K.editRxId = r.id; K.editRxFrom = from; K.custId = r.customer_id;
   K.cc = cco.cc; K.ccOther = cco.other; K.ccNew = ''; K.examMeta = null;
   K.examDraft = rxDraftFromMeta(r.meta || {}); K.hist = [];
+  K.frames = K.examDraft._frameIds || []; delete K.examDraft._frameIds;
   closeDlg(); S.mode = 'kiosk'; K.step = 'examintake'; render();
   toast('กำลังแก้ไขผลตรวจสายตา — แก้ไขช่องที่ต้องการแล้วกด "บันทึกการแก้ไข"');
 }
 // ออกจากโหมดแก้ไขผลตรวจสายตาโดยไม่บันทึก — กลับไปจุดที่กดเข้ามา (หน้าประวัติการใช้บริการ หรือหน้าลูกค้าในหลังบ้าน)
 function exitEditExam() {
   const cid = K.custId, from = K.editRxFrom;
-  K.editRxId = null; K.editRxFrom = null; K.examDraft = {}; K.cc = []; K.ccOther = '';
+  K.editRxId = null; K.editRxFrom = null; K.examDraft = {}; K.frames = []; K.cc = []; K.ccOther = '';
   if (from === 'kiosk') { K.step = 'history'; K.hist = []; render(); }
   else { S.mode = ''; render(); custView(cid); }
 }
@@ -2133,6 +2148,7 @@ function kioskExamIntake() {
   const c = K.custId ? find('customer_profiles', K.custId) : null;
   const ageGuess = (c && c.notes && (c.notes.match(/อายุ\s*(\d+)/) || [])[1]) || '';
   if (!K.examDraft) K.examDraft = {};
+  if (!K.frames) K.frames = [];
   const dr = K.examDraft; // ค่าร่างที่พิมพ์ไว้ล่าสุด (กันข้อมูลหายตอน render ซ้ำ เช่น ตอนซิงก์พื้นหลัง)
   const chip = s => {
     const on = K.cc.includes(s);
@@ -2257,6 +2273,20 @@ function kioskExamIntake() {
           <input name="purpose_other" value="${esc(dr.purpose_other || '')}" placeholder="ระบุ (ถ้าเลือกอื่นๆ)" style="flex:1;min-width:140px">
         </span>
       </label>
+      <div style="margin-bottom:12px">
+        <span class="lbl" style="display:block;font-size:13px;color:var(--mute,#69756d);margin-bottom:8px">กรอบที่ลองวัด (เพิ่ม/แก้/ลบได้ตลอด)</span>
+        ${K.frames.length ? K.frames.map((fid, idx) => `
+        <div style="border:1px solid #d7dde6;border-radius:8px;padding:10px 12px;margin:0 0 10px">
+          <div style="display:flex;gap:10px;align-items:center;margin-bottom:8px">
+            <input name="frame_${fid}_label" value="${esc(dr['frame_' + fid + '_label'] || '')}" placeholder="ชื่อ/รุ่นกรอบ ตัวที่ ${idx + 1}" style="flex:1;font-weight:600">
+            <button type="button" class="btn line sm bad" data-act="examframedel" data-id="${fid}">ลบ</button>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(78px,1fr));gap:10px">
+            ${FRAME_COLS.map(([ck, cl]) => uw(cl, `frame_${fid}_${ck}`)).join('')}
+          </div>
+        </div>`).join('') : '<p class="tag" style="margin:0 0 10px">ยังไม่มีกรอบที่บันทึกไว้ — กด "+ เพิ่มกรอบ" เพื่อเริ่มวัด</p>'}
+        <button type="button" class="btn line sm" data-act="examframeadd">+ เพิ่มกรอบ</button>
+      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         ${uw('ผู้ตรวจ', 'examiner')}${uw('ตำแหน่ง', 'examiner_role')}
       </div>
@@ -3372,7 +3402,7 @@ document.addEventListener('click', e => {
     K.hist.push(K.step);
     if (id === 'lens') { K.lr = freshLR(); K.step = 'lensreq'; render(); }
     else if (id === 'frame') { S.cust = K.custId; K.pq = ''; K.pcat = 'frame'; K.step = 'pick'; render(); }
-    else { if (id === 'exam') { K.cc = []; K.ccOther = ''; K.ccNew = ''; K.examMeta = null; K.examDraft = {}; } K.step = id === 'exam' ? 'examintake' : 'claimform'; render(); }
+    else { if (id === 'exam') { K.cc = []; K.ccOther = ''; K.ccNew = ''; K.examMeta = null; K.examDraft = {}; K.frames = []; } K.step = id === 'exam' ? 'examintake' : 'claimform'; render(); }
   }
   else if (a === 'lrtoggle') { const group = b.dataset.group, arr = K.lr[group] || (K.lr[group] = []); K.lr[group] = arr.includes(id) ? arr.filter(x => x !== id) : [...arr, id]; render(); }
   else if (a === 'lensreqgo') { S.cust = K.custId; K.pq = ''; K.pcat = 'lens'; K.hist.push(K.step); K.step = 'pick'; render(); }
@@ -3403,6 +3433,13 @@ document.addEventListener('click', e => {
     ls.set('ccSeed', ls.get('ccSeed', []).filter(x => x !== id));
     if (CC_SEED.includes(id)) ls.set('ccSeedRemoved', [...new Set([...ls.get('ccSeedRemoved', []), id])]);
     K.cc = K.cc.filter(x => x !== id);
+    render();
+  }
+  else if (a === 'examframeadd') { if (!K.frames) K.frames = []; K.frames = [...K.frames, uid()]; render(); }
+  else if (a === 'examframedel') {
+    if (!confirm('ลบกรอบนี้ออกจากรายการที่วัดไว้?')) return;
+    K.frames = (K.frames || []).filter(x => x !== id);
+    FRAME_COLS.concat([['label']]).forEach(([ck]) => { if (K.examDraft) delete K.examDraft['frame_' + id + '_' + ck]; });
     render();
   }
   else if (a === 'kioskaddprod') kioskQuickAddProd(id);
@@ -3787,7 +3824,7 @@ document.addEventListener('submit', async e => {
         notes: notes || null, deleted_at: null
       });
       const wasEdit = !!editId, editCustId = K.custId, editFrom = K.editRxFrom;
-      K.cc = []; K.ccOther = ''; K.ccNew = ''; K.examMeta = null; K.examDraft = {}; K.hist = []; K.editRxId = null; K.editRxFrom = null;
+      K.cc = []; K.ccOther = ''; K.ccNew = ''; K.examMeta = null; K.examDraft = {}; K.frames = []; K.hist = []; K.editRxId = null; K.editRxFrom = null;
       commit();
       if (wasEdit) {
         if (editFrom === 'kiosk') { K.custId = editCustId; K.step = 'history'; render(); toast('บันทึกการแก้ไขผลตรวจสายตาแล้ว'); }
