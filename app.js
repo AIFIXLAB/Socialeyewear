@@ -10,7 +10,7 @@ const baht = n => '฿' + Number(n || 0).toLocaleString('th-TH');
 const num = v => (v === '' || v == null || isNaN(+v)) ? null : +v;
 const toast = m => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2800); };
 const errText = e => { const m = e?.message || String(e); try { return JSON.parse(m).message || m; } catch { return m; } };
-const APP_VERSION = 'v76'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
+const APP_VERSION = 'v77'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
 
 /* ---------- โครงสร้างข้อมูล (ตรงกับ supabase/schema.sql) ---------- */
 const COLS = {
@@ -1751,7 +1751,7 @@ function kncustomForm(p = {}) {
   </form>`);
 }
 function custForm(c = {}, from = '') {
-  dialog(`<form data-form="cust" data-id="${c.id || ''}" data-from="${from}"><h2>${c.id ? 'แก้ไขลูกค้า' : 'เพิ่มลูกค้า'}</h2><div class="two">${fld('full_name', 'ชื่อ-นามสกุล', c.full_name, 'text', 'required')}${fld('customer_code', 'รหัสลูกค้า (รันต่อจากเลขล่าสุด)', c.id ? c.customer_code : nextCode())}${fld('phone', 'โทรศัพท์', c.phone, 'tel')}${fld('budget_thb', 'งบประมาณ (บาท)', c.budget_thb, 'number', 'min="0"')}</div>${fld('lifestyle', 'ไลฟ์สไตล์ / การใช้งาน', c.lifestyle)}<label>บันทึก<textarea name="notes" rows="2">${esc(c.notes)}</textarea></label><label class="chk"><input type="checkbox" name="consent" ${c.consent_recorded_at ? 'checked' : ''}> ลูกค้ายินยอมให้เก็บข้อมูลส่วนบุคคลและค่าสายตา${c.consent_recorded_at ? ` (บันทึกเมื่อ ${day(c.consent_recorded_at)})` : ''}</label>${foot('บันทึกลูกค้า')}</form>`);
+  dialog(`<form data-form="cust" data-id="${c.id || ''}" data-from="${from}"><h2>${c.id ? 'แก้ไขลูกค้า' : 'เพิ่มลูกค้า'}</h2><div class="two">${fld('full_name', 'ชื่อ-นามสกุล', c.full_name, 'text', 'required')}${fld('customer_code', 'รหัสลูกค้า (รันต่อจากเลขล่าสุด)', c.id ? c.customer_code : nextCode())}${fld('phone', 'โทรศัพท์', c.phone, 'tel')}${fld('budget_thb', 'งบประมาณ (บาท)', c.budget_thb, 'text', 'inputmode="numeric"')}</div>${fld('lifestyle', 'ไลฟ์สไตล์ / การใช้งาน', c.lifestyle)}<label>บันทึก<textarea name="notes" rows="2">${esc(c.notes)}</textarea></label><label class="chk"><input type="checkbox" name="consent" ${c.consent_recorded_at ? 'checked' : ''}> ลูกค้ายินยอมให้เก็บข้อมูลส่วนบุคคลและค่าสายตา${c.consent_recorded_at ? ` (บันทึกเมื่อ ${day(c.consent_recorded_at)})` : ''}</label>${foot('บันทึกลูกค้า')}</form>`);
 }
 function rxForm(cid, pre = '') {
   const g = (n, l, st = '0.25') => fld(n, l, '', 'number', `step="${st}"`);
@@ -2191,7 +2191,7 @@ function kioskExamIntake() {
       ${uw('รหัสลูกค้า', 'patient_code', '', 'text', '', c && c.customer_code || '')}
       ${uw('วันที่ตรวจ', 'exam_date', '', 'date', '', now().slice(0, 10))}
       ${uw('ชื่อ-นามสกุล', 'cust_fullname', '', 'text', '', c && c.full_name || '')}
-      ${uw('อายุ', 'cust_age', 'ปี', 'number', '', ageGuess || '')}
+      ${uw('อายุ', 'cust_age', 'ปี', 'text', 'inputmode="numeric"', ageGuess || '')}
       ${uw('เบอร์โทร', 'cust_phone', '', 'text', '', c && c.phone || '')}
     </div>
 
@@ -2254,8 +2254,8 @@ function kioskExamIntake() {
         ${uw('Auto Ref. L', 'autoref_os', 'เช่น -1.00 -0.50 x180')}
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px">
-        ${uw('PD ref. R', 'pdref_od', '', 'number', 'step="0.5"')}
-        ${uw('PD ref. L', 'pdref_os', '', 'number', 'step="0.5"')}
+        ${uw('PD ref. R', 'pdref_od', '', 'text', 'inputmode="decimal"')}
+        ${uw('PD ref. L', 'pdref_os', '', 'text', 'inputmode="decimal"')}
       </div>`)}
 
     ${box('VA', `${gridTable(VA_ROWS, VA_COLS, 'va')}
