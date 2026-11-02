@@ -10,7 +10,7 @@ const baht = n => '฿' + Number(n || 0).toLocaleString('th-TH');
 const num = v => (v === '' || v == null || isNaN(+v)) ? null : +v;
 const toast = m => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2800); };
 const errText = e => { const m = e?.message || String(e); try { return JSON.parse(m).message || m; } catch { return m; } };
-const APP_VERSION = 'v75'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
+const APP_VERSION = 'v76'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
 
 /* ---------- โครงสร้างข้อมูล (ตรงกับ supabase/schema.sql) ---------- */
 const COLS = {
@@ -359,9 +359,9 @@ const EYE_DISEASE_ROWS = [1, 2, 3, 4]; // แถวโรคตา/รักษ�
 const VA_ROWS = [['od', 'OD (ขวา)'], ['os', 'OS (ซ้าย)'], ['ou', 'OU (สองตา)']];
 const VA_COLS = [['sc', 'SC Distance'], ['near', 'VA Near'], ['ph', 'VA PH'], ['vadist', 'VA แว่น Distance'], ['vanear', 'VA แว่น Near']];
 const SUB_ROWS = [['bva_od', 'BVA OD'], ['bva_os', 'BVA OS'], ['final_od', 'FINAL OD'], ['final_os', 'FINAL OS']];
-const SUB_COLS = [['sph', 'SPH'], ['cyl', 'CYL'], ['axis', 'AXIS'], ['prism1', 'PRISM1'], ['base1', 'BASE1'], ['prism2', 'PRISM2'], ['base2', 'BASE2'], ['add', 'ADD'], ['vacc', 'VA cc'], ['distpd', 'Dist PD'], ['nearpd', 'Near PD'], ['fh', 'FH'], ['sh', 'SH']];
+const SUB_COLS = [['sph', 'SPH'], ['cyl', 'CYL'], ['axis', 'AXIS'], ['prism1', 'PRISM1'], ['prism2', 'PRISM2'], ['add', 'ADD'], ['vacc', 'VA cc'], ['distpd', 'Dist PD'], ['nearpd', 'Near PD'], ['range', 'Range (cm)']];
 // คอลัมน์ขนาดที่วัดของกรอบแว่นแต่ละตัวที่ลอง (เพิ่ม/แก้/ลบกรอบได้ไม่จำกัดจำนวนในหน้าซักประวัติ) — เก็บเป็น prescriptions.meta.frames (array ของ object ตาม id)
-const FRAME_COLS = [['pd_od', 'PD (OD)'], ['pd_os', 'PD (OS)'], ['fh_od', 'FH (OD)'], ['fh_os', 'FH (OS)'], ['a', 'A'], ['b', 'B'], ['dbl', 'DBL'], ['ed', 'ED'], ['ffa', 'FFA'], ['pt', 'PT']];
+const FRAME_COLS = [['pd_od', 'PD (OD)'], ['pd_os', 'PD (OS)'], ['fh_od', 'FH (OD)'], ['fh_os', 'FH (OS)'], ['a', 'A'], ['b', 'B'], ['dbl', 'DBL'], ['ed', 'ED'], ['ffa', 'FFA'], ['pt', 'PT'], ['bvd', 'BVD']];
 // อ่านค่าตาราง grid (VA / SUBJECTIVE) จาก form object d ตาม prefix เช่น 'va' หรือ 'sub'
 function readGrid(d, rows, cols, prefix) {
   const out = {};
