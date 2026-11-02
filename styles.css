@@ -52,8 +52,14 @@ dialog::backdrop{background:rgba(10,25,17,.55)}.two{display:grid;grid-template-c
  nav button.on{color:var(--gold)}.two{grid-template-columns:1fr}
 }
 @media print{body{display:block;background:#fff}.side,main,#toast,#kioskOv,.noprint{display:none!important}
- dialog{position:static;border:0;width:100%;padding:0;color:#000;background:#fff}dialog::backdrop{display:none}
- dialog#lightboxDlg,dialog#sigDlg{display:none!important}}
+ dialog{position:static;border:0;width:100%;padding:0;color:#000;background:#fff;max-height:none!important;overflow:visible!important}dialog::backdrop{display:none}
+ dialog#lightboxDlg,dialog#sigDlg{display:none!important}
+ .sheet{font-size:12px;line-height:1.35}
+ .sheet h2{font-size:17px;margin-bottom:2px}
+ .sheet h3{margin:8px 0 3px;font-size:12px}
+ .sheet .row{padding:1.5px 0}
+ .sheet table th,.sheet table td{padding:4px 6px}
+ @page{margin:10mm}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
 /* v2 */
 .tools{display:flex;gap:8px;flex-wrap:wrap}.gap{margin-top:26px}
