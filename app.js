@@ -10,7 +10,7 @@ const baht = n => '฿' + Number(n || 0).toLocaleString('th-TH');
 const num = v => (v === '' || v == null || isNaN(+v)) ? null : +v;
 const toast = m => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2800); };
 const errText = e => { const m = e?.message || String(e); try { return JSON.parse(m).message || m; } catch { return m; } };
-const APP_VERSION = 'v77'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
+const APP_VERSION = 'v78'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
 
 /* ---------- โครงสร้างข้อมูล (ตรงกับ supabase/schema.sql) ---------- */
 const COLS = {
@@ -2522,12 +2522,17 @@ function kioskProductBrowse() {
       <input placeholder="สีกรอบ" value="${esc(x.color || '')}" data-bind="cartcolor:${x.id}" style="width:120px;font-size:12.5px;padding:6px 8px">
       <input type="text" inputmode="numeric" placeholder="ราคาขาย" value="${x.price || ''}" data-bind="cartprice:${x.id}" style="width:120px;font-size:12.5px;padding:6px 8px">
     </div>` : ''}
+    ${x && type === 'other' ? `<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center">
+      <span class="tag">ราคา (แก้ได้ ถ้าคิดไม่เท่าราคาตั้ง)</span>
+      <input type="text" inputmode="numeric" placeholder="ราคา" value="${x.price || ''}" data-bind="cartprice:${x.id}" style="width:120px;font-size:12.5px;padding:6px 8px">
+      <input placeholder="หมายเหตุ (ถ้ามี)" value="${esc(x.note || '')}" data-bind="cartnote:${x.id}" style="flex:1;min-width:140px;font-size:12.5px;padding:6px 8px">
+    </div>` : ''}
   </div>`; };
   const tab = (id, l) => `<button data-act="kioskcat" data-id="${id}" style="padding:9px 18px;border-radius:999px;border:1px solid ${K.pcat === id ? 'transparent' : 'rgba(0,0,0,.15)'};background:${K.pcat === id ? '#23262a' : 'rgba(255,255,255,.55)'};color:${K.pcat === id ? '#fff' : '#23262a'};font-size:13px;cursor:pointer">${l}</button>`;
-  const label = type === 'frame' ? 'กรอบแว่น' : 'เลนส์';
+  const label = type === 'frame' ? 'กรอบแว่น' : type === 'lens' ? 'เลนส์' : 'บริการ/อื่นๆ';
   const summary = type === 'lens' ? lrSummary() : '';
   return `<div>
-    <div style="display:flex;gap:10px;margin-bottom:14px;align-items:center">${tab('frame', 'กรอบแว่น')}${tab('lens', 'เลนส์')}${type === 'lens' ? `<button class="btn line sm" data-act="customlens" style="margin-left:8px">+ กรอกเลนส์เอง</button>` : ''}<span class="tag" style="margin-left:auto;align-self:center">ตะกร้า ${S.cart.length} รายการ</span></div>
+    <div style="display:flex;gap:10px;margin-bottom:14px;align-items:center">${tab('frame', 'กรอบแว่น')}${tab('lens', 'เลนส์')}${tab('other', 'อื่นๆ')}${type === 'lens' ? `<button class="btn line sm" data-act="customlens" style="margin-left:8px">+ กรอกเลนส์เอง</button>` : ''}<span class="tag" style="margin-left:auto;align-self:center">ตะกร้า ${S.cart.length} รายการ</span></div>
     ${summary ? `<div class="panel" style="padding:10px 14px;margin-bottom:14px;font-size:12.5px;color:#444"><b>ความต้องการลูกค้า:</b> ${esc(summary)}</div>` : ''}
     <div style="display:flex;gap:10px;margin-bottom:14px">
       <input placeholder="ค้นหา${label} ชื่อ/ยี่ห้อ" value="${esc(K.pq || '')}" data-bind="kpq" style="flex:1">
@@ -2698,7 +2703,7 @@ function receiptData(forQuoteId) {
     const meta = q.meta || {};
     return {
       customerId: q.customer_id, saved: true,
-      items: items.map(i => ({ name: i.item_name_snapshot, type: i.product_type, qty: i.quantity, price: i.unit_price_thb, lineTotal: i.line_total_thb, productId: i.product_id, code: (i.meta || {}).code || '', color: (i.meta || {}).color || '', frameType: (i.meta || {}).frameType || '', tint: (i.meta || {}).tint || '', corridor: (i.meta || {}).corridor || '', lensType: (i.meta || {}).lensType || '', customLens: (i.meta || {}).customLens || null })),
+      items: items.map(i => ({ name: i.item_name_snapshot, type: i.product_type, qty: i.quantity, price: i.unit_price_thb, lineTotal: i.line_total_thb, productId: i.product_id, code: (i.meta || {}).code || '', color: (i.meta || {}).color || '', frameType: (i.meta || {}).frameType || '', tint: (i.meta || {}).tint || '', corridor: (i.meta || {}).corridor || '', lensType: (i.meta || {}).lensType || '', customLens: (i.meta || {}).customLens || null, note: (i.meta || {}).note || '' })),
       sub: q.subtotal_thb, discTotal: q.discount_thb, total: q.total_thb,
       defNo: q.quote_number || '', defDate: q.receipt_date || (q.created_at || '').slice(0, 10) || now().slice(0, 10),
       defPay: meta.payment || [], defSig: meta.signature || '', defSeller: meta.seller || '',
@@ -2708,7 +2713,7 @@ function receiptData(forQuoteId) {
   const c = cartCalc();
   return {
     customerId: K.custId, saved: false,
-    items: S.cart.map(i => ({ name: i.name, type: i.type, qty: i.qty, price: i.price, lineTotal: i.price * i.qty, productId: i.productId || i.id, code: i.code || '', color: i.color || '', frameType: i.frameType || '', tint: i.tint || '', corridor: i.corridor || '', lensType: i.lensType || '', customLens: i.customLens || null })),
+    items: S.cart.map(i => ({ name: i.name, type: i.type, qty: i.qty, price: i.price, lineTotal: i.price * i.qty, productId: i.productId || i.id, code: i.code || '', color: i.color || '', frameType: i.frameType || '', tint: i.tint || '', corridor: i.corridor || '', lensType: i.lensType || '', customLens: i.customLens || null, note: i.note || '' })),
     sub: c.sub, discTotal: c.discTotal, total: c.total,
     defNo: '', defDate: now().slice(0, 10),
     defPay: [], defSig: '', defSeller: S.activeSeller || '',
@@ -2725,6 +2730,7 @@ function cartItemMeta(i) {
   if (i.corridor) m.corridor = i.corridor;
   if (i.lensType) m.lensType = i.lensType;
   if (i.customLens) m.customLens = i.customLens;
+  if (i.note) m.note = i.note;
   return Object.keys(m).length ? m : null;
 }
 function itemExtraLine(item, type) {
@@ -2743,6 +2749,7 @@ function itemExtraLine(item, type) {
     }
     const idx = p ? lensIndexSummary(p) : ''; return [p?.brand ? `ยี่ห้อ ${p.brand}` : '', idx ? `Index ${idx}` : '', item?.lensType ? `ชนิด ${item.lensType}` : '', item?.corridor ? `Corridor ${item.corridor}` : '', item?.tint ? `สี ${item.tint}` : '', p?.sku ? `รหัส ${p.sku}` : ''].filter(Boolean).join(' · ');
   }
+  if (item?.note) return item.note;
   return '';
 }
 function receiptHTML() {
@@ -3607,6 +3614,7 @@ document.addEventListener('input', e => {
   else if (k.startsWith('cartcolor:')) { const x = S.cart.find(i => i.id === k.slice(10)); if (x) x.color = e.target.value; }
   else if (k.startsWith('cartframetype:')) { const x = S.cart.find(i => i.id === k.slice(14)); if (x) x.frameType = e.target.value || null; }
   else if (k.startsWith('cartprice:')) { const x = S.cart.find(i => i.id === k.slice(10)); if (x) x.price = Math.max(0, +e.target.value || 0); refocus(); }
+  else if (k.startsWith('cartnote:')) { const x = S.cart.find(i => i.id === k.slice(9)); if (x) x.note = e.target.value; }
   else if (k === 'vptint') { if (S.varPick) S.varPick.tint = e.target.value; }
   else if (k === 'vpcorridor') { if (S.varPick) S.varPick.corridor = e.target.value; }
   else if (k === 'vptype') { if (S.varPick) S.varPick.lensType = e.target.value; }
