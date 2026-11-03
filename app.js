@@ -10,7 +10,7 @@ const baht = n => '฿' + Number(n || 0).toLocaleString('th-TH');
 const num = v => (v === '' || v == null || isNaN(+v)) ? null : +v;
 const toast = m => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2800); };
 const errText = e => { const m = e?.message || String(e); try { return JSON.parse(m).message || m; } catch { return m; } };
-const APP_VERSION = 'v79'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
+const APP_VERSION = 'v80'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
 
 /* ---------- โครงสร้างข้อมูล (ตรงกับ supabase/schema.sql) ---------- */
 const COLS = {
@@ -2586,7 +2586,6 @@ function kioskCart() {
       <button class="btn line" data-act="kioskback">ย้อนกลับ</button>
       ${S.cart.length ? `<button class="btn line" data-act="receiptpreview">ดูตัวอย่าง/พิมพ์ใบเสร็จ</button>` : ''}
       ${S.cart.length ? `<button class="btn line" data-act="kioskdeposit">รับมัดจำ</button>` : ''}
-      <button class="btn" data-act="kioskcheckout">ยืนยันสั่งซื้อ</button>
     </div>
   </div>`;
 }
@@ -2838,8 +2837,29 @@ function applyReceiptForm(f) {
     save('quotes', { ...q, status: newStatus, quote_number: RCPT.no || null, receipt_date: RCPT.date, meta });
     commit();
   } else {
-    K.paidFull = paidFullChecked; // ยังไม่มีบิลจริง (ดูตัวอย่างก่อนยืนยันสั่งซื้อ) — เก็บไว้ใช้ตอนกด "ยืนยันสั่งซื้อ"
+    K.paidFull = paidFullChecked; // ยังไม่มีบิลจริง (ดูตัวอย่างก่อนพิมพ์ใบเสร็จ) — เก็บไว้ใช้ตอนบันทึกออเดอร์
   }
+}
+// บันทึกออเดอร์จริงจากตะกร้า (สร้าง quotes + quote_items) — ใช้ตอนกด "พิมพ์ใบเสร็จ" จากหน้าตัวอย่างก่อนมีบิลจริง
+// (เดิมคือโค้ดของปุ่ม "ยืนยันสั่งซื้อ" ที่ถูกเอาออกไปแล้ว เพื่อรวมขั้นตอน "บันทึก" กับ "พิมพ์ใบเสร็จ" เป็นปุ่มเดียว กันพนักงานลืมกดบันทึก/กดซ้ำซ้อน)
+function kioskSaveOrder() {
+  if (!S.cart.length) return null;
+  S.cust = K.custId;
+  const c = cartCalc(), qid = uid();
+  const lrNote = lrSummary();
+  const discNote = c.discTotal ? `ส่วนลด — กรอบ: ${c.discFrameAmt ? baht(c.discFrameAmt) : '-'} / เลนส์: ${c.discLensAmt ? baht(c.discLensAmt) : '-'}` : '';
+  const payVals = RCPT ? RCPT.pay.slice() : [];
+  const meta = { payment: payVals, signature: RCPT ? (RCPT.sig || '') : '', seller: S.activeSeller || '', pickupDate: K.pickupDate || null };
+  if (K.paidFull && c.total > 0.004) {
+    meta.payments = [{ id: uid(), kind: 'final', amount: c.total, date: now().slice(0, 10), methods: payVals, note: 'ติ๊กชำระครบแล้วจากหน้าตัวอย่างใบเสร็จก่อนบันทึกออเดอร์', seller: S.activeSeller || null, docNo: nextDepositNo(), at: now() }];
+  }
+  const quoteNo = (RCPT && RCPT.no) ? RCPT.no : nextReceiptNo();
+  save('quotes', { id: qid, customer_id: S.cust || null, quote_number: quoteNo, status: 'converted', subtotal_thb: c.sub, discount_thb: c.discTotal, total_thb: c.total, notes: [lrNote ? `ความต้องการลูกค้า: ${lrNote}` : '', discNote].filter(Boolean).join(' · ') || null, valid_until: null, receipt_date: now().slice(0, 10), meta, deleted_at: null });
+  const cartBefore = S.cart.slice();
+  cartBefore.forEach(i => save('quote_items', { id: uid(), quote_id: qid, product_id: i.productId || i.id, item_name_snapshot: i.name, product_type: i.type, quantity: i.qty, unit_price_thb: i.price, line_total_thb: i.price * i.qty, meta: cartItemMeta(i), deleted_at: null }));
+  verifySaleItems(qid, cartBefore);
+  S.cart = []; K.hist = []; K.lr = freshLR(); K.lastQuoteId = qid; K.discFrame = freshDisc(); K.discLens = freshDisc(); K.pickupDate = ''; K.paidFull = false; RCPT = null; RCPT_FOR = null; commit();
+  return qid;
 }
 // ===== ระบบรับเงินมัดจำ / รับชำระส่วนที่เหลือ =====
 let PAY_BUSY = false;
@@ -3395,8 +3415,17 @@ document.addEventListener('click', e => {
       RCPT.no = nextReceiptNo();
       if (RCPT_FOR) { const q = find('quotes', RCPT_FOR); save('quotes', { ...q, quote_number: RCPT.no }); commit(); }
     }
+    const isNewSale = !RCPT_FOR; // เปิดจากหน้าตัวอย่างก่อนมีบิลจริง — พิมพ์เสร็จแล้วบันทึกออเดอร์+ปิดหน้าขายอัตโนมัติ กันลืมกดบันทึก/กดซ้ำซ้อน
     dialog(receiptHTML());
-    setTimeout(() => window.print(), 30);
+    setTimeout(() => {
+      window.print();
+      if (isNewSale) {
+        const qid = kioskSaveOrder();
+        closeDlg();
+        if (qid) { K.step = 'done'; toast('พิมพ์ใบเสร็จและบันทึกการสั่งซื้อแล้ว'); }
+        render();
+      }
+    }, 30);
   }
   else if (a === 'close') closeDlg();
   else if (a === 'logout') { if (!pendingCount() || confirm('ยังมีข้อมูลที่ไม่ได้ซิงก์ ออกจากระบบต่อหรือไม่? (ข้อมูลยังอยู่ในเครื่อง)')) { sess = null; ls.set('sess', null); S.staff = null; render(); } }
@@ -3481,21 +3510,10 @@ document.addEventListener('click', e => {
   else if (a === 'kioskdelprod') { if (confirm('ลบสินค้านี้?')) { S.cart = S.cart.filter(i => i.id !== id && i.productId !== id); softDelete('products', id); render(); } }
   else if (a === 'kioskproddetail') { S.catReturn = 'kiosk'; S.catDetail = id; S.mode = 'lenscat'; render(); }
   else if (a === 'kioskcheckout') {
-    if (!S.cart.length) return toast('เลือกสินค้าอย่างน้อย 1 รายการก่อน');
-    S.cust = K.custId;
-    const c = cartCalc(), qid = uid();
-    const lrNote = lrSummary();
-    const discNote = c.discTotal ? `ส่วนลด — กรอบ: ${c.discFrameAmt ? baht(c.discFrameAmt) : '-'} / เลนส์: ${c.discLensAmt ? baht(c.discLensAmt) : '-'}` : '';
-    const payVals = RCPT ? RCPT.pay.slice() : [];
-    const meta = { payment: payVals, signature: RCPT ? (RCPT.sig || '') : '', seller: S.activeSeller || '', pickupDate: K.pickupDate || null };
-    if (K.paidFull && c.total > 0.004) {
-      meta.payments = [{ id: uid(), kind: 'final', amount: c.total, date: now().slice(0, 10), methods: payVals, note: 'ติ๊กชำระครบแล้วจากหน้าตัวอย่างใบเสร็จก่อนยืนยันสั่งซื้อ', seller: S.activeSeller || null, docNo: nextDepositNo(), at: now() }];
-    }
-    save('quotes', { id: qid, customer_id: S.cust || null, quote_number: nextReceiptNo(), status: 'converted', subtotal_thb: c.sub, discount_thb: c.discTotal, total_thb: c.total, notes: [lrNote ? `ความต้องการลูกค้า: ${lrNote}` : '', discNote].filter(Boolean).join(' · ') || null, valid_until: null, receipt_date: now().slice(0, 10), meta, deleted_at: null });
-    const cartBefore = S.cart.slice();
-    cartBefore.forEach(i => save('quote_items', { id: uid(), quote_id: qid, product_id: i.productId || i.id, item_name_snapshot: i.name, product_type: i.type, quantity: i.qty, unit_price_thb: i.price, line_total_thb: i.price * i.qty, meta: cartItemMeta(i), deleted_at: null }));
-    verifySaleItems(qid, cartBefore);
-    S.cart = []; K.step = 'done'; K.hist = []; K.lr = freshLR(); K.lastQuoteId = qid; K.discFrame = freshDisc(); K.discLens = freshDisc(); K.pickupDate = ''; K.paidFull = false; RCPT = null; RCPT_FOR = null; commit(); render(); toast('บันทึกการสั่งซื้อแล้ว');
+    // ปุ่มนี้ถูกเอาออกจากหน้าสรุปรายการแล้ว (รวมเข้ากับปุ่ม "พิมพ์ใบเสร็จ" แทน) เหลือไว้เผื่อมีที่อื่นเรียกใช้
+    const qid = kioskSaveOrder();
+    if (qid) { K.step = 'done'; render(); toast('บันทึกการสั่งซื้อแล้ว'); }
+    else toast('เลือกสินค้าอย่างน้อย 1 รายการก่อน');
   }
   else if (a === 'kioskdeposit') {
     if (!S.cart.length) return toast('เลือกสินค้าอย่างน้อย 1 รายการก่อน');
