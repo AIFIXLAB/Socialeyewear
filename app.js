@@ -10,7 +10,7 @@ const baht = n => '฿' + Number(n || 0).toLocaleString('th-TH');
 const num = v => (v === '' || v == null || isNaN(+v)) ? null : +v;
 const toast = m => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2800); };
 const errText = e => { const m = e?.message || String(e); try { return JSON.parse(m).message || m; } catch { return m; } };
-const APP_VERSION = 'v78'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
+const APP_VERSION = 'v79'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
 
 /* ---------- โครงสร้างข้อมูล (ตรงกับ supabase/schema.sql) ---------- */
 const COLS = {
@@ -2800,7 +2800,7 @@ function receiptHTML() {
         <button type="button" class="btn line sm" data-act="opensigpad">${RCPT.sig ? 'แก้ลายเซ็น' : 'ขอลายเซ็นลูกค้า'}</button>
         ${RCPT.sig ? `<button type="button" class="btn line sm bad" data-act="sigremove">ลบลายเซ็น</button>` : ''}
       </div>
-      <p class="tag">แก้ข้อมูลแล้วกด "อัปเดตตัวอย่าง" เพื่อให้ใบเสร็จด้านบนเปลี่ยนตาม ก่อนสั่งพิมพ์ — ติ๊ก "ชำระครบแล้ว" แล้วกด "อัปเดตตัวอย่าง" ระบบจะบันทึกว่าไม่มียอดค้างชำระทันที</p>
+      <p class="tag">แก้ข้อมูลแล้วกด "อัปเดตตัวอย่าง" เพื่อให้ใบเสร็จด้านบนเปลี่ยนตามทันที หรือจะกด "พิมพ์ใบเสร็จ" ไปเลยก็ได้ ระบบจะบันทึกค่าที่กรอก/ติ๊กไว้ (รวมถึง "ชำระครบแล้ว") ให้อัตโนมัติก่อนพิมพ์เสมอ</p>
       <div class="foot">
         <button type="button" class="btn line" data-act="close">ปิด</button>
         <button type="submit" class="btn line">อัปเดตตัวอย่าง</button>
@@ -2814,6 +2814,32 @@ function openReceipt(forQuoteId) {
   const d = receiptData(RCPT_FOR);
   RCPT = { no: d.defNo, date: d.defDate, pay: d.defPay.slice(), sig: d.defSig, seller: d.defSeller, paidFull: d.defPaidFull };
   dialog(receiptHTML());
+}
+// อ่านค่าปัจจุบันจากฟอร์มใบเสร็จ (เลขที่/วันที่/ผู้ขาย/ช่องทางชำระ/ติ๊กชำระครบแล้ว) มาบันทึกจริง — ใช้ร่วมกันทั้งตอนกด "อัปเดตตัวอย่าง" (submit)
+// และตอนกด "พิมพ์ใบเสร็จ" โดยตรง กันเคสติ๊ก "ชำระครบแล้ว" แล้วกดพิมพ์เลยโดยไม่ได้กดอัปเดตตัวอย่างก่อน ทำให้ติ๊กไว้แต่ระบบไม่บันทึกว่าไม่มียอดค้างจริง
+function applyReceiptForm(f) {
+  if (!f) return;
+  const d = Object.fromEntries(new FormData(f));
+  const payVals = [...f.querySelectorAll('[name="pay"]:checked')].map(x => x.value);
+  const paidFullChecked = !!f.querySelector('[name="paidfull"]:checked');
+  RCPT = { no: (d.receipt_no || '').trim(), date: d.receipt_date || now().slice(0, 10), pay: payVals, sig: RCPT.sig, seller: (d.seller || '').trim(), paidFull: paidFullChecked };
+  if (RCPT_FOR) {
+    const q = find('quotes', RCPT_FOR);
+    const meta = { ...(q.meta || {}), payment: payVals, seller: RCPT.seller };
+    let newStatus = q.status;
+    if (paidFullChecked) {
+      const balance = quoteBalance({ ...q, meta });
+      if (balance > 0.004) {
+        const pay = { id: uid(), kind: 'final', amount: balance, date: RCPT.date || now().slice(0, 10), methods: payVals, note: 'ติ๊กชำระครบแล้วจากหน้าตัวอย่างใบเสร็จ', seller: RCPT.seller || null, docNo: nextDepositNo(), at: now() };
+        meta.payments = [...(Array.isArray(meta.payments) ? meta.payments : []), pay];
+        newStatus = ['draft', 'presented'].includes(q.status) ? 'accepted' : q.status;
+      }
+    }
+    save('quotes', { ...q, status: newStatus, quote_number: RCPT.no || null, receipt_date: RCPT.date, meta });
+    commit();
+  } else {
+    K.paidFull = paidFullChecked; // ยังไม่มีบิลจริง (ดูตัวอย่างก่อนยืนยันสั่งซื้อ) — เก็บไว้ใช้ตอนกด "ยืนยันสั่งซื้อ"
+  }
 }
 // ===== ระบบรับเงินมัดจำ / รับชำระส่วนที่เหลือ =====
 let PAY_BUSY = false;
@@ -3363,11 +3389,13 @@ document.addEventListener('click', e => {
   else if (a === 'backup') download('smart-optic-backup-' + now().slice(0, 10) + '.json', JSON.stringify(db, null, 1), 'application/json');
   else if (a === 'print') window.print();
   else if (a === 'printrcpt') {
+    // กันเคสติ๊ก "ชำระครบแล้ว"/เปลี่ยนช่องทางชำระ แล้วกด "พิมพ์ใบเสร็จ" ทันทีโดยไม่ได้กด "อัปเดตตัวอย่าง" ก่อน — อ่านค่าปัจจุบันจากฟอร์มมาบันทึกจริงก่อนพิมพ์เสมอ
+    applyReceiptForm(b.closest('form[data-form="receiptmeta"]'));
     if (!RCPT.no) {
       RCPT.no = nextReceiptNo();
       if (RCPT_FOR) { const q = find('quotes', RCPT_FOR); save('quotes', { ...q, quote_number: RCPT.no }); commit(); }
-      dialog(receiptHTML());
     }
+    dialog(receiptHTML());
     setTimeout(() => window.print(), 30);
   }
   else if (a === 'close') closeDlg();
@@ -3722,26 +3750,7 @@ document.addEventListener('submit', async e => {
       save('quotes', { ...q0, status: d.status, valid_until: d.valid_until || null, notes: d.notes.trim() || null, meta });
       commit(); quoteSheet(id); toast('บันทึกใบเสนอราคาแล้ว');
     } else if (k === 'receiptmeta') {
-      const payVals = [...f.querySelectorAll('[name="pay"]:checked')].map(x => x.value);
-      const paidFullChecked = !!f.querySelector('[name="paidfull"]:checked');
-      RCPT = { no: (d.receipt_no || '').trim(), date: d.receipt_date || now().slice(0, 10), pay: payVals, sig: RCPT.sig, seller: (d.seller || '').trim(), paidFull: paidFullChecked };
-      if (RCPT_FOR) {
-        const q = find('quotes', RCPT_FOR);
-        const meta = { ...(q.meta || {}), payment: payVals, seller: RCPT.seller };
-        let newStatus = q.status;
-        if (paidFullChecked) {
-          const balance = quoteBalance({ ...q, meta });
-          if (balance > 0.004) {
-            const pay = { id: uid(), kind: 'final', amount: balance, date: RCPT.date || now().slice(0, 10), methods: payVals, note: 'ติ๊กชำระครบแล้วจากหน้าตัวอย่างใบเสร็จ', seller: RCPT.seller || null, docNo: nextDepositNo(), at: now() };
-            meta.payments = [...(Array.isArray(meta.payments) ? meta.payments : []), pay];
-            newStatus = ['draft', 'presented'].includes(q.status) ? 'accepted' : q.status;
-          }
-        }
-        save('quotes', { ...q, status: newStatus, quote_number: RCPT.no || null, receipt_date: RCPT.date, meta });
-        commit();
-      } else {
-        K.paidFull = paidFullChecked; // ยังไม่มีบิลจริง (ดูตัวอย่างก่อนยืนยันสั่งซื้อ) — เก็บไว้ใช้ตอนกด "ยืนยันสั่งซื้อ"
-      }
+      applyReceiptForm(f);
       dialog(receiptHTML());
     } else if (k === 'payrecv') {
       if (PAY_BUSY) return;
