@@ -10,7 +10,7 @@ const baht = n => '฿' + Number(n || 0).toLocaleString('th-TH');
 const num = v => (v === '' || v == null || isNaN(+v)) ? null : +v;
 const toast = m => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2800); };
 const errText = e => { const m = e?.message || String(e); try { return JSON.parse(m).message || m; } catch { return m; } };
-const APP_VERSION = 'v81'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
+const APP_VERSION = 'v82'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
 
 /* ---------- โครงสร้างข้อมูล (ตรงกับ supabase/schema.sql) ---------- */
 const COLS = {
@@ -424,6 +424,28 @@ function rxDraftFromMeta(m) {
   });
   return dr;
 }
+// ฟิลด์ "ประวัติ" (ไม่ใช่ค่าที่ต้องวัดใหม่ทุกครั้ง เช่น สายตา/Auto Ref/PD) ที่จะดึงจากผลตรวจครั้งก่อนของลูกค้าคนเดิมมาเติมให้อัตโนมัติ
+const EXAM_HISTORY_COPY_FIELDS = ['disease_other', 'last_doctor_visit', 'last_doctor_clinic',
+  'ed1_name', 'ed1_clinic', 'ed1_treat', 'ed2_name', 'ed2_clinic', 'ed2_treat', 'ed3_name', 'ed3_clinic', 'ed3_treat', 'ed4_name', 'ed4_clinic', 'ed4_treat',
+  'accident_detail', 'accident_clinic', 'accident_treat', 'last_va_check_where', 'last_va_check_by', 'last_va_check_other',
+  'cl_freq', 'cl_r', 'cl_l', 'cl_duration', 'old_glasses_r', 'old_glasses_l', 'old_glasses_duration',
+  'lens_name', 'lens_index', 'lens_color_change', 'lens_corridor', 'lens_pd_r', 'lens_pd_l', 'lens_problem', 'lens_marking', 'lens_brand_model'];
+// ดึงประวัติสุขภาพ (โรคประจำตัว/โรคตา) และประวัติการใช้แว่น-คอนแทคเลนส์จากผลตรวจครั้งล่าสุดของลูกค้าคนเดิม มาเติมในร่างฟอร์มให้อัตโนมัติตอนเริ่มตรวจใหม่
+// กันพนักงานต้องพิมพ์ซ้ำทุกครั้ง — ไม่แตะค่าที่ต้องวัดใหม่เสมอ (Auto Ref/PD/VA/SUBJECTIVE/กรอบที่ลอง) และไม่ทับช่องที่พิมพ์ไว้แล้วในรอบนี้
+function prefillExamHistoryFromLastVisit(custId) {
+  if (!custId) return;
+  const prev = live('prescriptions').filter(r => r.customer_id === custId).sort((a, b) => (b.exam_date || b.created_at || '').localeCompare(a.exam_date || a.created_at || ''))[0];
+  if (!prev || !prev.meta) return;
+  const pd = rxDraftFromMeta(prev.meta);
+  const dr = K.examDraft;
+  EXAM_HISTORY_COPY_FIELDS.forEach(k => { if (pd[k] != null && dr[k] == null) dr[k] = pd[k]; });
+  CHRONIC_DISEASES.forEach(([k]) => {
+    if (pd['chk_' + k] && dr['chk_' + k] == null) dr['chk_' + k] = true;
+    if (pd['med_' + k] != null && dr['med_' + k] == null) dr['med_' + k] = pd['med_' + k];
+    if (pd['yr_' + k] != null && dr['yr_' + k] == null) dr['yr_' + k] = pd['yr_' + k];
+  });
+  K.examPrefilledDate = prev.exam_date || prev.created_at || null; // โชว์แจ้งพนักงานว่าดึงมาจากครั้งไหน ให้ตรวจสอบ/แก้ตามจริงอีกที
+}
 // ดึงอาการ (CC) ที่ติ๊กไว้ของบันทึกเดิม — บันทึกใหม่จะมี meta.cc ตรงๆ, บันทึกเก่าให้พยายามอ่านจากหมายเหตุ (notes) แทน
 function ccFromRx(r) {
   const m = r.meta || {};
@@ -520,7 +542,7 @@ function openEditExam(id, from) {
 // ออกจากโหมดแก้ไขผลตรวจสายตาโดยไม่บันทึก — กลับไปจุดที่กดเข้ามา (หน้าประวัติการใช้บริการ หรือหน้าลูกค้าในหลังบ้าน)
 function exitEditExam() {
   const cid = K.custId, from = K.editRxFrom;
-  K.editRxId = null; K.editRxFrom = null; K.examDraft = {}; K.frames = []; K.cc = []; K.ccOther = '';
+  K.editRxId = null; K.editRxFrom = null; K.examDraft = {}; K.frames = []; K.cc = []; K.ccOther = ''; K.examPrefilledDate = null;
   if (from === 'kiosk') { K.step = 'history'; K.hist = []; render(); }
   else { S.mode = ''; render(); custView(cid); }
 }
@@ -2186,6 +2208,7 @@ function kioskExamIntake() {
   return `<div class="panel" style="padding:20px 22px;width:100%;box-sizing:border-box">
     <h2 style="margin-top:0">${K.editRxId ? 'แก้ไขผลตรวจสายตา' : 'ซักประวัติก่อนตรวจสายตา'}</h2>
     ${K.editRxId ? '<p class="tag" style="margin-top:-8px;color:var(--bad,#a23b2a)">กำลังแก้ไขรายการที่บันทึกไว้แล้ว — แก้ไขเฉพาะช่องที่ต้องการแล้วกด "บันทึก" ด้านล่าง</p>' : ''}
+    ${!K.editRxId && K.examPrefilledDate ? `<p class="tag" style="margin-top:-8px">ดึงข้อมูลประวัติสุขภาพ/ประวัติการใช้แว่น-คอนแทคเลนส์จากการตรวจครั้งก่อน (${day(K.examPrefilledDate)}) มาเติมให้แล้ว — ตรวจสอบและแก้ไขให้ตรงกับที่ลูกค้าแจ้งจริงในวันนี้ด้วย</p>` : ''}
     <form data-form="examintake">
     <div style="display:grid;grid-template-columns:1fr 1fr 2fr 1fr 1.3fr;gap:12px;margin-bottom:4px">
       ${uw('รหัสลูกค้า', 'patient_code', '', 'text', '', c && c.customer_code || '')}
@@ -2965,20 +2988,36 @@ function ensureSigDlg() {
 }
 function setupSigCanvas() {
   const canvas = document.getElementById('sigCanvas'); if (!canvas) return;
-  const rect = canvas.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
-  canvas.width = Math.max(1, Math.round(rect.width * dpr)); canvas.height = Math.max(1, Math.round(rect.height * dpr));
-  const ctx = canvas.getContext('2d');
-  ctx.scale(dpr, dpr); ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#18231d';
-  let drawing = false, last = null;
-  const pos = e => { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
-  canvas.onpointerdown = e => { drawing = true; last = pos(e); try { canvas.setPointerCapture(e.pointerId); } catch { } };
-  canvas.onpointermove = e => { if (!drawing) return; const p = pos(e); ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke(); last = p; };
-  const end = () => { drawing = false; };
-  canvas.onpointerup = end; canvas.onpointercancel = end; canvas.onpointerleave = end;
-  SIG_CANVAS = canvas;
+  // รอให้ dialog เลย์เอาต์เสร็จก่อนค่อยวัดขนาดจริง (เรียกทันทีหลัง showModal() บางเครื่อง/บาง iOS ยังได้ rect ผิดๆ ทำให้ลายเซ็นเพี้ยน)
+  requestAnimationFrame(() => {
+    const rect = canvas.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.max(1, Math.round(rect.width * dpr)); canvas.height = Math.max(1, Math.round(rect.height * dpr));
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr); ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#18231d';
+    let drawing = false, last = null;
+    const pos = e => { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+    // ป้องกันหน้าจอเด้ง/บาวซ์ตอนลากนิ้วเซ็นบน iPad — ต้องกัน default ทั้ง pointer และ touch event
+    // (touch-action:none อย่างเดียวบาง iOS Safari ยังหลุด โดยเฉพาะตอนเปิดซ้อนบน dialog ใบเสร็จอีกที)
+    canvas.onpointerdown = e => { e.preventDefault(); drawing = true; last = pos(e); try { canvas.setPointerCapture(e.pointerId); } catch { } };
+    canvas.onpointermove = e => { if (!drawing) return; e.preventDefault(); const p = pos(e); ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke(); last = p; };
+    const end = e => { if (e && e.cancelable) e.preventDefault(); drawing = false; };
+    canvas.onpointerup = end; canvas.onpointercancel = end; canvas.onpointerleave = end;
+    const blockTouch = e => { if (e.cancelable) e.preventDefault(); };
+    canvas.addEventListener('touchstart', blockTouch, { passive: false });
+    canvas.addEventListener('touchmove', blockTouch, { passive: false });
+    canvas.addEventListener('touchend', blockTouch, { passive: false });
+    SIG_CANVAS = canvas;
+  });
 }
-function openSigPad() { const d = ensureSigDlg(); d.innerHTML = sigPadHTML(); if (!d.open) d.showModal(); setupSigCanvas(); }
-function closeSigPad() { const d = document.getElementById('sigDlg'); if (d && d.open) d.close(); }
+function openSigPad() {
+  const d = ensureSigDlg(); d.innerHTML = sigPadHTML(); if (!d.open) d.showModal(); setupSigCanvas();
+  // ล็อกสกรอลพื้นหลังไว้ชั่วคราวตอนเปิดช่องเซ็น กันทั้งหน้าเด้ง/บาวซ์ตอนลากนิ้ว (คืนค่าตอนปิดใน closeSigPad)
+  document.documentElement.style.overscrollBehavior = 'none'; document.body.style.overscrollBehavior = 'none'; document.body.style.touchAction = 'none';
+}
+function closeSigPad() {
+  const d = document.getElementById('sigDlg'); if (d && d.open) d.close();
+  document.documentElement.style.overscrollBehavior = ''; document.body.style.overscrollBehavior = ''; document.body.style.touchAction = '';
+}
 
 const SAMPLE = [['lens', 'เลนส์ Single Vision ใส', 1500, 'general'], ['lens', 'เลนส์ Blue Light Cut', 2800, 'screen,general'], ['lens', 'เลนส์ Photochromic', 4200, 'outdoor,drive'], ['lens', 'เลนส์ Anti-Glare Drive', 3900, 'drive'], ['lens', 'เลนส์ Progressive Premium', 9800, 'progressive'], ['frame', 'กรอบ Titanium Round', 5900, ''], ['frame', 'กรอบ Acetate Classic', 3500, ''], ['service', 'ค่าตรวจวัดสายตา', 300, '']];
 
@@ -3466,7 +3505,7 @@ document.addEventListener('click', e => {
     K.hist.push(K.step);
     if (id === 'lens') { K.lr = freshLR(); K.step = 'lensreq'; render(); }
     else if (id === 'frame') { S.cust = K.custId; K.pq = ''; K.pcat = 'frame'; K.step = 'pick'; render(); }
-    else { if (id === 'exam') { K.cc = []; K.ccOther = ''; K.ccNew = ''; K.examMeta = null; K.examDraft = {}; K.frames = []; } K.step = id === 'exam' ? 'examintake' : 'claimform'; render(); }
+    else { if (id === 'exam') { K.cc = []; K.ccOther = ''; K.ccNew = ''; K.examMeta = null; K.examDraft = {}; K.frames = []; K.examPrefilledDate = null; prefillExamHistoryFromLastVisit(K.custId); } K.step = id === 'exam' ? 'examintake' : 'claimform'; render(); }
   }
   else if (a === 'lrtoggle') { const group = b.dataset.group, arr = K.lr[group] || (K.lr[group] = []); K.lr[group] = arr.includes(id) ? arr.filter(x => x !== id) : [...arr, id]; render(); }
   else if (a === 'lensreqgo') { S.cust = K.custId; K.pq = ''; K.pcat = 'lens'; K.hist.push(K.step); K.step = 'pick'; render(); }
@@ -3859,7 +3898,7 @@ document.addEventListener('submit', async e => {
         notes: notes || null, deleted_at: null
       });
       const wasEdit = !!editId, editCustId = K.custId, editFrom = K.editRxFrom;
-      K.cc = []; K.ccOther = ''; K.ccNew = ''; K.examMeta = null; K.examDraft = {}; K.frames = []; K.hist = []; K.editRxId = null; K.editRxFrom = null;
+      K.cc = []; K.ccOther = ''; K.ccNew = ''; K.examMeta = null; K.examDraft = {}; K.frames = []; K.hist = []; K.editRxId = null; K.editRxFrom = null; K.examPrefilledDate = null;
       commit();
       if (wasEdit) {
         if (editFrom === 'kiosk') { K.custId = editCustId; K.step = 'history'; render(); toast('บันทึกการแก้ไขผลตรวจสายตาแล้ว'); }
