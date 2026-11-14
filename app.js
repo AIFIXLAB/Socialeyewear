@@ -10,7 +10,7 @@ const baht = n => '฿' + Number(n || 0).toLocaleString('th-TH');
 const num = v => (v === '' || v == null || isNaN(+v)) ? null : +v;
 const toast = m => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2800); };
 const errText = e => { const m = e?.message || String(e); try { return JSON.parse(m).message || m; } catch { return m; } };
-const APP_VERSION = 'v80'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
+const APP_VERSION = 'v81'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
 
 /* ---------- โครงสร้างข้อมูล (ตรงกับ supabase/schema.sql) ---------- */
 const COLS = {
@@ -2175,7 +2175,7 @@ function kioskExamIntake() {
   const dRow = ([k, label]) => `<div style="display:grid;grid-template-columns:1.2fr 1fr .8fr;gap:8px;align-items:center;padding:6px 0;border-bottom:1px dashed rgba(0,0,0,.08)">
     <label style="display:flex;align-items:center;gap:7px;margin:0;font-size:13px"><input type="checkbox" name="chk_${k}" ${dr['chk_' + k] ? 'checked' : ''} style="width:17px;height:17px"> ${esc(label)}</label>
     <input name="med_${k}" placeholder="ทานยา (ถ้ามี)" value="${esc(dr['med_' + k] || '')}" style="font-size:12.5px">
-    <input name="yr_${k}" type="number" min="0" placeholder="เป็นมา (ปี)" value="${esc(dr['yr_' + k] != null ? dr['yr_' + k] : '')}" style="font-size:12.5px">
+    <input name="yr_${k}" type="text" inputmode="numeric" placeholder="เป็นมา (ปี)" value="${esc(dr['yr_' + k] != null ? dr['yr_' + k] : '')}" style="font-size:12.5px">
   </div>`;
   // แถวโรคตา/อุบัติเหตุ: ชื่อ + รพ./คลินิก + รักษา/ผ่าตัด
   const med3 = (n1, n2, n3, ph1) => `<div style="display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:10px;margin-bottom:8px">${uw('รายละเอียด', n1, ph1)}${uw('รักษา รพ./คลินิก', n2)}${uw('รักษา/ผ่าตัด', n3)}</div>`;
