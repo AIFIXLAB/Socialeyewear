@@ -10,7 +10,7 @@ const baht = n => '฿' + Number(n || 0).toLocaleString('th-TH');
 const num = v => (v === '' || v == null || isNaN(+v)) ? null : +v;
 const toast = m => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2800); };
 const errText = e => { const m = e?.message || String(e); try { return JSON.parse(m).message || m; } catch { return m; } };
-const APP_VERSION = 'v82'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
+const APP_VERSION = 'v85'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
 
 /* ---------- โครงสร้างข้อมูล (ตรงกับ supabase/schema.sql) ---------- */
 const COLS = {
@@ -389,6 +389,7 @@ function examIntakeDataFromForm(d) {
     lens_corridor: t(d.lens_corridor), lens_pd_r: t(d.lens_pd_r), lens_pd_l: t(d.lens_pd_l), lens_problem: t(d.lens_problem),
     autoref_od: t(d.autoref_od), autoref_os: t(d.autoref_os), pdref_od: t(d.pdref_od), pdref_os: t(d.pdref_os),
     lens_marking: t(d.lens_marking), lens_brand_model: t(d.lens_brand_model),
+    followup_date: t(d.followup_date), followup_type: t(d.followup_date) ? (d.followup_type || 'other') : null, followup_note: t(d.followup_note),
     va: readGrid(d, VA_ROWS, VA_COLS, 'va'),
     dominant_eye: d.dominant_eye || null, dominant_hand: d.dominant_hand || null,
     sub: readGrid(d, SUB_ROWS, SUB_COLS, 'sub'),
@@ -409,7 +410,7 @@ function examIntakeHasData(m) {
 function rxDraftFromMeta(m) {
   m = m || {};
   const dr = {};
-  const simple = ['exam_date', 'examiner', 'patient_code', 'cust_fullname', 'cust_age', 'cust_phone', 'comp_hours', 'tablet_hours', 'usage_other', 'last_doctor_visit', 'last_doctor_clinic', 'blur_distance', 'accident_detail', 'accident_clinic', 'accident_treat', 'last_va_check_where', 'last_va_check_by', 'last_va_check_other', 'cl_freq', 'cl_r', 'cl_l', 'cl_duration', 'old_glasses_r', 'old_glasses_l', 'old_glasses_duration', 'lens_name', 'lens_index', 'lens_color_change', 'lens_corridor', 'lens_pd_r', 'lens_pd_l', 'lens_problem', 'autoref_od', 'autoref_os', 'pdref_od', 'pdref_os', 'lens_marking', 'lens_brand_model', 'dominant_eye', 'dominant_hand', 'purpose_type', 'purpose_other', 'examiner_role', 'notes2'];
+  const simple = ['exam_date', 'examiner', 'patient_code', 'cust_fullname', 'cust_age', 'cust_phone', 'comp_hours', 'tablet_hours', 'usage_other', 'last_doctor_visit', 'last_doctor_clinic', 'blur_distance', 'accident_detail', 'accident_clinic', 'accident_treat', 'last_va_check_where', 'last_va_check_by', 'last_va_check_other', 'cl_freq', 'cl_r', 'cl_l', 'cl_duration', 'old_glasses_r', 'old_glasses_l', 'old_glasses_duration', 'lens_name', 'lens_index', 'lens_color_change', 'lens_corridor', 'lens_pd_r', 'lens_pd_l', 'lens_problem', 'autoref_od', 'autoref_os', 'pdref_od', 'pdref_os', 'lens_marking', 'lens_brand_model', 'dominant_eye', 'dominant_hand', 'purpose_type', 'purpose_other', 'examiner_role', 'notes2', 'followup_date', 'followup_type', 'followup_note'];
   simple.forEach(k => { if (m[k] != null) dr[k] = m[k]; });
   if (m.disease_other_text != null) dr.disease_other = m.disease_other_text;
   (m.diseases || []).forEach(x => { if (x.on) dr['chk_' + x.key] = true; if (x.meds) dr['med_' + x.key] = x.meds; if (x.years != null) dr['yr_' + x.key] = x.years; });
@@ -508,6 +509,7 @@ function examIntakePrintView(custId, ccText, ccOther, m) {
   ${row('แว่นสำหรับ', m.purpose_type ? (PURPOSE_LABEL[m.purpose_type] || m.purpose_type) + (m.purpose_other ? ' · ' + m.purpose_other : '') : '')}
   ${(m.frames || []).length ? `<div class="tag" style="margin:4px 0 2px">กรอบที่ลองวัด</div><div class="wrap" style="overflow-x:auto;margin:0 0 6px"><table><tr><th>กรอบ</th>${FRAME_COLS.map(([, l]) => `<th style="font-size:10.5px">${l}</th>`).join('')}</tr>${m.frames.map((fr, i) => `<tr><th style="text-align:left;white-space:nowrap;font-size:11.5px">${esc(fr.label || 'ตัวที่ ' + (i + 1))}</th>${FRAME_COLS.map(([ck]) => `<td style="text-align:center;font-size:11.5px">${esc(fr[ck] || '-')}</td>`).join('')}</tr>`).join('')}</table></div>` : ''}
   ${row('ผู้ตรวจ', m.examiner)}${row('ตำแหน่ง', m.examiner_role)}
+  ${m.followup_date ? row('นัดติดตามครั้งถัดไป', `${day(m.followup_date)}${m.followup_type ? ' · ' + (FOLLOWUP_TYPE_LABEL[m.followup_type] || m.followup_type) : ''}${m.followup_note ? ' · ' + m.followup_note : ''}`) : ''}
   ${m.notes2 ? `<div style="margin-top:10px;padding-top:8px;border-top:1px dashed var(--line,#e4ddd2)">${esc(m.notes2)}</div>` : ''}
   </div>
   <div class="foot noprint"><button type="button" class="btn line" data-act="close">ปิด</button><button type="button" class="btn line" data-act="print">สั่งพิมพ์</button></div>`);
@@ -522,7 +524,25 @@ const ROLE_LABEL = { owner: 'เจ้าของ', manager: 'ผู้จั�
 const SHOP_ADDR = 'วิคตอเรียการ์เด้น ห้องที่ N102-104 อาคารN เลขที่ 1869 ถ.เพชรเกษม แขวงหลักสอง เขตบางแค กรุงเทพฯ 10600';
 const SHOP_PHONE = '086-9885360 / 097-2382217';
 const SHOP_TAXID = '4101600006509';
-const NAV = [['customers', 'ลูกค้า'], ['products', 'สินค้า'], ['keynote', 'คีย์โน้ตพรีเซนต์'], ['insights', 'ภาพรวม'], ['settings', 'ตั้งค่า']];
+const NAV = [['customers', 'ลูกค้า'], ['followups', 'นัดหมาย'], ['products', 'สินค้า'], ['insights', 'ภาพรวม'], ['settings', 'ตั้งค่า']];
+// นัดติดตาม — เก็บไว้ใน prescriptions.meta ของ "ใบตรวจสายตา" แต่ละใบโดยตรง (ไม่สร้างตารางใหม่ ไม่ต้องรัน SQL เพิ่มที่ Supabase)
+// ตั้ง/แก้ได้ทั้งตอนกรอกใบตรวจสายตาใหม่ และตั้งเร็วๆ ภายหลังจากหน้าประวัติลูกค้าได้โดยไม่ต้องเปิดฟอร์มตรวจทั้งใบ (ดู followupQuickForm)
+const FOLLOWUP_TYPES = [['myopia', 'ติดตามคุมสายตาสั้น'], ['va', 'เช็คค่าสายตา (VA)'], ['squint', 'เช็คตาเข/เหล่'], ['other', 'อื่นๆ']];
+const FOLLOWUP_TYPE_LABEL = Object.fromEntries(FOLLOWUP_TYPES);
+const FOLLOWUP_STATUS_LABEL = { pending: 'รอโทรนัด', called: 'โทรแล้ว', done: 'เสร็จสิ้น' };
+const FOLLOWUP_REMIND_DAYS = 3; // แจ้งเตือนล่วงหน้ากี่วันก่อนถึงวันนัด (ขึ้นในรายการ "ต้องโทรนัด")
+// ใบตรวจสายตาที่มีนัดติดตามตั้งไว้ ยังไม่เสร็จ และถึงกำหนด/ใกล้ถึงกำหนดภายใน FOLLOWUP_REMIND_DAYS วัน (รวมที่เลยกำหนดมาแล้วแต่ยังไม่ได้โทรด้วย) — เรียงนัดใกล้สุดขึ้นก่อน
+function followupDueSoon() {
+  const threshold = new Date(Date.now() + FOLLOWUP_REMIND_DAYS * 86400000).toISOString().slice(0, 10);
+  return live('prescriptions').filter(r => r.meta && r.meta.followup_date && r.meta.followup_status !== 'done' && r.meta.followup_date <= threshold)
+    .sort((a, b) => (a.meta.followup_date || '').localeCompare(b.meta.followup_date || ''));
+}
+// ใบตรวจสายตาล่าสุดของลูกค้าคนนี้ (ไว้ผูกนัดติดตามจากหน้าประวัติลูกค้าโดยไม่ต้องเปิดฟอร์มตรวจทั้งใบ) — ถ้ายังไม่เคยตรวจเลย จะสร้างใบเปล่าไว้เก็บแค่นัดติดตามให้
+function latestRxForFollowup(custId) {
+  const rows = live('prescriptions').filter(r => r.customer_id === custId).sort((a, b) => (b.exam_date || b.created_at || '').localeCompare(a.exam_date || a.created_at || ''));
+  // ถ้ามีใบไหนตั้งนัดติดตามไว้แล้ว ให้ใช้ใบนั้น (ใบล่าสุดที่มีนัด) กันกรณีมีใบตรวจใหม่กว่าที่ยังไม่เคยตั้งนัด แล้วเปิดมาเจอฟอร์มว่างทั้งที่จริงมีนัดอยู่
+  return rows.find(r => r.meta && r.meta.followup_date) || rows[0] || null;
+}
 const S = { v: 'customers', need: 'general', cart: [], cust: '', disc: 0, notes: '', q: '', pq: '', ptype: 'all', pbrand: '', staff: null, mode: 'splash', custView: 'all', custFrom: '', custTo: '', catQ: '', catCompare: [], catDetail: null, catReturn: '', catDesign: '', catMain: '', activeSeller: null, varPick: null, knSel: [], knIdx: 0 };
 const freshLR = () => ({ purpose: [], other: '', vision: [], lenstype: [], brand: [], level: [], lensIndex: [], coating: [], photochromic: [], age: '', budget: '', occupation: '', notes: '' });
 const freshDisc = () => ({ type: 'amt', val: 0 });
@@ -1146,6 +1166,43 @@ const views = {
     <p class="tag" style="margin:-4px 0 12px">"ใช้บริการล่าสุด"/"ระบุช่วงเวลา" อิงจากวันที่มีรายการขาย ตรวจสายตา หรือซ่อม/เคลมล่าสุดของลูกค้า (ไม่ใช่วันที่นำเข้าข้อมูลเดิมเข้าระบบ)</p>
     ${rows.length ? `<div class="panel wrap"><table><tr><th>รหัส</th><th>ชื่อ</th><th>โทรศัพท์</th><th>ใช้บริการล่าสุด</th><th>ค่าสายตาล่าสุด</th><th></th></tr>${shown.map(c => `<tr><td>${esc(c.customer_code || '-')}</td><td>${esc(c.full_name)}</td><td>${esc(c.phone || '')}</td><td class="tag">${visit(c).text || '-'}</td><td class="tag">${esc(rxText(latestRx(c.id)))}</td><td class="act"><button class="btn line sm" data-act="viewcust" data-id="${c.id}">เปิด</button>${mgr() ? ` <button class="btn line sm bad" data-act="delcust" data-id="${c.id}">ลบ</button>` : ''}</td></tr>`).join('')}</table></div>${rows.length > shown.length ? `<p class="tag">แสดง ${shown.length} จาก ${rows.length} ราย พิมพ์ค้นหาเพื่อกรอง</p>` : ''}` : empty('ยังไม่มีลูกค้าที่ตรงกับการค้นหา', '<button class="btn" data-act="newcust">เพิ่มลูกค้าคนแรก</button> <button class="btn line" data-act="impcust">นำเข้าจาก CSV</button>')}`;
   },
+  followups() {
+    // ข้อมูลนัดติดตามทั้งหมดอ่านจาก prescriptions.meta ของแต่ละใบตรวจสายตาโดยตรง (ไม่มีตารางแยก)
+    const q = (S.apptQ || '').toLowerCase();
+    let rows = live('prescriptions').filter(r => r.meta && r.meta.followup_date);
+    if (q) rows = rows.filter(r => [custName(r.customer_id), find('customer_profiles', r.customer_id)?.phone, r.meta.followup_note].join(' ').toLowerCase().includes(q));
+    const dueIds = new Set(followupDueSoon().map(r => r.id));
+    const statusFilter = S.apptStatus || 'open';
+    const filtered = rows.filter(r => statusFilter === 'all' ? true : statusFilter === 'open' ? r.meta.followup_status !== 'done' : r.meta.followup_status === statusFilter)
+      .sort((a, b) => (a.meta.followup_date || '').localeCompare(b.meta.followup_date || ''));
+    const due = followupDueSoon();
+    const tab = (id, l) => `<button class="chip ${statusFilter === id ? 'on' : ''}" data-act="apptfilter" data-id="${id}">${l}</button>`;
+    const phoneOf = r => find('customer_profiles', r.customer_id)?.phone || '';
+    const lineFor = r => `<b>${esc(custName(r.customer_id))}</b>${phoneOf(r) ? ` · <a href="tel:${esc(phoneOf(r))}">${esc(phoneOf(r))}</a>` : ''} · ${day(r.meta.followup_date)} · ${esc(FOLLOWUP_TYPE_LABEL[r.meta.followup_type] || '')}${r.meta.followup_note ? ' (' + esc(r.meta.followup_note) + ')' : ''}`;
+    const row = r => `<tr style="${dueIds.has(r.id) ? 'background:#fdf3e4' : ''}">
+      <td>${day(r.meta.followup_date)}</td>
+      <td>${esc(custName(r.customer_id))}</td>
+      <td>${phoneOf(r) ? `<a href="tel:${esc(phoneOf(r))}">${esc(phoneOf(r))}</a>` : '-'}</td>
+      <td>${esc(FOLLOWUP_TYPE_LABEL[r.meta.followup_type] || '-')}${r.meta.followup_note ? `<br><span class="tag">${esc(r.meta.followup_note)}</span>` : ''}</td>
+      <td><span class="st ${r.meta.followup_status || 'pending'}">${esc(FOLLOWUP_STATUS_LABEL[r.meta.followup_status || 'pending'])}</span></td>
+      <td class="act">
+        ${(r.meta.followup_status || 'pending') === 'pending' ? `<button class="btn line sm" data-act="apptcalled" data-id="${r.id}">โทรแล้ว</button>` : ''}
+        ${r.meta.followup_status !== 'done' ? `<button class="btn line sm" data-act="apptdone" data-id="${r.id}">เสร็จสิ้น</button>` : ''}
+        <button class="btn line sm" data-act="apptedit" data-id="${r.customer_id}">แก้ไข</button>
+        <button class="btn line sm bad" data-act="apptcancel" data-id="${r.id}">ลบนัด</button>
+      </td>
+    </tr>`;
+    return `<div class="bar"><div><h1>นัดหมาย</h1><p class="sub" style="margin:0">นัดติดตามที่ตั้งไว้ในใบตรวจสายตาของลูกค้าแต่ละคน — ระบบจะไฮไลต์รายการที่ถึงกำหนดโทรนัดภายใน ${FOLLOWUP_REMIND_DAYS} วันให้อัตโนมัติ</p></div>
+      <div class="tools"><input placeholder="ค้นหาชื่อ/เบอร์/หมายเหตุ" value="${esc(S.apptQ || '')}" data-bind="apptq" style="width:220px"></div></div>
+    <p class="tag" style="margin:-4px 0 14px">ตั้ง/แก้นัดติดตามได้จากหน้าประวัติลูกค้า (กด "ตั้งนัดติดตาม") หรือตอนกรอกใบตรวจสายตาในหัวข้อ "สรุปผล"</p>
+    ${due.length ? `<div class="panel" style="padding:16px 18px;margin-bottom:14px;border-color:#c9a961;background:#fdf8ee"><b style="color:#7a3b2e">📞 ต้องโทรนัด ${due.length} ราย (ถึงกำหนด/ใกล้ถึงภายใน ${FOLLOWUP_REMIND_DAYS} วัน)</b>
+      <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">${due.map(r => `<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:6px 0;border-bottom:1px dashed rgba(0,0,0,.1)">
+        <span>${lineFor(r)}</span>
+        <span><button class="btn line sm" data-act="apptcalled" data-id="${r.id}">โทรแล้ว</button></span>
+      </div>`).join('')}</div></div>` : ''}
+    <div class="chips" style="margin-bottom:10px">${tab('open', 'ยังไม่เสร็จ')}${tab('all', 'ทั้งหมด')}${tab('done', 'เสร็จสิ้นแล้ว')}</div>
+    ${filtered.length ? `<div class="panel wrap"><table><tr><th>วันนัด</th><th>ชื่อ</th><th>โทรศัพท์</th><th>ประเภท</th><th>สถานะ</th><th></th></tr>${filtered.map(row).join('')}</table></div>` : empty('ยังไม่มีนัดติดตามในหมวดนี้')}`;
+  },
   keynote() {
     const sel = S.knSel || (S.knSel = []);
     const { topics, coatingBrands, photoBrands, tintBrands, models, custom } = knSlideSources();
@@ -1754,6 +1811,23 @@ const closeDlg = () => $('#dlg').close();
 const fld = (n, l, v = '', t = 'text', extra = '') => `<label>${l}<input name="${n}" type="${t}" value="${esc(v)}" ${extra}></label>`;
 const foot = ok => `<div class="foot"><button type="button" class="btn line" data-act="close">ยกเลิก</button><button class="btn" type="submit">${ok}</button></div>`;
 
+// ฟอร์มตั้ง/แก้นัดติดตามแบบเร็ว ๆ — ผูกกับ "ใบตรวจสายตา" ใบล่าสุดของลูกค้าคนนี้โดยตรง (ไม่มีตารางฐานข้อมูลแยก ไม่ต้องรัน SQL เพิ่ม)
+// เปิดจากปุ่ม "ตั้งนัดติดตาม" ในหน้าประวัติลูกค้า หรือปุ่ม "แก้ไข" ในหน้า "นัดหมาย" — ไม่ต้องเปิดฟอร์มตรวจสายตาทั้งใบ
+function followupQuickForm(custId) {
+  const r = latestRxForFollowup(custId);
+  const m = (r && r.meta) || {};
+  dialog(`<form data-form="followup" data-custid="${custId}" data-rxid="${r ? r.id : ''}"><h2>ตั้งนัดติดตาม — ${esc(custName(custId))}</h2>
+    ${r ? `<p class="tag" style="margin-top:-8px">ผูกกับใบตรวจสายตาวันที่ ${day(r.exam_date || r.created_at)}</p>` : `<p class="tag" style="margin-top:-8px">ลูกค้าคนนี้ยังไม่มีใบตรวจสายตาในระบบ — จะสร้างใบเปล่าไว้เก็บนัดติดตามให้ก่อน กรอกผลตรวจจริงทีหลังได้ตามปกติ</p>`}
+    <div class="two">${fld('followup_date', 'วันที่นัดติดตาม', m.followup_date || '', 'date', 'required')}
+      <label>ประเภทการนัด<select name="followup_type">${FOLLOWUP_TYPES.map(([k, l]) => `<option value="${k}" ${(m.followup_type || 'other') === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>
+    </div>
+    ${fld('followup_note', 'รายละเอียดเพิ่มเติม (เช่น Follow 6M, check VA)', m.followup_note)}
+    <div class="foot">
+      ${m.followup_date ? `<button type="button" class="btn line bad" data-act="apptcancel" data-id="${r.id}">ลบนัดนี้</button>` : ''}
+      <button type="button" class="btn line" data-act="close">ยกเลิก</button>
+      <button class="btn" type="submit">บันทึกนัดติดตาม</button>
+    </div></form>`);
+}
 function kncustomForm(p = {}) {
   const ls = p.lens_spec || {};
   const group = ls.group || 'coating';
@@ -1815,6 +1889,10 @@ function custView(id) {
   const cls = live('claims').filter(x => x.customer_id === id).sort((a, b) => b.created_at.localeCompare(a.created_at));
   dialog(`<style>#dlg{width:min(760px,95vw)!important;max-width:95vw!important}</style>
   <h2>${esc(c.full_name)} <span class="tag">${esc(c.customer_code || '')}</span></h2><p class="tag">${esc([c.phone, c.budget_thb ? 'งบ ' + baht(c.budget_thb) : '', c.lifestyle].filter(Boolean).join(' · '))}${c.notes ? '<br>' + esc(c.notes) : ''}</p>
+  ${(() => { const fr = rx.find(r => r.meta && r.meta.followup_date); return `<div class="panel" style="padding:10px 14px;margin:0 0 14px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+    ${fr ? `<span>นัดติดตาม: <b>${day(fr.meta.followup_date)}</b> · ${esc(FOLLOWUP_TYPE_LABEL[fr.meta.followup_type] || '')}${fr.meta.followup_note ? ' (' + esc(fr.meta.followup_note) + ')' : ''} · <span class="st ${fr.meta.followup_status || 'pending'}">${esc(FOLLOWUP_STATUS_LABEL[fr.meta.followup_status || 'pending'])}</span></span>` : `<span class="tag">ยังไม่มีนัดติดตาม</span>`}
+    <button type="button" class="btn line sm" data-act="apptadd" data-id="${id}">${fr ? 'แก้ไขนัดติดตาม' : 'ตั้งนัดติดตาม'}</button>
+  </div>`; })()}
   <h3>ประวัติค่าสายตา</h3>${rx.length ? `<div class="wrap"><table><tr><th>วันที่</th><th>ผู้ตรวจ</th><th>ขวา SPH/CYL/AXIS</th><th>ขวา ADD/PD</th><th>ซ้าย SPH/CYL/AXIS</th><th>ซ้าย ADD/PD</th><th>พารามิเตอร์เพิ่มเติม</th><th></th></tr>${rx.map(r => {
     const m = r.meta || {};
     const extra = [
@@ -2097,7 +2175,9 @@ function splashView() {
 }
 function hubView() {
   setThemeColor('#aab0b8');
+  const apptDue = followupDueSoon().length; // แจ้งเตือน "ต้องโทรนัด" ทันทีที่เปิดแอป — กันลืมโทรแจ้งลูกค้าก่อนถึงวันนัด
   return `<div style="position:fixed;inset:0;background:${SILVER_BG};display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px;gap:26px">
+  ${apptDue ? `<button data-act="apptgohub" style="position:fixed;top:18px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:8px;padding:10px 18px;border-radius:999px;border:1px solid rgba(201,169,97,.6);background:#fff;color:#7a3b2e;font-weight:600;font-size:13px;cursor:pointer;box-shadow:0 8px 20px rgba(20,22,26,.18);max-width:90vw;text-align:center">📞 มีนัดที่ต้องโทร ${apptDue} ราย — ดูรายชื่อ</button>` : ''}
   <img src="${LOGO_DATA_URI}" style="width:84px;height:84px;object-fit:contain;filter:drop-shadow(0 10px 18px rgba(20,22,26,.3))">
   <div style="font-size:12px;letter-spacing:.3em;color:#2c2f33;text-transform:uppercase;text-align:center">Social Eyewear · Smart Optic</div>
   <div style="display:flex;gap:18px;flex-wrap:wrap;justify-content:center;max-width:640px;width:100%">
@@ -2108,10 +2188,6 @@ function hubView() {
     <button data-act="gomode" data-id="admin" style="flex:1;min-width:240px;padding:30px 22px;border-radius:18px;border:1px solid rgba(255,255,255,.7);background:rgba(255,255,255,.55);backdrop-filter:blur(6px);box-shadow:0 14px 34px rgba(20,22,26,.2);color:#23262a;cursor:pointer;text-align:left">
       <div style="font-size:18px;font-weight:700;margin-bottom:6px">Admin</div>
       <div style="font-size:12.5px;color:#565b61;line-height:1.7">ประวัติลูกค้า สินค้า ใบเสนอราคา และภาพรวมร้าน</div>
-    </button>
-    <button data-act="gokeynote" style="flex:1;min-width:240px;padding:30px 22px;border-radius:18px;border:1px solid rgba(255,255,255,.7);background:rgba(255,255,255,.55);backdrop-filter:blur(6px);box-shadow:0 14px 34px rgba(20,22,26,.2);color:#23262a;cursor:pointer;text-align:left">
-      <div style="font-size:18px;font-weight:700;margin-bottom:6px">คีย์โน้ตพรีเซนต์</div>
-      <div style="font-size:12.5px;color:#565b61;line-height:1.7">สไลด์แนะนำเลนส์ โค้ทติ้ง เปลี่ยนสี และย้อมสี เปิดพรีเซนต์เต็มจอให้ลูกค้าดูได้ทันที</div>
     </button>
   </div>
   </div>`;
@@ -2312,6 +2388,11 @@ function kioskExamIntake() {
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
         ${uw('ผู้ตรวจ', 'examiner')}${uw('ตำแหน่ง', 'examiner_role')}
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 2fr;gap:12px;margin-top:10px">
+        ${uw('นัดติดตามครั้งถัดไป (ถ้ามี)', 'followup_date', '', 'date')}
+        ${selw('ประเภทการนัด', 'followup_type', FOLLOWUP_TYPES, '— ไม่ระบุ —')}
+        ${uw('รายละเอียดเพิ่มเติม', 'followup_note', 'เช่น Follow 6M, check VA')}
       </div>
       <label style="margin-top:10px">หมายเหตุเพิ่มเติม${ta('notes2', 2)}</label>`)}
 
@@ -2628,9 +2709,14 @@ function kioskHistory() {
   items.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
   items.forEach((it, i) => it.no = i + 1);
   const rows = items.slice().reverse();
+  const fr = live('prescriptions').filter(r => r.customer_id === cid).find(r => r.meta && r.meta.followup_date);
   return `<div class="panel" style="padding:26px">
     <h2 style="margin-top:0">ประวัติการใช้บริการ</h2>
     <p class="tag" style="margin-top:-6px">กดแถบรายการเพื่อดูรายละเอียดแต่ละครั้ง</p>
+    <div class="panel" style="padding:10px 14px;margin:10px 0 0;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+      ${fr ? `<span>นัดติดตาม: <b>${day(fr.meta.followup_date)}</b> · ${esc(FOLLOWUP_TYPE_LABEL[fr.meta.followup_type] || '')}${fr.meta.followup_note ? ' (' + esc(fr.meta.followup_note) + ')' : ''} · <span class="st ${fr.meta.followup_status || 'pending'}">${esc(FOLLOWUP_STATUS_LABEL[fr.meta.followup_status || 'pending'])}</span></span>` : `<span class="tag">ยังไม่มีนัดติดตาม</span>`}
+      <button type="button" class="btn line sm" data-act="apptadd" data-id="${cid}">${fr ? 'แก้ไขนัดติดตาม' : 'ตั้งนัดติดตาม'}</button>
+    </div>
     ${rows.length ? `<div style="display:flex;flex-direction:column;gap:8px;max-height:56vh;overflow:auto;padding-right:2px;margin-top:12px">${rows.map(it => `
       <button data-act="histopen" data-kind="${it.kind}" data-id="${it.id}" class="panel" style="padding:12px 14px;display:flex;justify-content:space-between;align-items:center;gap:10px;text-align:left;cursor:pointer;width:100%;border:0;font:inherit">
         <div><div class="tag">ครั้งที่ ${it.no} · ${day(it.date)}</div><div style="font-weight:600">${esc(it.label)}</div></div>
@@ -3470,6 +3556,19 @@ document.addEventListener('click', e => {
   else if (a === 'logout') { if (!pendingCount() || confirm('ยังมีข้อมูลที่ไม่ได้ซิงก์ ออกจากระบบต่อหรือไม่? (ข้อมูลยังอยู่ในเครื่อง)')) { sess = null; ls.set('sess', null); S.staff = null; render(); } }
   else if (a === 'rmstaff') { if (confirm('ถอดพนักงานคนนี้ออกจากร้าน?')) api(`/rest/v1/shop_members?shop_id=eq.${shop.id}&user_id=eq.${id}`, { method: 'DELETE' }).then(loadStaff).catch(err => toast(errText(err))); }
   else if (a === 'delseller') { if (confirm('ลบชื่อพนักงานขายนี้?')) softDelete('sellers', id); }
+  else if (a === 'apptadd') followupQuickForm(id);
+  else if (a === 'apptedit') followupQuickForm(id);
+  else if (a === 'apptcalled') { const r = find('prescriptions', id); if (r) { save('prescriptions', { ...r, meta: { ...r.meta, followup_status: 'called', followup_called_at: now() } }); commit(); toast('บันทึกว่าโทรแล้ว'); } }
+  else if (a === 'apptdone') { const r = find('prescriptions', id); if (r) { save('prescriptions', { ...r, meta: { ...r.meta, followup_status: 'done' } }); commit(); toast('ปิดรายการนัดติดตามแล้ว'); } }
+  else if (a === 'apptcancel') {
+    if (confirm('ลบนัดติดตามนี้? (ไม่กระทบข้อมูลผลตรวจสายตาอื่นในใบนี้)')) {
+      const r = find('prescriptions', id);
+      if (r) { const { followup_date, followup_type, followup_note, followup_status, followup_called_at, ...rest } = r.meta || {}; save('prescriptions', { ...r, meta: Object.keys(rest).length ? rest : null }); commit(); }
+      closeDlg(); toast('ลบนัดติดตามแล้ว');
+    }
+  }
+  else if (a === 'apptfilter') { S.apptStatus = id; render(); }
+  else if (a === 'apptgohub') { S.mode = 'admin'; S.v = 'followups'; render(); }
   else if (a === 'sellerreport') dialog(sellerReportHTML());
   else if (a === 'integrity') dialog(dataIntegrityReport());
   else if (a === 'saledebuglog') dialog(saleDebugLogView());
@@ -3477,7 +3576,6 @@ document.addEventListener('click', e => {
   else if (a === 'custview') { S.custView = id; render(); }
   else if (a === 'splashgo') { S.activeSeller = null; S.mode = 'hub'; render(); }
   else if (a === 'gomode') { if (id === 'kiosk') kioskReset(); S.mode = id; render(); }
-  else if (a === 'gokeynote') { S.mode = 'admin'; S.v = 'keynote'; render(); }
   else if (a === 'kioskexit') {
     if (K.editRxId) exitEditExam();
     else { const viaPin = !!S.activeSeller; S.activeSeller = null; S.mode = viaPin ? 'splash' : 'hub'; render(); }
@@ -3693,6 +3791,7 @@ document.addEventListener('input', e => {
   else if (k === 'catq') { S.catQ = e.target.value; refocus(); }
   else if (k === 'kpq') { K.pq = e.target.value; refocus(); }
   else if (k === 'knq') { S.knq = e.target.value; refocus(); }
+  else if (k === 'apptq') { S.apptQ = e.target.value; refocus(); }
   else if (k === 'ccnew') K.ccNew = e.target.value;
   else if (k === 'ccother') K.ccOther = e.target.value;
   else if (k.startsWith('cartcode:')) { const x = S.cart.find(i => i.id === k.slice(9)); if (x) x.code = e.target.value; }
@@ -3730,6 +3829,14 @@ document.addEventListener('submit', async e => {
       const o = id ? find('customer_profiles', id) : {}, nid = id || uid();
       save('customer_profiles', { ...o, id: nid, full_name: d.full_name.trim(), customer_code: d.customer_code.trim() || null, phone: d.phone.trim() || null, budget_thb: num(d.budget_thb), lifestyle: d.lifestyle.trim() || null, notes: d.notes.trim() || null, consent_recorded_at: d.consent ? (o.consent_recorded_at || now()) : null, deleted_at: null });
       if (f.dataset.from === 'studio') S.cust = nid; closeDlg(); commit(); toast('บันทึกลูกค้าแล้ว');
+    } else if (k === 'followup') {
+      if (!d.followup_date) return toast('ใส่วันที่นัดติดตามด้วย');
+      const custId = f.dataset.custid, rxId = f.dataset.rxid;
+      const r = rxId ? find('prescriptions', rxId) : null;
+      const meta = { ...(r ? r.meta : null), followup_date: d.followup_date, followup_type: d.followup_type || 'other', followup_note: (d.followup_note || '').trim() || null, followup_status: 'pending', followup_called_at: null };
+      if (r) save('prescriptions', { ...r, meta });
+      else save('prescriptions', { id: uid(), customer_id: custId, exam_date: null, od_sph: null, od_cyl: null, od_axis: null, os_sph: null, os_cyl: null, os_axis: null, pd: null, add_power: null, od_pd: null, os_pd: null, od_add: null, os_add: null, examiner: null, notes: null, meta, deleted_at: null });
+      closeDlg(); commit(); toast('บันทึกนัดติดตามแล้ว');
     } else if (k === 'knc') {
       const o = id ? find('products', id) : {}, nid = id || uid();
       const title = d.product_name.trim(); if (!title) return toast('ใส่ชื่อสไลด์ด้วย');
@@ -3888,6 +3995,12 @@ document.addEventListener('submit', async e => {
       const meta = { ...health, cc: K.cc.slice(), cc_other: (K.ccOther || '').trim() || null };
       const editId = K.editRxId;
       const existing = editId ? find('prescriptions', editId) : null;
+      // รักษาสถานะนัดติดตาม (โทรแล้ว/เสร็จสิ้น) ไว้ถ้าวันที่นัดยังเหมือนเดิม — ถ้าเพิ่งตั้ง/เปลี่ยนวันที่นัดใหม่ ให้รีเซ็ตกลับเป็น "รอโทรนัด" เสมอ
+      if (meta.followup_date) {
+        const sameDate = existing && existing.meta && existing.meta.followup_date === meta.followup_date;
+        meta.followup_status = sameDate ? (existing.meta.followup_status || 'pending') : 'pending';
+        meta.followup_called_at = sameDate ? (existing.meta.followup_called_at || null) : null;
+      }
       save('prescriptions', {
         ...(existing || {}),
         id: editId || uid(), customer_id: K.custId, exam_date: d.exam_date || null, examiner: health.examiner,
