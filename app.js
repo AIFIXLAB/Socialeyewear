@@ -10,7 +10,7 @@ const baht = n => '฿' + Number(n || 0).toLocaleString('th-TH');
 const num = v => (v === '' || v == null || isNaN(+v)) ? null : +v;
 const toast = m => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2800); };
 const errText = e => { const m = e?.message || String(e); try { return JSON.parse(m).message || m; } catch { return m; } };
-const APP_VERSION = 'v85'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
+const APP_VERSION = 'v86'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
 
 /* ---------- โครงสร้างข้อมูล (ตรงกับ supabase/schema.sql) ---------- */
 const COLS = {
@@ -240,7 +240,7 @@ async function sync() {
   const isFirstSync = Object.keys(ls.get('pull', {})).length === 0; // เครื่องที่เพิ่งล็อกอินครั้งแรก ยังไม่เคยดึงข้อมูลลงมาเลยสักตาราง — ต้องดึงข้อมูลทั้งหมดของร้าน (ลูกค้า/สินค้า/บิลย้อนหลังทั้งหมด) ซึ่งใช้เวลานานกว่าซิงก์ปกติที่ดึงแค่ส่วนที่เปลี่ยนไป
   syncing = true; status = isFirstSync ? 'กำลังดึงข้อมูลทั้งหมดของร้านครั้งแรก… (อาจใช้เวลาสักครู่ตามความเร็วเน็ต กรุณาอย่าปิดแอประหว่างนี้)' : 'กำลังซิงก์…'; setStatus();
   try {
-    if (!(await loadShop())) { status = ''; syncing = false; setStatus(); if (!$('#dlg').open) render(); return; }
+    if (!(await loadShop())) { status = ''; syncing = false; setStatus(); if (!$('#dlg').open && !typingNow()) render(); return; }
     const pull = ls.get('pull', {});
     let tableFailed = false;
     tableErrors = {}; // เริ่มรอบซิงก์ใหม่ ล้าง error ของตารางจากรอบก่อนหน้า (ถ้ารอบนี้ผ่านแล้วจะได้ไม่ค้างข้อความเก่าไว้)
@@ -296,11 +296,11 @@ async function sync() {
     syncApolloCatalog(); // ซิงก์แคตตาล็อก Apollo แบบเดียวกัน
     status = errCount() ? 'บางรายการซิงก์ไม่สำเร็จ' : tableFailed ? 'ซิงก์บางส่วนไม่สำเร็จ จะลองใหม่อัตโนมัติ' : 'ซิงก์แล้ว ' + new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
   } catch (e) { status = 'ซิงก์ไม่สำเร็จ จะลองใหม่อัตโนมัติ'; console.error(e); }
-  syncing = false; setStatus(); if (!$('#dlg').open) render();
+  syncing = false; setStatus(); if (!$('#dlg').open && !typingNow()) render();
 }
 async function loadStaff() {
   if (!sess || !shop) return;
-  try { S.staff = await api('/rest/v1/rpc/shop_staff', { method: 'POST', body: JSON.stringify({ p_shop: shop.id }) }); if (S.v === 'settings' && !$('#dlg').open) render(); } catch (e) { console.error(e); }
+  try { S.staff = await api('/rest/v1/rpc/shop_staff', { method: 'POST', body: JSON.stringify({ p_shop: shop.id }) }); if (S.v === 'settings' && !$('#dlg').open && !typingNow()) render(); } catch (e) { console.error(e); }
 }
 
 /* ---------- รายการอ้างอิงจากระบบเดิม (ยี่ห้อ/ชนิด/Index) ใช้เป็นคำแนะนำอัตโนมัติตอนเพิ่มสินค้า ---------- */
@@ -1806,6 +1806,9 @@ function render() {
   $('#nav').innerHTML = `<button data-act="gomode" data-id="hub">‹ กลับหน้าหลัก</button><div style="height:1px;background:rgba(255,255,255,.14);margin:4px 2px"></div>` + NAV.map(([k, l]) => `<button data-act="go" data-id="${k}" class="${S.v === k ? 'on' : ''}">${l}</button>`).join('');
   $('#view').innerHTML = views[S.v](); setStatus();
 }
+// กำลังพิมพ์อยู่ไหม (โฟกัสอยู่ที่ช่องกรอกข้อมูล) — ใช้กันไม่ให้ render() พื้นหลัง (ซิงก์ทุก 60 วิ, ข้อมูลแท็บอื่นมาผสาน ฯลฯ)
+// มาแทนที่ DOM ของฟอร์มที่กำลังพิมพ์อยู่พอดี ซึ่งทำให้คีย์บอร์ดบนไอแพด/มือถือปิดตัวเอง หน้าจอเลื่อนเด้งขึ้นบน และบางฟอร์มที่ไม่มีการเก็บร่างไว้ข้อมูลจะหายไปเลย
+function typingNow() { const el = document.activeElement; return !!(el && ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)); }
 const dialog = html => { const d = $('#dlg'); d.innerHTML = html; if (!d.open) d.showModal(); };
 const closeDlg = () => $('#dlg').close();
 const fld = (n, l, v = '', t = 'text', extra = '') => `<label>${l}<input name="${n}" type="${t}" value="${esc(v)}" ${extra}></label>`;
@@ -2222,9 +2225,9 @@ function kioskNewCust() {
   return `<div class="panel" style="padding:26px">
     <h2 style="margin-top:0">ลูกค้าใหม่</h2>
     <form data-form="kiosknewcust">
-      <label>ชื่อ-นามสกุล<input name="full_name" required></label>
-      <label>เบอร์โทรศัพท์<input name="phone" value="${esc(K.phone)}" required></label>
-      <label>อายุ<input name="age" type="number" min="0"></label>
+      <label>ชื่อ-นามสกุล<input name="full_name" required value="${esc(K.newCustDraft ? K.newCustDraft.full_name || '' : '')}"></label>
+      <label>เบอร์โทรศัพท์<input name="phone" value="${esc(K.newCustDraft && K.newCustDraft.phone != null ? K.newCustDraft.phone : K.phone)}" required></label>
+      <label>อายุ<input name="age" type="text" inputmode="numeric" value="${esc(K.newCustDraft ? K.newCustDraft.age || '' : '')}"></label>
       <div class="foot"><button type="button" class="btn line" data-act="kioskback">ย้อนกลับ</button><button class="btn" type="submit">ถัดไป</button></div>
     </form>
   </div>`;
@@ -3584,10 +3587,10 @@ document.addEventListener('click', e => {
   else if (a === 'opencatalog') { S.catReturn = id || ''; S.catDetail = null; S.mode = 'lenscat'; render(); }
   else if (a === 'closecatalog') { S.mode = S.catReturn || ''; S.catReturn = ''; render(); }
   else if (a === 'catdesign') { S.catDesign = id; render(); }
-  else if (a === 'kioskstep') { K.hist.push(K.step); K.step = id; if (id === 'lookup') { K.custId = null; K.photo = null; } render(); }
+  else if (a === 'kioskstep') { K.hist.push(K.step); K.step = id; if (id === 'lookup') { K.custId = null; K.photo = null; K.newCustDraft = null; } render(); }
   else if (a === 'kioskback') {
     const prev = K.hist.pop();
-    if (prev) { K.step = prev; if (prev === 'lookup') { K.custId = null; K.photo = null; } render(); }
+    if (prev) { K.step = prev; if (prev === 'lookup') { K.custId = null; K.photo = null; K.newCustDraft = null; } render(); }
     else if (K.editRxId) exitEditExam();
     else { S.mode = 'hub'; render(); }
   }
@@ -3812,7 +3815,16 @@ function trackExamDraft(e) {
   else if (t.type === 'radio') { if (t.checked) K.examDraft[t.name] = t.value; }
   else K.examDraft[t.name] = t.value;
 }
+// เก็บค่าที่พิมพ์ในหน้า "ลูกค้าใหม่" ไว้เหมือนกัน กันข้อมูลหายถ้ามี render() พื้นหลังเกิดขึ้นระหว่างกรอก (เช่น ซิงก์ทุก 60 วิ)
+function trackNewCustDraft(e) {
+  const t = e.target; if (!t.name || !t.closest) return;
+  const f = t.closest('form[data-form="kiosknewcust"]'); if (!f) return;
+  if (!K.newCustDraft) K.newCustDraft = {};
+  K.newCustDraft[t.name] = t.value;
+}
 document.addEventListener('input', trackExamDraft);
+document.addEventListener('input', trackNewCustDraft);
+document.addEventListener('change', trackNewCustDraft);
 document.addEventListener('change', trackExamDraft);
 document.addEventListener('keydown', e => {
   if (S.mode !== 'present') return;
@@ -3984,7 +3996,7 @@ document.addEventListener('submit', async e => {
     } else if (k === 'kiosknewcust') {
       const nid = uid();
       save('customer_profiles', { id: nid, customer_code: nextCode(), full_name: d.full_name.trim(), phone: d.phone.trim() || null, budget_thb: null, lifestyle: null, notes: d.age ? `อายุ ${d.age} ปี` : null, consent_recorded_at: null, deleted_at: null });
-      commit(); K.custId = nid; K.step = 'menu'; render(); toast('เพิ่มลูกค้าใหม่แล้ว');
+      commit(); K.custId = nid; K.step = 'menu'; K.newCustDraft = null; render(); toast('เพิ่มลูกค้าใหม่แล้ว');
     } else if (k === 'examintake') {
       const ccText = [K.cc.join(', '), (K.ccOther || '').trim()].filter(Boolean).join(' / ');
       const health = examIntakeDataFromForm(d);
@@ -4042,7 +4054,7 @@ function mergeFreshTable(t, fresh) {
   const merged = fresh.slice();
   mine.forEach(r => { const i = merged.findIndex(x => x.id === r.id); i < 0 ? merged.push(r) : merged[i] = r; });
   db[t] = merged;
-  if (!$('#dlg').open) render();
+  if (!$('#dlg').open && !typingNow()) render();
 }
 window.addEventListener('storage', e => {
   if (!e.key) return;
