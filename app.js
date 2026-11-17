@@ -10,7 +10,7 @@ const baht = n => '฿' + Number(n || 0).toLocaleString('th-TH');
 const num = v => (v === '' || v == null || isNaN(+v)) ? null : +v;
 const toast = m => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2800); };
 const errText = e => { const m = e?.message || String(e); try { return JSON.parse(m).message || m; } catch { return m; } };
-const APP_VERSION = 'v86'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
+const APP_VERSION = 'v87'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
 
 /* ---------- โครงสร้างข้อมูล (ตรงกับ supabase/schema.sql) ---------- */
 const COLS = {
@@ -1370,7 +1370,7 @@ const views = {
     <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr))">
     <div class="panel"><h2>บัญชี</h2>${acct}</div>${mkShop}${sellers}
     <div class="panel"><h2>การเชื่อมต่อ</h2><label>Project URL<input data-bind="url" value="${esc(c.url)}"></label><label>Publishable key<input data-bind="key" value="${esc(c.key)}"></label><p class="tag">ใช้เฉพาะ publishable key ห้ามใส่ secret key</p></div>
-    <div class="panel"><h2>ข้อมูลในเครื่อง</h2><p class="tag">รอซิงก์ ${pendingCount()} รายการ${errCount() ? ` · ผิดพลาด ${errCount()} รายการ (แก้ไขรายการนั้นแล้วบันทึกใหม่เพื่อลองอีกครั้ง)` : ''}</p><button class="btn line" data-act="backup">สำรองข้อมูลเป็นไฟล์ JSON</button></div></div>`;
+    <div class="panel"><h2>ข้อมูลในเครื่อง</h2><p class="tag">รอซิงก์ ${pendingCount()} รายการ${errCount() ? ` · ผิดพลาด ${errCount()} รายการ (แก้ไขรายการนั้นแล้วบันทึกใหม่เพื่อลองอีกครั้ง)` : ''}</p><p class="tag">ตอนนี้มีลูกค้า ${live('customer_profiles').length} คน · สินค้า/เลนส์ ${live('products').length} รายการในเครื่องนี้</p><button class="btn line" data-act="backup">สำรองข้อมูลเป็นไฟล์ JSON</button> <button class="btn line" data-act="fullresync">ดึงข้อมูลใหม่ทั้งหมด</button><p class="tag" style="margin-top:8px">ใช้ปุ่มนี้ถ้าเครื่องนี้ข้อมูลไม่ครบ/ไม่ตรงกับเครื่องอื่น (เช่น รายชื่อลูกค้าหรือเลนส์บางชนิดหายไป) — จะดึงข้อมูลล่าสุดทั้งหมดของร้านมาใหม่ทั้งหมด ไม่ลบรายการที่พิมพ์ไว้ในเครื่องนี้แล้วยังไม่ได้ซิงก์</p></div></div>`;
   }
 };
 
@@ -3584,6 +3584,11 @@ document.addEventListener('click', e => {
     else { const viaPin = !!S.activeSeller; S.activeSeller = null; S.mode = viaPin ? 'splash' : 'hub'; render(); }
   }
   else if (a === 'syncnow') forceSync();
+  else if (a === 'fullresync') {
+    if (!navigator.onLine || !sess) { toast('ออฟไลน์อยู่ หรือยังไม่ได้ล็อกอิน ไม่สามารถดึงข้อมูลใหม่ได้ตอนนี้'); return; }
+    if (!confirm('ดึงข้อมูลล่าสุดทั้งหมดของร้านมาใหม่ที่เครื่องนี้? อาจใช้เวลาสักครู่ตามจำนวนข้อมูลและความเร็วเน็ต (รายการที่พิมพ์ไว้ในเครื่องนี้แล้วยังไม่ได้ซิงก์จะไม่หาย)')) return;
+    ls.set('pull', {}); toast('กำลังดึงข้อมูลทั้งหมดของร้านใหม่…'); sync();
+  }
   else if (a === 'opencatalog') { S.catReturn = id || ''; S.catDetail = null; S.mode = 'lenscat'; render(); }
   else if (a === 'closecatalog') { S.mode = S.catReturn || ''; S.catReturn = ''; render(); }
   else if (a === 'catdesign') { S.catDesign = id; render(); }
