@@ -10,7 +10,7 @@ const baht = n => '฿' + Number(n || 0).toLocaleString('th-TH');
 const num = v => (v === '' || v == null || isNaN(+v)) ? null : +v;
 const toast = m => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2800); };
 const errText = e => { const m = e?.message || String(e); try { return JSON.parse(m).message || m; } catch { return m; } };
-const APP_VERSION = 'v90'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
+const APP_VERSION = 'v91'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
 
 /* ---------- โครงสร้างข้อมูล (ตรงกับ supabase/schema.sql) ---------- */
 const COLS = {
@@ -616,6 +616,9 @@ function lrHasCriteria(lr) { return !!(lr.lenstype.length || lr.vision.length ||
 const empty = (m, a = '') => `<div class="empty">${m}${a ? `<br><br>${a}` : ''}</div>`;
 const fmtP = v => v == null || v === '' ? '-' : (+v > 0 ? '+' : '') + (+v).toFixed(2);
 const day = d => d ? new Date(d).toLocaleDateString('th-TH') : '-';
+// เลื่อนเดือนจาก "YYYY-MM" ไปข้างหน้า/ถอยหลัง n เดือน — ใช้เวลาเที่ยงวันกันปัญหาแปลงเขตเวลาแล้ววันที่เพี้ยนข้ามเดือน
+const shiftMonth = (ym, n) => { const [y, m] = ym.split('-').map(Number); return new Date(y, m - 1 + n, 1, 12).toISOString().slice(0, 7); };
+const monthLabelTH = ym => { const [y, m] = ym.split('-').map(Number); return new Date(y, m - 1, 1, 12).toLocaleDateString('th-TH', { month: 'long', year: 'numeric' }); };
 const cartSub = () => S.cart.reduce((n, i) => n + i.price * i.qty, 0);
 function discAmt(cfg, base) {
   const v = Math.max(0, +(cfg && cfg.val) || 0);
@@ -1499,31 +1502,60 @@ const views = {
     const cnt = {}; live('quote_items').forEach(i => { const p = find('quotes', i.quote_id); if (p && !p.deleted_at) cnt[i.item_name_snapshot] = (cnt[i.item_name_snapshot] || 0) + i.quantity; });
     const top = Object.entries(cnt).sort((a, b) => b[1] - a[1]).slice(0, 5), max = top[0]?.[1] || 1;
     const low = live('products').filter(p => p.stock_qty != null && p.stock_qty <= 2 && p.active !== false);
-    const thisMonth = now().slice(0, 7);
-    const monthLabel = new Date().toLocaleDateString('th-TH', { month: 'long', year: 'numeric' });
-    const monthQuotes = won.filter(x => (x.created_at || '').slice(0, 7) === thisMonth);
+    const curMonth = now().slice(0, 7);
+    if (!S.insMonth) S.insMonth = curMonth;
+    const selMonth = S.insMonth > curMonth ? curMonth : S.insMonth; // กันเผลอเลื่อนไปอนาคต
+    const monthLabel = monthLabelTH(selMonth);
+    const monthQuotes = won.filter(x => (x.created_at || '').slice(0, 7) === selMonth);
     const monthRev = monthQuotes.reduce((n, x) => n + x.total_thb, 0);
-    const monthItems = {};
+    const monthItems = {}, lensItems = {}; let lensQtyTotal = 0;
     live('quote_items').forEach(i => {
       const p = find('quotes', i.quote_id);
-      if (p && !p.deleted_at && ['accepted', 'converted'].includes(p.status) && (p.created_at || '').slice(0, 7) === thisMonth) {
+      if (p && !p.deleted_at && ['accepted', 'converted'].includes(p.status) && (p.created_at || '').slice(0, 7) === selMonth) {
         const key = i.item_name_snapshot;
         if (!monthItems[key]) monthItems[key] = { qty: 0, total: 0 };
         monthItems[key].qty += i.quantity;
         monthItems[key].total += i.line_total_thb;
+        if (i.product_type === 'lens') {
+          if (!lensItems[key]) lensItems[key] = { qty: 0, total: 0 };
+          lensItems[key].qty += i.quantity;
+          lensItems[key].total += i.line_total_thb;
+          lensQtyTotal += i.quantity;
+        }
       }
     });
     const monthRows = Object.entries(monthItems).sort((a, b) => b[1].total - a[1].total);
+    const lensRows = Object.entries(lensItems).sort((a, b) => b[1].qty - a[1].qty);
+    const topLens = lensRows[0];
     return `<h1>ภาพรวม</h1><p class="sub">สรุปจากข้อมูลที่อยู่ในเครื่องนี้</p>
     <div class="grid stats"><div class="panel stat"><span class="tag">ยอดที่ลูกค้าตกลง</span><b>${baht(rev)}</b></div><div class="panel stat"><span class="tag">ใบเสนอราคา</span><b>${q.length}</b></div><div class="panel stat"><span class="tag">อัตราปิดการขาย</span><b>${q.length ? Math.round(won.length / q.length * 100) : 0}%</b></div><div class="panel stat"><span class="tag">ยอดเฉลี่ยต่อใบ</span><b>${baht(won.length ? Math.round(rev / won.length) : 0)}</b></div></div>
     <div class="panel" style="margin-top:16px">
-      <div class="bar" style="margin-bottom:12px"><h2 style="margin:0">สรุปยอดขายเดือนนี้ — ${esc(monthLabel)}</h2><button class="btn line sm" data-act="csvmonth">ส่งออก CSV</button></div>
+      <div class="bar" style="margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:6px">
+          <button type="button" class="btn line sm" data-act="insmonth" data-id="prev" title="เดือนก่อนหน้า">‹</button>
+          <h2 style="margin:0;min-width:180px;text-align:center">${esc(monthLabel)}</h2>
+          <button type="button" class="btn line sm" data-act="insmonth" data-id="next" title="เดือนถัดไป" ${selMonth >= curMonth ? 'disabled' : ''}>›</button>
+          ${selMonth !== curMonth ? `<button type="button" class="btn line sm" data-act="insmonth" data-id="now">กลับเดือนนี้</button>` : ''}
+        </div>
+        <button class="btn line sm" data-act="csvmonth">ส่งออก CSV</button>
+      </div>
       <div class="grid stats" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
         <div class="panel stat"><span class="tag">จำนวนบิลที่ขายได้</span><b>${monthQuotes.length}</b></div>
         <div class="panel stat"><span class="tag">ยอดขายรวมเดือนนี้</span><b>${baht(monthRev)}</b></div>
         <div class="panel stat"><span class="tag">ยอดเฉลี่ยต่อบิล</span><b>${baht(monthQuotes.length ? Math.round(monthRev / monthQuotes.length) : 0)}</b></div>
       </div>
       ${monthRows.length ? `<div class="wrap" style="margin-top:14px"><table><tr><th>สินค้า</th><th style="text-align:right">จำนวนที่ขาย</th><th style="text-align:right">ยอดขาย</th></tr>${monthRows.map(([n, v]) => `<tr><td>${esc(n)}</td><td style="text-align:right">${v.qty}</td><td style="text-align:right">${baht(v.total)}</td></tr>`).join('')}</table></div>` : '<p class="tag" style="margin-top:14px">ยังไม่มีรายการขายในเดือนนี้</p>'}
+    </div>
+    <div class="panel" style="margin-top:16px">
+      <h2 style="margin-top:0">สรุปยอดขายเลนส์ — ${esc(monthLabel)}</h2>
+      ${lensRows.length ? `
+      <div class="grid stats" style="grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-bottom:14px">
+        <div class="panel stat"><span class="tag">ขายเลนส์ได้ (คู่/ชิ้น)</span><b>${lensQtyTotal}</b></div>
+        <div class="panel stat"><span class="tag">ชนิดเลนส์ที่ขายได้</span><b>${lensRows.length}</b></div>
+        <div class="panel stat"><span class="tag">ขายดีที่สุด</span><b style="font-size:16px">${esc(topLens[0])}</b><span class="tag">${topLens[1].qty} คู่/ชิ้น</span></div>
+      </div>
+      <div class="wrap"><table><tr><th>ชนิดเลนส์</th><th style="text-align:right">จำนวนที่ขาย (คู่/ชิ้น)</th><th style="text-align:right">ยอดขาย</th></tr>${lensRows.map(([n, v]) => `<tr><td>${esc(n)}</td><td style="text-align:right">${v.qty}</td><td style="text-align:right">${baht(v.total)}</td></tr>`).join('')}</table></div>`
+        : '<p class="tag">ยังไม่มีรายการขายเลนส์ในเดือนนี้</p>'}
     </div>
     <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr));margin-top:16px">
       <div class="panel"><h2>ยอดขายรายเดือน (6 เดือน)</h2>${chart}</div>
@@ -3692,11 +3724,11 @@ document.addEventListener('click', e => {
   else if (a === 'csvcust') download('customers.csv', csv([['รหัส', 'ชื่อ', 'โทรศัพท์', 'งบ', 'ไลฟ์สไตล์', 'ยินยอม'], ...live('customer_profiles').map(c => [c.customer_code, c.full_name, c.phone, c.budget_thb, c.lifestyle, c.consent_recorded_at ? 'ใช่' : 'ไม่'])]));
   else if (a === 'csvq') download('quotes.csv', csv([['เลขที่', 'วันที่', 'ลูกค้า', 'รวม', 'ส่วนลด', 'สุทธิ', 'สถานะ'], ...live('quotes').map(q => [q.quote_number, q.created_at.slice(0, 10), custName(q.customer_id), q.subtotal_thb, q.discount_thb, q.total_thb, QST[q.status]])]));
   else if (a === 'csvmonth') {
-    const thisMonth = now().slice(0, 7);
+    const selMonth = S.insMonth || now().slice(0, 7);
     const monthItems = {};
     live('quote_items').forEach(i => {
       const p = find('quotes', i.quote_id);
-      if (p && !p.deleted_at && ['accepted', 'converted'].includes(p.status) && (p.created_at || '').slice(0, 7) === thisMonth) {
+      if (p && !p.deleted_at && ['accepted', 'converted'].includes(p.status) && (p.created_at || '').slice(0, 7) === selMonth) {
         const key = i.item_name_snapshot;
         if (!monthItems[key]) monthItems[key] = { qty: 0, total: 0 };
         monthItems[key].qty += i.quantity;
@@ -3704,7 +3736,15 @@ document.addEventListener('click', e => {
       }
     });
     const rows = Object.entries(monthItems).sort((a, b) => b[1].total - a[1].total);
-    download(`ยอดขาย-${thisMonth}.csv`, csv([['สินค้า', 'จำนวนที่ขาย', 'ยอดขาย'], ...rows.map(([n, v]) => [n, v.qty, v.total])]));
+    download(`ยอดขาย-${selMonth}.csv`, csv([['สินค้า', 'จำนวนที่ขาย', 'ยอดขาย'], ...rows.map(([n, v]) => [n, v.qty, v.total])]));
+  }
+  else if (a === 'insmonth') {
+    const curMonth = now().slice(0, 7);
+    if (!S.insMonth) S.insMonth = curMonth;
+    if (id === 'prev') S.insMonth = shiftMonth(S.insMonth, -1);
+    else if (id === 'next') { const nm = shiftMonth(S.insMonth, 1); S.insMonth = nm > curMonth ? curMonth : nm; }
+    else if (id === 'now') S.insMonth = curMonth;
+    render();
   }
   else if (a === 'backup') download('smart-optic-backup-' + now().slice(0, 10) + '.json', JSON.stringify(db, null, 1), 'application/json');
   else if (a === 'print') window.print();
