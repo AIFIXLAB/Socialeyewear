@@ -10,7 +10,7 @@ const baht = n => '฿' + Number(n || 0).toLocaleString('th-TH');
 const num = v => (v === '' || v == null || isNaN(+v)) ? null : +v;
 const toast = m => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2800); };
 const errText = e => { const m = e?.message || String(e); try { return JSON.parse(m).message || m; } catch { return m; } };
-const APP_VERSION = 'v88'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
+const APP_VERSION = 'v89'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
 
 /* ---------- โครงสร้างข้อมูล (ตรงกับ supabase/schema.sql) ---------- */
 const COLS = {
@@ -701,32 +701,148 @@ async function fetchAllRows(t) {
   }
   return all;
 }
-// ปุ่ม "ดาวน์โหลดข้อมูลทั้งหมดเป็น ZIP" ในหน้าตั้งค่า — ดึงทุกตารางสดจากเซิร์ฟเวอร์ (ข้อมูลของทุกเครื่องรวมกัน ไม่ใช่แค่ที่เครื่องนี้เคยซิงก์มา) แล้วห่อเป็น ZIP ไฟล์เดียวให้ดาวน์โหลดทันที
+// เนื้อหาเอกสารประกอบชุดกู้คืน (ข้อความคงที่ ฝังไว้ในแอปเลย จะได้ไม่ต้องพึ่งไฟล์แยกข้างนอก — อัปเดตพร้อมโค้ดทุกครั้งที่ส่งเวอร์ชันใหม่)
+const RECOVERY_SCHEMA_SQL = `-- โครงสร้างฐานข้อมูล (SCHEMA) ของระบบ Social Eyewear — "เวอร์ชันคาดการณ์จากโค้ดแอป"
+-- ⚠️ ไฟล์นี้สร้างจากการอ่านโค้ด app.js ย้อนกลับ ไม่ใช่ไฟล์ schema จริงจาก Supabase โดยตรง
+-- (แอปไม่มีสิทธิ์เข้าถึงฐานข้อมูลจริงเพื่อ pg_dump เอง) ชื่อตาราง/คอลัมน์แม่นยำสูง แต่ RLS policy, trigger,
+-- ชนิดข้อมูลที่เป๊ะ 100% ควรตรวจสอบกับของจริงอีกครั้ง (ดูวิธีใน วิธี-ดึงโครงสร้างจริงจาก-Supabase.md)
+
+create table shops (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  created_at timestamptz default now()
+);
+create table shop_members (
+  id uuid primary key default gen_random_uuid(),
+  shop_id uuid references shops(id),
+  user_id uuid references auth.users(id),
+  role text check (role in ('owner','manager','staff')),
+  created_at timestamptz default now()
+);
+create table customer_profiles (
+  id uuid primary key, shop_id uuid references shops(id),
+  customer_code text, full_name text, phone text, budget_thb numeric, lifestyle text, notes text,
+  consent_recorded_at timestamptz, deleted_at timestamptz,
+  created_at timestamptz default now(), updated_at timestamptz default now()
+);
+create table prescriptions (
+  id uuid primary key, shop_id uuid references shops(id), customer_id uuid references customer_profiles(id),
+  exam_date date, od_sph numeric, od_cyl numeric, od_axis numeric, os_sph numeric, os_cyl numeric, os_axis numeric,
+  pd numeric, add_power numeric, od_pd numeric, os_pd numeric, od_add numeric, os_add numeric,
+  examiner text, notes text, meta jsonb, deleted_at timestamptz,
+  created_at timestamptz default now(), updated_at timestamptz default now()
+);
+create table products (
+  id uuid primary key, shop_id uuid references shops(id),
+  product_type text, sku text, brand text, color text, product_name text, description text,
+  features jsonb not null default '[]', retail_price_thb numeric, cost_thb numeric, stock_qty numeric,
+  active boolean default true, lens_spec jsonb, deleted_at timestamptz,
+  created_at timestamptz default now(), updated_at timestamptz default now()
+);
+create table quotes (
+  id uuid primary key, shop_id uuid references shops(id), customer_id uuid references customer_profiles(id),
+  quote_number text, status text, subtotal_thb numeric, discount_thb numeric, total_thb numeric,
+  notes text, valid_until date, receipt_date date, meta jsonb, deleted_at timestamptz,
+  created_at timestamptz default now(), updated_at timestamptz default now()
+);
+create table quote_items (
+  id uuid primary key, shop_id uuid references shops(id), quote_id uuid references quotes(id), product_id uuid references products(id),
+  item_name_snapshot text, product_type text, quantity numeric, unit_price_thb numeric, line_total_thb numeric,
+  meta jsonb, deleted_at timestamptz, created_at timestamptz default now(), updated_at timestamptz default now()
+);
+create table claims (
+  id uuid primary key, shop_id uuid references shops(id), customer_id uuid references customer_profiles(id),
+  kind text, frame_model text, frame_code text, issue text, repair_items text, cost_thb numeric, pickup_date date,
+  photo text, status text, signed_at timestamptz, notes text, deleted_at timestamptz,
+  created_at timestamptz default now(), updated_at timestamptz default now()
+);
+create table sellers (
+  id uuid primary key, shop_id uuid references shops(id), name text, role text, pin text, deleted_at timestamptz,
+  created_at timestamptz default now(), updated_at timestamptz default now()
+);
+-- RPC functions ที่แอปเรียกใช้ (ต้องดูเนื้อหาจริงจาก Supabase SQL Editor): create_shop(p_name text), add_staff(p_shop uuid, p_email text, p_role text), shop_staff(p_shop uuid)`;
+
+const RECOVERY_SCHEMA_HOWTO = `# วิธีดึง "โครงสร้างฐานข้อมูลจริง" ออกมาจาก Supabase (ทำเองได้ ไม่ต้องเขียนโค้ด)
+
+ไฟล์ โครงสร้างตาราง-ที่คาดการณ์ไว้.sql ในโฟลเดอร์นี้เป็นแค่การคาดการณ์จากโค้ดแอป ถ้าอยากได้ของจริง 100% ให้ทำตามนี้:
+
+## วิธีที่ 1 — ง่ายที่สุด
+1. เข้า https://supabase.com ล็อกอินเข้าโปรเจกต์ของร้าน
+2. เมนู Database → Backups → ถ้ามีปุ่ม "Download backup" กดดาวน์โหลดได้เลย (ได้ทั้งโครงสร้าง+ข้อมูลในไฟล์เดียว)
+
+## วิธีที่ 2 — ถ้าไม่มีปุ่ม Download backup
+1. Project Settings (รูปเฟือง) → Database → หา Connection string (แบบ URI) คัดลอกไว้ (มีรหัสผ่านอยู่ในนั้น เก็บเป็นความลับ)
+2. ใช้คำสั่ง (ต้องมีโปรแกรม pg_dump):
+   pg_dump "ใส่ connection string" --schema-only > schema-จริง.sql
+
+## วิธีที่ 3 — ง่ายสุดสำหรับคนไม่ถนัดคอม
+1. Supabase → เมนู Table Editor → เลือกตารางทีละตาราง → ปุ่ม Export → Export to CSV`;
+
+const RECOVERY_GUIDE_MD = `# คู่มือกู้คืนระบบฉุกเฉิน — Social Eyewear Smart Optic
+
+เอกสารนี้เขียนไว้ให้ "คนที่ไม่ใช่โปรแกรมเมอร์" อ่านแล้วเอาไปให้ AI หรือโปรแกรมเมอร์คนใหม่ทำตามได้เลย
+
+## กรณีที่ 1: Vercel ล่ม/เลิกกิจการ (Supabase ยังอยู่)
+ไม่ร้ายแรงมาก — Vercel แค่ฝากไฟล์เว็บ ข้อมูลยังอยู่ที่ Supabase
+สั่ง AI คนใหม่ว่า: "เอาไฟล์เว็บในโฟลเดอร์ 01-โค้ดแอป ไปอัปโหลดขึ้นเว็บโฮสติ้งเจ้าใหม่ (Netlify/Cloudflare Pages/อื่นๆ) แล้วอัปเดต config.js ให้ยังชี้ไปที่ Supabase โปรเจกต์เดิม"
+
+## กรณีที่ 2: Supabase ล่ม/เลิกกิจการ (ร้ายแรงกว่า)
+ไฟล์ในโฟลเดอร์นี้มีครบแล้ว (โค้ด + โครงสร้างตาราง + ข้อมูลจริงล่าสุด ณ วันที่ดาวน์โหลด)
+สั่ง AI คนใหม่ว่า: "ช่วยตั้งฐานข้อมูล Postgres ใหม่ (Supabase เจ้าใหม่หรือ Postgres ที่ไหนก็ได้) นำเข้าโครงสร้างตารางจากโฟลเดอร์ 02-ฐานข้อมูล ตามด้วยข้อมูลจริงจากโฟลเดอร์ 04-ขอมูลจริงของร้าน (ไฟล์ .json ต่อตาราง) จากนั้นเปิด REST API แล้วแก้ config.js ของแอปในโฟลเดอร์ 01-โค้ดแอป ให้ชี้ไปที่ Project URL/key ใหม่"
+
+## สรุป
+| ถ้าเจ้านี้ล่ม | ร้ายแรงแค่ไหน | ต้องทำอะไร |
+|---|---|---|
+| Vercel | ไม่มาก | ย้ายไฟล์เว็บไปโฮสต์ใหม่ |
+| Supabase | มาก | ตั้งฐานข้อมูลใหม่ + นำเข้าโครงสร้าง + นำเข้าข้อมูลจริงจากไฟล์ ZIP นี้
+
+**สำคัญที่สุด:** ดาวน์โหลดไฟล์ ZIP ชุดนี้ใหม่เป็นระยะๆ (แนะนำเดือนละครั้ง) เพราะข้อมูลข้างในคือข้อมูลสด ณ ตอนที่กดดาวน์โหลดเท่านั้น ไฟล์เก่าจะไม่มีข้อมูลที่เพิ่มหลังจากนั้น`;
+
+// ปุ่ม "ดาวน์โหลดชุดกู้คืนฉบับสมบูรณ์ ZIP" ในหน้าตั้งค่า — กดครั้งเดียวได้ครบทุกอย่างในไฟล์เดียว:
+// 1) โค้ดแอปปัจจุบัน (ดึงสดจากเว็บเดียวกับที่กำลังเปิดอยู่ตอนนี้ รับประกันว่าตรงกับเวอร์ชันที่ใช้งานจริงเป๊ะ)
+// 2) โครงสร้างฐานข้อมูล + วิธีดึง schema จริงจาก Supabase
+// 3) คู่มือกู้คืนระบบ
+// 4) ข้อมูลจริงทั้งหมดทุกตาราง ดึงสดจากเซิร์ฟเวอร์ (ของทุกเครื่องรวมกัน ไม่ใช่แค่เครื่องนี้)
 async function exportFullBackupZip() {
-  if (!navigator.onLine || !sess) { toast('ต้องเชื่อมเน็ตและล็อกอินก่อน ถึงจะดึงข้อมูลทั้งหมดจากเซิร์ฟเวอร์ได้'); return; }
+  if (!navigator.onLine || !sess) { toast('ต้องเชื่อมเน็ตและล็อกอินก่อน ถึงจะสร้างชุดกู้คืนได้'); return; }
   if (!shop) { toast('ยังไม่มีร้านผูกกับบัญชีนี้'); return; }
-  const btn = $('#fullBackupBtn'); if (btn) { btn.disabled = true; btn.textContent = 'กำลังดึงข้อมูล…'; }
+  const btn = $('#fullBackupBtn'); if (btn) { btn.disabled = true; btn.textContent = 'กำลังเตรียมชุดกู้คืน…'; }
   try {
-    toast('กำลังดึงข้อมูลทั้งหมดจากเซิร์ฟเวอร์… อาจใช้เวลาสักครู่ถ้าข้อมูลเยอะ');
+    toast('กำลังรวมโค้ด+ฐานข้อมูล+ข้อมูลจริงทั้งหมดเป็น ZIP เดียว… อาจใช้เวลาสักครู่');
     const JSZip = await loadJSZip();
     const zip = new JSZip();
+    // 1) โค้ดแอปปัจจุบัน — ดึงไฟล์สดจากเว็บเดียวกับที่กำลังรันอยู่ (same-origin, ไม่ติด CORS)
+    const codeFiles = ['index.html', 'config.js', 'manifest.webmanifest', 'icon.svg', 'app.js', 'sw.js', 'styles.css'];
+    let gotCodeFiles = [];
+    for (const f of codeFiles) {
+      if (btn) btn.textContent = `กำลังรวมไฟล์ ${f}…`;
+      try { const r = await fetch('/' + f, { cache: 'no-store' }); if (r.ok) { zip.file(`01-โค้ดแอป/${f}`, await r.text()); gotCodeFiles.push(f); } } catch { /* ไฟล์นี้ดึงไม่ได้ ข้ามไป ไม่ให้ทั้งชุดล้ม */ }
+    }
+    const missingCodeFiles = codeFiles.filter(f => !gotCodeFiles.includes(f));
+    zip.file('01-โค้ดแอป/อ่านก่อน.md', `# โค้ดแอปปัจจุบัน (ดึงสดตอนกดดาวน์โหลด — ตรงกับเวอร์ชันที่ใช้งานจริงตอนนี้)\n\nไฟล์ที่ดึงมาได้: ${gotCodeFiles.join(', ') || '(ไม่มี)'}\n${missingCodeFiles.length ? `\n⚠️ ไฟล์ที่ดึงไม่ได้ (ต้องไปหาจาก GitHub ของร้านเพิ่มเอง): ${missingCodeFiles.join(', ')}` : '\nได้ครบทุกไฟล์แล้ว ✅'}\n\nเป็นไฟล์เว็บธรรมดา (HTML/CSS/JavaScript) ไม่ได้ผูกกับ Vercel โดยเฉพาะ เอาไปฝากเว็บโฮสติ้งเจ้าไหนก็เปิดได้`);
+    // 2) โครงสร้างฐานข้อมูล
+    zip.file('02-ฐานข้อมูล/โครงสร้างตาราง-ที่คาดการณ์ไว้.sql', RECOVERY_SCHEMA_SQL);
+    zip.file('02-ฐานข้อมูล/วิธี-ดึงโครงสร้างจริงจาก-Supabase.md', RECOVERY_SCHEMA_HOWTO);
+    // 3) คู่มือกู้คืน
+    zip.file('03-วิธีกู้คืนระบบ/ถ้าวันหนึ่งสองเว็บนี้ล่ม-ทำตามนี้.md', RECOVERY_GUIDE_MD);
+    // 4) ข้อมูลจริงทั้งหมด ดึงสดจากเซิร์ฟเวอร์
     const counts = {};
     for (const t of T) {
-      if (btn) btn.textContent = `กำลังดึง ${t}…`;
+      if (btn) btn.textContent = `กำลังดึงข้อมูล ${t}…`;
       const rows = await fetchAllRows(t);
       counts[t] = rows.length;
-      zip.file(`data/${t}.json`, JSON.stringify(rows, null, 1));
+      zip.file(`04-ขอมูลจริงของร้าน/${t}.json`, JSON.stringify(rows, null, 1));
     }
-    zip.file('data/สรุป.json', JSON.stringify({ exported_at: now(), shop_name: shop.name, shop_id: shop.id, record_counts: counts }, null, 1));
-    zip.file('อ่านก่อน.md', `# ไฟล์สำรองข้อมูลจริงทั้งหมดของร้าน "${shop.name}"\n\nดึงสดจากเซิร์ฟเวอร์ Supabase เมื่อ ${day(now())} — รวมข้อมูลจากทุกเครื่องที่เคยซิงก์เข้าระบบ ไม่ใช่แค่เครื่องนี้เครื่องเดียว\n\nแต่ละไฟล์ในโฟลเดอร์ data/ คือข้อมูลดิบ 1 ตาราง (เป็นไฟล์ JSON) ไว้ใช้นำเข้าฐานข้อมูลใหม่ตอนกู้คืนระบบ (ดูวิธีทำในไฟล์ \`03-วิธีกู้คืนระบบ\` ของชุดสำรองฉุกเฉิน)\n\nจำนวนรายการที่ดึงมาได้แต่ละตาราง:\n${Object.entries(counts).map(([t, n]) => `- ${t}: ${n} รายการ`).join('\n')}\n`);
+    zip.file('04-ขอมูลจริงของร้าน/สรุป.json', JSON.stringify({ exported_at: now(), shop_name: shop.name, shop_id: shop.id, record_counts: counts }, null, 1));
+    zip.file('อ่านก่อนเลย-README.md', `# ชุดกู้คืนฉบับสมบูรณ์ — ร้าน "${shop.name}"\n\nสร้างโดยกดปุ่ม "ดาวน์โหลดข้อมูลทั้งหมดเป็น ZIP" ในแอป เมื่อ ${day(now())} — ไฟล์นี้มีครบทุกอย่างในตัวเอง ไม่ต้องไปหาไฟล์อื่นมาประกอบเพิ่ม:\n\n- 01-โค้ดแอป: โค้ดเว็บปัจจุบัน (ดึงสดจากเว็บที่ใช้งานจริงตอนกดปุ่ม)\n- 02-ฐานข้อมูล: โครงสร้างตาราง + วิธีดึง schema จริงจาก Supabase\n- 03-วิธีกู้คืนระบบ: คู่มือทีละขั้นตอน ถ้า Vercel/Supabase ล่ม\n- 04-ขอมูลจริงของร้าน: ข้อมูลลูกค้า/ใบตรวจ/สินค้าจริงทั้งหมด ดึงสด ณ วันที่ดาวน์โหลด (รวมของทุกเครื่อง ไม่ใช่แค่เครื่องนี้)\n\nจำนวนรายการข้อมูลจริงที่ดึงมาได้:\n${Object.entries(counts).map(([t, n]) => `- ${t}: ${n} รายการ`).join('\n')}\n\n⚠️ ข้อมูลในไฟล์นี้คือข้อมูลสด ณ ตอนที่กดดาวน์โหลดเท่านั้น ถ้ามีการใช้งานต่อหลังจากนี้ ไฟล์จะไม่มีข้อมูลใหม่ — ดาวน์โหลดไฟล์ใหม่เป็นระยะๆ (แนะนำเดือนละครั้ง) แล้วเก็บไว้ในคอมหรือแฟลชไดรฟ์`);
     const blob = await zip.generateAsync({ type: 'blob' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `social-eyewear-ขอมูลจริงทั้งหมด-${now().slice(0, 10)}.zip`;
+    a.download = `social-eyewear-ชุดกู้คืนฉบับสมบูรณ์-${now().slice(0, 10)}.zip`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-    toast('ดาวน์โหลดไฟล์สำรองข้อมูลทั้งหมดเรียบร้อยแล้ว');
-  } catch (e) { toast('สำรองข้อมูลไม่สำเร็จ: ' + errText(e)); console.error(e); }
+    toast('ดาวน์โหลดชุดกู้คืนฉบับสมบูรณ์เรียบร้อยแล้ว');
+  } catch (e) { toast('สร้างชุดกู้คืนไม่สำเร็จ: ' + errText(e)); console.error(e); }
   finally { if (btn) { btn.disabled = false; btn.textContent = '⬇ ดาวน์โหลดข้อมูลทั้งหมดเป็น ZIP'; } }
 }
 
@@ -1425,7 +1541,7 @@ const views = {
     <div class="panel"><h2>บัญชี</h2>${acct}</div>${mkShop}${sellers}
     <div class="panel"><h2>การเชื่อมต่อ</h2><label>Project URL<input data-bind="url" value="${esc(c.url)}"></label><label>Publishable key<input data-bind="key" value="${esc(c.key)}"></label><p class="tag">ใช้เฉพาะ publishable key ห้ามใส่ secret key</p></div>
     <div class="panel"><h2>ข้อมูลในเครื่อง</h2><p class="tag">รอซิงก์ ${pendingCount()} รายการ${errCount() ? ` · ผิดพลาด ${errCount()} รายการ (แก้ไขรายการนั้นแล้วบันทึกใหม่เพื่อลองอีกครั้ง)` : ''}</p><p class="tag">ตอนนี้มีลูกค้า ${live('customer_profiles').length} คน · สินค้า/เลนส์ ${live('products').length} รายการในเครื่องนี้</p><button class="btn line" data-act="backup">สำรองข้อมูลเป็นไฟล์ JSON (เฉพาะเครื่องนี้)</button> <button class="btn line" data-act="fullresync">ดึงข้อมูลใหม่ทั้งหมด (ซ่อมเครื่องนี้)</button><p class="tag" style="margin-top:8px">ใช้ปุ่มนี้ถ้าเครื่องนี้ข้อมูลไม่ครบ/ไม่ตรงกับเครื่องอื่น (เช่น รายชื่อลูกค้าหรือเลนส์บางชนิดหายไป) — จะดึงข้อมูลล่าสุดทั้งหมดของร้านมาใหม่ทั้งหมด ไม่ลบรายการที่พิมพ์ไว้ในเครื่องนี้แล้วยังไม่ได้ซิงก์</p></div>
-    <div class="panel"><h2>สำรองข้อมูลฉุกเฉิน (ทุกตาราง ทุกเครื่องรวมกัน)</h2><p class="tag">ดึงข้อมูลสดจากเซิร์ฟเวอร์โดยตรงทุกตาราง (ลูกค้า/ใบตรวจ/สินค้า/ใบเสนอราคา/เคลม/พนักงาน) รวมเป็นไฟล์ ZIP เดียว กดครั้งเดียวได้ไฟล์ครบ ไม่ต้องเข้า Supabase เอง — เก็บไว้ในคอม/แฟลชไดรฟ์เป็นระยะๆ เผื่อกรณีฉุกเฉิน</p><button id="fullBackupBtn" class="btn gold" data-act="fullbackupzip">⬇ ดาวน์โหลดข้อมูลทั้งหมดเป็น ZIP</button></div></div>`;
+    <div class="panel"><h2>ชุดกู้คืนฉบับสมบูรณ์ (กดครั้งเดียวได้ครบ)</h2><p class="tag">กดปุ่มเดียวได้ไฟล์ ZIP ที่มีครบในตัวเอง ไม่ต้องไปรวมไฟล์เองอีก: โค้ดแอปปัจจุบัน + โครงสร้างฐานข้อมูล + คู่มือกู้คืนระบบ + ข้อมูลจริงทั้งหมดทุกตาราง (ดึงสดจากเซิร์ฟเวอร์ ของทุกเครื่องรวมกัน) — เก็บไฟล์ที่ได้ไว้ในคอม/แฟลชไดรฟ์เป็นระยะๆ (แนะนำเดือนละครั้ง) เผื่อกรณีฉุกเฉิน</p><button id="fullBackupBtn" class="btn gold" data-act="fullbackupzip">⬇ ดาวน์โหลดข้อมูลทั้งหมดเป็น ZIP</button></div></div>`;
   }
 };
 
