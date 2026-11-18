@@ -10,7 +10,7 @@ const baht = n => '฿' + Number(n || 0).toLocaleString('th-TH');
 const num = v => (v === '' || v == null || isNaN(+v)) ? null : +v;
 const toast = m => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2800); };
 const errText = e => { const m = e?.message || String(e); try { return JSON.parse(m).message || m; } catch { return m; } };
-const APP_VERSION = 'v87'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
+const APP_VERSION = 'v88'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
 
 /* ---------- โครงสร้างข้อมูล (ตรงกับ supabase/schema.sql) ---------- */
 const COLS = {
@@ -675,6 +675,60 @@ function notesLastDate(notes) {
 }
 const csv = rows => '﻿' + rows.map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
 const download = (name, text, type = 'text/csv') => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: type + ';charset=utf-8' })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); };
+
+/* ---------- สำรองข้อมูลทั้งหมดของร้านเป็นไฟล์ ZIP เดียว (ดึงสดจากเซิร์ฟเวอร์ ไม่ใช่แค่ที่ค้างในเครื่องนี้) ---------- */
+// โหลดไลบรารี JSZip จาก CDN แบบขี้เกียจ (โหลดครั้งแรกตอนกดปุ่มเท่านั้น ไม่ให้ถ่วงเวลาเปิดแอปปกติ)
+function loadJSZip() {
+  if (window.JSZip) return Promise.resolve(window.JSZip);
+  if (window.__jszipLoading) return window.__jszipLoading;
+  window.__jszipLoading = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+    s.onload = () => resolve(window.JSZip);
+    s.onerror = () => { window.__jszipLoading = null; reject(new Error('โหลดตัวช่วยสร้างไฟล์ ZIP ไม่สำเร็จ — ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่')); };
+    document.head.appendChild(s);
+  });
+  return window.__jszipLoading;
+}
+// ดึงข้อมูล "ทุกแถว" ของตารางหนึ่งจากเซิร์ฟเวอร์โดยตรง (ไม่สนใจว่าเครื่องนี้เคยซิงก์ไปถึงไหนแล้ว) — ใช้ตอนสำรองข้อมูลแบบเต็มเท่านั้น
+async function fetchAllRows(t) {
+  let all = [], offset = 0; const pageSize = 1000;
+  for (;;) {
+    const rows = await api(`/rest/v1/${t}?select=*&order=created_at.asc,id.asc&limit=${pageSize}&offset=${offset}`) || [];
+    all = all.concat(rows);
+    if (rows.length < pageSize) break;
+    offset += pageSize;
+  }
+  return all;
+}
+// ปุ่ม "ดาวน์โหลดข้อมูลทั้งหมดเป็น ZIP" ในหน้าตั้งค่า — ดึงทุกตารางสดจากเซิร์ฟเวอร์ (ข้อมูลของทุกเครื่องรวมกัน ไม่ใช่แค่ที่เครื่องนี้เคยซิงก์มา) แล้วห่อเป็น ZIP ไฟล์เดียวให้ดาวน์โหลดทันที
+async function exportFullBackupZip() {
+  if (!navigator.onLine || !sess) { toast('ต้องเชื่อมเน็ตและล็อกอินก่อน ถึงจะดึงข้อมูลทั้งหมดจากเซิร์ฟเวอร์ได้'); return; }
+  if (!shop) { toast('ยังไม่มีร้านผูกกับบัญชีนี้'); return; }
+  const btn = $('#fullBackupBtn'); if (btn) { btn.disabled = true; btn.textContent = 'กำลังดึงข้อมูล…'; }
+  try {
+    toast('กำลังดึงข้อมูลทั้งหมดจากเซิร์ฟเวอร์… อาจใช้เวลาสักครู่ถ้าข้อมูลเยอะ');
+    const JSZip = await loadJSZip();
+    const zip = new JSZip();
+    const counts = {};
+    for (const t of T) {
+      if (btn) btn.textContent = `กำลังดึง ${t}…`;
+      const rows = await fetchAllRows(t);
+      counts[t] = rows.length;
+      zip.file(`data/${t}.json`, JSON.stringify(rows, null, 1));
+    }
+    zip.file('data/สรุป.json', JSON.stringify({ exported_at: now(), shop_name: shop.name, shop_id: shop.id, record_counts: counts }, null, 1));
+    zip.file('อ่านก่อน.md', `# ไฟล์สำรองข้อมูลจริงทั้งหมดของร้าน "${shop.name}"\n\nดึงสดจากเซิร์ฟเวอร์ Supabase เมื่อ ${day(now())} — รวมข้อมูลจากทุกเครื่องที่เคยซิงก์เข้าระบบ ไม่ใช่แค่เครื่องนี้เครื่องเดียว\n\nแต่ละไฟล์ในโฟลเดอร์ data/ คือข้อมูลดิบ 1 ตาราง (เป็นไฟล์ JSON) ไว้ใช้นำเข้าฐานข้อมูลใหม่ตอนกู้คืนระบบ (ดูวิธีทำในไฟล์ \`03-วิธีกู้คืนระบบ\` ของชุดสำรองฉุกเฉิน)\n\nจำนวนรายการที่ดึงมาได้แต่ละตาราง:\n${Object.entries(counts).map(([t, n]) => `- ${t}: ${n} รายการ`).join('\n')}\n`);
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `social-eyewear-ขอมูลจริงทั้งหมด-${now().slice(0, 10)}.zip`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    toast('ดาวน์โหลดไฟล์สำรองข้อมูลทั้งหมดเรียบร้อยแล้ว');
+  } catch (e) { toast('สำรองข้อมูลไม่สำเร็จ: ' + errText(e)); console.error(e); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = '⬇ ดาวน์โหลดข้อมูลทั้งหมดเป็น ZIP'; } }
+}
 
 /* ---------- นำเข้าลูกค้าจาก CSV ---------- */
 // IMPORT-HELPERS-START
@@ -1370,7 +1424,8 @@ const views = {
     <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr))">
     <div class="panel"><h2>บัญชี</h2>${acct}</div>${mkShop}${sellers}
     <div class="panel"><h2>การเชื่อมต่อ</h2><label>Project URL<input data-bind="url" value="${esc(c.url)}"></label><label>Publishable key<input data-bind="key" value="${esc(c.key)}"></label><p class="tag">ใช้เฉพาะ publishable key ห้ามใส่ secret key</p></div>
-    <div class="panel"><h2>ข้อมูลในเครื่อง</h2><p class="tag">รอซิงก์ ${pendingCount()} รายการ${errCount() ? ` · ผิดพลาด ${errCount()} รายการ (แก้ไขรายการนั้นแล้วบันทึกใหม่เพื่อลองอีกครั้ง)` : ''}</p><p class="tag">ตอนนี้มีลูกค้า ${live('customer_profiles').length} คน · สินค้า/เลนส์ ${live('products').length} รายการในเครื่องนี้</p><button class="btn line" data-act="backup">สำรองข้อมูลเป็นไฟล์ JSON</button> <button class="btn line" data-act="fullresync">ดึงข้อมูลใหม่ทั้งหมด</button><p class="tag" style="margin-top:8px">ใช้ปุ่มนี้ถ้าเครื่องนี้ข้อมูลไม่ครบ/ไม่ตรงกับเครื่องอื่น (เช่น รายชื่อลูกค้าหรือเลนส์บางชนิดหายไป) — จะดึงข้อมูลล่าสุดทั้งหมดของร้านมาใหม่ทั้งหมด ไม่ลบรายการที่พิมพ์ไว้ในเครื่องนี้แล้วยังไม่ได้ซิงก์</p></div></div>`;
+    <div class="panel"><h2>ข้อมูลในเครื่อง</h2><p class="tag">รอซิงก์ ${pendingCount()} รายการ${errCount() ? ` · ผิดพลาด ${errCount()} รายการ (แก้ไขรายการนั้นแล้วบันทึกใหม่เพื่อลองอีกครั้ง)` : ''}</p><p class="tag">ตอนนี้มีลูกค้า ${live('customer_profiles').length} คน · สินค้า/เลนส์ ${live('products').length} รายการในเครื่องนี้</p><button class="btn line" data-act="backup">สำรองข้อมูลเป็นไฟล์ JSON (เฉพาะเครื่องนี้)</button> <button class="btn line" data-act="fullresync">ดึงข้อมูลใหม่ทั้งหมด (ซ่อมเครื่องนี้)</button><p class="tag" style="margin-top:8px">ใช้ปุ่มนี้ถ้าเครื่องนี้ข้อมูลไม่ครบ/ไม่ตรงกับเครื่องอื่น (เช่น รายชื่อลูกค้าหรือเลนส์บางชนิดหายไป) — จะดึงข้อมูลล่าสุดทั้งหมดของร้านมาใหม่ทั้งหมด ไม่ลบรายการที่พิมพ์ไว้ในเครื่องนี้แล้วยังไม่ได้ซิงก์</p></div>
+    <div class="panel"><h2>สำรองข้อมูลฉุกเฉิน (ทุกตาราง ทุกเครื่องรวมกัน)</h2><p class="tag">ดึงข้อมูลสดจากเซิร์ฟเวอร์โดยตรงทุกตาราง (ลูกค้า/ใบตรวจ/สินค้า/ใบเสนอราคา/เคลม/พนักงาน) รวมเป็นไฟล์ ZIP เดียว กดครั้งเดียวได้ไฟล์ครบ ไม่ต้องเข้า Supabase เอง — เก็บไว้ในคอม/แฟลชไดรฟ์เป็นระยะๆ เผื่อกรณีฉุกเฉิน</p><button id="fullBackupBtn" class="btn gold" data-act="fullbackupzip">⬇ ดาวน์โหลดข้อมูลทั้งหมดเป็น ZIP</button></div></div>`;
   }
 };
 
@@ -3589,6 +3644,7 @@ document.addEventListener('click', e => {
     if (!confirm('ดึงข้อมูลล่าสุดทั้งหมดของร้านมาใหม่ที่เครื่องนี้? อาจใช้เวลาสักครู่ตามจำนวนข้อมูลและความเร็วเน็ต (รายการที่พิมพ์ไว้ในเครื่องนี้แล้วยังไม่ได้ซิงก์จะไม่หาย)')) return;
     ls.set('pull', {}); toast('กำลังดึงข้อมูลทั้งหมดของร้านใหม่…'); sync();
   }
+  else if (a === 'fullbackupzip') exportFullBackupZip();
   else if (a === 'opencatalog') { S.catReturn = id || ''; S.catDetail = null; S.mode = 'lenscat'; render(); }
   else if (a === 'closecatalog') { S.mode = S.catReturn || ''; S.catReturn = ''; render(); }
   else if (a === 'catdesign') { S.catDesign = id; render(); }
