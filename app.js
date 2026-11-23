@@ -10,7 +10,7 @@ const baht = n => '฿' + Number(n || 0).toLocaleString('th-TH');
 const num = v => (v === '' || v == null || isNaN(+v)) ? null : +v;
 const toast = m => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2800); };
 const errText = e => { const m = e?.message || String(e); try { return JSON.parse(m).message || m; } catch { return m; } };
-const APP_VERSION = 'v94'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
+const APP_VERSION = 'v96'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
 
 /* ---------- โครงสร้างข้อมูล (ตรงกับ supabase/schema.sql) ---------- */
 const COLS = {
@@ -3012,13 +3012,11 @@ function quoteSheet(id) {
     </div>
   </form></div>`);
 }
-// แก้ไขราคา/จำนวนของรายการที่ขายไปแล้ว (บิลที่บันทึกแล้ว) ใช้ได้ทั้งหน้าหลังบ้านและหน้าบริการลูกค้า (kiosk) — kiosk ต้องยืนยันรหัสผู้จัดการก่อนทุกครั้ง กันแก้ยอดขายที่ปิดบิลไปแล้วโดยไม่ตั้งใจ
-function quoteEditPinGate(id) {
-  dialog(`<h2>ยืนยันรหัสผู้จัดการ</h2><p class="tag">แก้ไขราคา/จำนวนของรายการที่ขายไปแล้ว ต้องใส่รหัสผู้จัดการ/เจ้าของร้าน (รหัส 4 หลักที่ตั้งไว้ในหน้า "พนักงานขาย") ก่อนทุกครั้ง</p>
-  <form data-form="qeditpin" data-id="${id}" style="display:flex;flex-direction:column;align-items:center;gap:10px">
-    <input name="pin" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="รหัส 4 หลัก" autofocus style="width:180px;text-align:center;font-size:22px;letter-spacing:.4em;padding:12px 10px;border-radius:12px;border:1px solid rgba(0,0,0,.15)">
-    <div class="foot"><button type="button" class="btn line" data-act="viewq" data-id="${id}">ยกเลิก</button><button class="btn" type="submit">ยืนยัน</button></div>
-  </form>`);
+// แก้ไขราคา/จำนวนของรายการที่ขายไปแล้ว (บิลที่บันทึกแล้ว) — ต้องลอคอินเป็นแอดมิน (เจ้าของ/ผู้จัดการ) ที่หลังบ้านก่อนเท่านั้นถึงจะแก้ไขได้
+// ใครไม่ได้ลอคอินแอดมิน (เช่น พนักงานหน้าร้านที่กดเข้าหน้าบริการลูกค้าด้วยชื่อ+รหัส 4 หลักแบบ kiosk) จะกดแก้ไขไม่ได้ กันแก้ยอดขายที่ปิดบิลไปแล้วโดยไม่ตั้งใจ
+function quoteEditNoAccess(id) {
+  dialog(`<h2>ต้องลอคอินแอดมินก่อน</h2><p class="tag">การแก้ไขราคา/จำนวนของรายการที่ขายไปแล้ว ทำได้เฉพาะตอนลอคอินเป็นแอดมิน (เจ้าของร้าน/ผู้จัดการ) ที่หน้าหลังบ้านเท่านั้น — ออกจากหน้าบริการลูกค้านี้ แล้วไปลอคอินที่หลังบ้านก่อน จึงจะกลับมาแก้ไขรายการนี้ได้</p>
+  <div class="foot"><button type="button" class="btn" data-act="viewq" data-id="${id}">ปิด</button></div>`);
 }
 function quoteItemsEditForm(id) {
   const q = find('quotes', id); if (!q) return;
@@ -3763,7 +3761,7 @@ document.addEventListener('click', e => {
     save('quotes', { ...q, subtotal_thb: Math.max(0, (q.subtotal_thb || 0) - item.line_total_thb), total_thb: Math.max(0, (q.total_thb || 0) - item.line_total_thb), notes: [q.notes, fixNote].filter(Boolean).join(' · ') });
     commit(); quoteSheet(qid); toast('ลบรายการแล้ว');
   }
-  else if (a === 'qeditgate') { if (mgr()) quoteItemsEditForm(id); else quoteEditPinGate(id); }
+  else if (a === 'qeditgate') { if (mgr()) quoteItemsEditForm(id); else quoteEditNoAccess(id); }
   else if (a === 'delq') { if (confirm('ลบใบเสนอราคานี้?')) softDelete('quotes', id); }
   else if (a === 'csvcust') download('customers.csv', csv([['รหัส', 'ชื่อ', 'โทรศัพท์', 'งบ', 'ไลฟ์สไตล์', 'ยินยอม'], ...live('customer_profiles').map(c => [c.customer_code, c.full_name, c.phone, c.budget_thb, c.lifestyle, c.consent_recorded_at ? 'ใช่' : 'ไม่'])]));
   else if (a === 'csvq') download('quotes.csv', csv([['เลขที่', 'วันที่', 'ลูกค้า', 'รวม', 'ส่วนลด', 'สุทธิ', 'สถานะ'], ...live('quotes').map(q => [q.quote_number, q.created_at.slice(0, 10), custName(q.customer_id), q.subtotal_thb, q.discount_thb, q.total_thb, QST[q.status]])]));
@@ -3804,10 +3802,15 @@ document.addEventListener('click', e => {
     const doPrint = () => {
       window.print();
       if (isNewSale) {
-        const qid = kioskSaveOrder();
-        closeDlg();
-        if (qid) { K.step = 'done'; toast('พิมพ์ใบเสร็จและบันทึกการสั่งซื้อแล้ว'); }
-        render();
+        // บนไอแพด คำสั่ง window.print() จะคืนค่าทันทีโดยไม่รอหน้าต่างพิมพ์/แชร์ชีตของ iOS เสร็จก่อน (ต่างจากคอม/Android ที่จะหยุดรอ)
+        // ถ้าปิดหน้าต่างใบเสร็จ (closeDlg/render) ทันทีแบบเดิม เนื้อหาจะถูกล้างไปก่อนที่ iOS จะทันจับภาพหน้าไปพิมพ์จริง กลายเป็นพิมพ์ออกมาเป็นหน้าเปล่า
+        // แก้ด้วยการหน่วงเวลาสักครู่ก่อนค่อยบันทึกออเดอร์+ปิดหน้าต่าง ให้ iOS มีเวลาจับภาพเนื้อหาไปพิมพ์ก่อนแน่ๆ
+        setTimeout(() => {
+          const qid = kioskSaveOrder();
+          closeDlg();
+          if (qid) { K.step = 'done'; toast('พิมพ์ใบเสร็จและบันทึกการสั่งซื้อแล้ว'); }
+          render();
+        }, 800);
       }
     };
     // รอให้เบราว์เซอร์ "วาด/เพนต์" เนื้อหาใบเสร็จที่เพิ่งสร้าง/อัปเดตใหม่เสร็จก่อนค่อยสั่งพิมพ์จริง — เคสที่ยังไม่มีเลขที่ใบ (ต้องรันเลขที่ใหม่ + สร้างใบเสร็จใหม่พร้อมกันตรงนี้) ใช้เวลาวาดนานกว่าปกติเล็กน้อย
@@ -4240,12 +4243,8 @@ document.addEventListener('submit', async e => {
       const fixNote = `[แก้ไข ${day(now())}: เพิ่มรายการที่ตกหล่น — ${name} × ${qty} = ${baht(lineTotal)}]`;
       save('quotes', { ...q, subtotal_thb: (q.subtotal_thb || 0) + lineTotal, total_thb: (q.total_thb || 0) + lineTotal, notes: [q.notes, fixNote].filter(Boolean).join(' · ') });
       commit(); quoteSheet(id); toast('เพิ่มรายการที่ตกหล่นแล้ว — กรอบนี้จะอยู่ในหน้า "สินค้า" หมวดกรอบด้วย');
-    } else if (k === 'qeditpin') {
-      const pin = (d.pin || '').trim();
-      const okSeller = live('sellers').find(s => s.pin && s.pin === pin && ['owner', 'manager'].includes(s.role));
-      if (!okSeller) { toast('รหัสไม่ถูกต้อง หรือไม่ใช่รหัสผู้จัดการ/เจ้าของร้าน'); return; }
-      quoteItemsEditForm(id);
     } else if (k === 'qeditsave') {
+      if (!mgr()) return;
       const q = find('quotes', id); if (!q) return;
       const items = live('quote_items').filter(i => i.quote_id === id);
       let newSub = 0; const changes = [];
