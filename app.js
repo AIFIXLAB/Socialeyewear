@@ -10,7 +10,7 @@ const baht = n => '฿' + Number(n || 0).toLocaleString('th-TH');
 const num = v => (v === '' || v == null || isNaN(+v)) ? null : +v;
 const toast = m => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2800); };
 const errText = e => { const m = e?.message || String(e); try { return JSON.parse(m).message || m; } catch { return m; } };
-const APP_VERSION = 'v91'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
+const APP_VERSION = 'v92'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
 
 /* ---------- โครงสร้างข้อมูล (ตรงกับ supabase/schema.sql) ---------- */
 const COLS = {
@@ -2086,7 +2086,7 @@ function customLensForm() {
       <label>เปลี่ยนสี/ย้อมสี<select name="color_change">${LENS_COLOR_OPTS.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></label>
     </div>
     ${fld('tint_code', 'รหัสสี/เฉดสีที่ย้อม (ถ้ามี)', '')}
-    <div class="two">${fld('price', 'ราคาขาย (บาท)', '', 'number', 'min="0" required')}${fld('params', 'พารามิเตอร์เพิ่มเติม', '')}</div>
+    <div class="two">${fld('price', 'ราคาขาย (บาท)', '', 'text', 'inputmode="decimal" placeholder="เช่น 3400" required')}${fld('params', 'พารามิเตอร์เพิ่มเติม', '')}</div>
     <label style="margin-top:10px">หมายเหตุ<textarea name="notes" rows="2"></textarea></label>
     ${foot('เพิ่มลงตะกร้า')}</form>`);
 }
@@ -3757,7 +3757,7 @@ document.addEventListener('click', e => {
     }
     const isNewSale = !RCPT_FOR; // เปิดจากหน้าตัวอย่างก่อนมีบิลจริง — พิมพ์เสร็จแล้วบันทึกออเดอร์+ปิดหน้าขายอัตโนมัติ กันลืมกดบันทึก/กดซ้ำซ้อน
     dialog(receiptHTML());
-    setTimeout(() => {
+    const doPrint = () => {
       window.print();
       if (isNewSale) {
         const qid = kioskSaveOrder();
@@ -3765,7 +3765,13 @@ document.addEventListener('click', e => {
         if (qid) { K.step = 'done'; toast('พิมพ์ใบเสร็จและบันทึกการสั่งซื้อแล้ว'); }
         render();
       }
-    }, 30);
+    };
+    // รอให้เบราว์เซอร์ "วาด/เพนต์" เนื้อหาใบเสร็จที่เพิ่งสร้าง/อัปเดตใหม่เสร็จก่อนค่อยสั่งพิมพ์จริง — เคสที่ยังไม่มีเลขที่ใบ (ต้องรันเลขที่ใหม่ + สร้างใบเสร็จใหม่พร้อมกันตรงนี้) ใช้เวลาวาดนานกว่าปกติเล็กน้อย
+    // ถ้าสั่งพิมพ์เร็วเกินไปก่อนวาดเสร็จ บางเครื่อง (โดยเฉพาะไอแพดบางรุ่น) จะได้หน้ากระดาษเปล่าในรอบแรก ต้องกดพิมพ์ซ้ำถึงจะขึ้นถูก — แก้ด้วยการรอ 2 รอบเพนต์ (requestAnimationFrame) บวกรอโลโก้ถอดรหัสเสร็จก่อน
+    const logoImg = $('#dlg img');
+    const afterPaint = () => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(doPrint, 60)));
+    if (logoImg && !logoImg.complete && logoImg.decode) logoImg.decode().catch(() => {}).then(afterPaint, afterPaint);
+    else afterPaint();
   }
   else if (a === 'close') closeDlg();
   else if (a === 'logout') { if (!pendingCount() || confirm('ยังมีข้อมูลที่ไม่ได้ซิงก์ ออกจากระบบต่อหรือไม่? (ข้อมูลยังอยู่ในเครื่อง)')) { sess = null; ls.set('sess', null); S.staff = null; render(); } }
@@ -4080,10 +4086,12 @@ document.addEventListener('submit', async e => {
       K.examMeta = null;
       commit(); custView(f.dataset.cid); toast('บันทึกค่าสายตาแล้ว');
     } else if (k === 'customlens') {
-      if (!d.price || +d.price <= 0) { toast('กรุณาใส่ราคาขาย'); return; }
+      // ตัดคอมม่า/เว้นวรรคออกก่อนแปลงเป็นตัวเลข เผื่อผู้ใช้พิมพ์ราคาแบบมีคอมม่าคั่นหลักพัน เช่น "3,400"
+      const priceNum = +String(d.price || '').replace(/[,\s]/g, '');
+      if (!priceNum || priceNum <= 0) { toast('กรุณาใส่ราคาขาย'); return; }
       const name = [d.brand, d.model].filter(Boolean).join(' ').trim() || 'เลนส์กรอกเอง';
       S.cart.push({
-        id: uid(), productId: null, name, type: 'lens', price: Math.max(0, +d.price || 0), qty: 1,
+        id: uid(), productId: null, name, type: 'lens', price: Math.max(0, priceNum), qty: 1,
         customLens: { brand: d.brand || '', model: d.model || '', lens_type: d.lens_type || '', index: d.lens_index || '', corridor: d.corridor || '', color_change: d.color_change || 'none', tint_code: d.tint_code || '', params: d.params || '', notes: d.notes || '' }
       });
       closeDlg(); render(); toast('เพิ่มเลนส์ลงตะกร้าแล้ว');
