@@ -10,7 +10,7 @@ const baht = n => '฿' + Number(n || 0).toLocaleString('th-TH');
 const num = v => (v === '' || v == null || isNaN(+v)) ? null : +v;
 const toast = m => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2800); };
 const errText = e => { const m = e?.message || String(e); try { return JSON.parse(m).message || m; } catch { return m; } };
-const APP_VERSION = 'v92'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
+const APP_VERSION = 'v93'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
 
 /* ---------- โครงสร้างข้อมูล (ตรงกับ supabase/schema.sql) ---------- */
 const COLS = {
@@ -429,10 +429,21 @@ function rxDraftFromMeta(m) {
 const EXAM_HISTORY_COPY_FIELDS = ['disease_other', 'last_doctor_visit', 'last_doctor_clinic',
   'ed1_name', 'ed1_clinic', 'ed1_treat', 'ed2_name', 'ed2_clinic', 'ed2_treat', 'ed3_name', 'ed3_clinic', 'ed3_treat', 'ed4_name', 'ed4_clinic', 'ed4_treat',
   'accident_detail', 'accident_clinic', 'accident_treat', 'last_va_check_where', 'last_va_check_by', 'last_va_check_other',
-  'cl_freq', 'cl_r', 'cl_l', 'cl_duration', 'old_glasses_r', 'old_glasses_l', 'old_glasses_duration',
-  'lens_name', 'lens_index', 'lens_color_change', 'lens_corridor', 'lens_pd_r', 'lens_pd_l', 'lens_problem', 'lens_marking', 'lens_brand_model'];
+  'cl_freq', 'cl_r', 'cl_l', 'cl_duration', 'old_glasses_duration',
+  'lens_name', 'lens_index', 'lens_color_change', 'lens_corridor', 'lens_problem', 'lens_marking', 'lens_brand_model'];
+// สรุปค่าสายตาจากแถว SUBJECTIVE (เช่น FINAL OD/OS ของการตรวจครั้งก่อน) เป็นข้อความสั้นๆ เช่น "SPH -2.00 CYL -0.50 x180 ADD +2.00"
+// ใช้เติมช่อง "แว่นเดิม" ของการตรวจครั้งใหม่ — ตัดส่วนที่ไม่มีค่าออก กันข้อความเพี้ยน
+function formatOldGlassesText(row) {
+  if (!row) return '';
+  const parts = [];
+  if (row.sph) parts.push('SPH ' + row.sph);
+  if (row.cyl) parts.push('CYL ' + row.cyl + (row.axis ? ' x' + row.axis : ''));
+  if (row.add) parts.push('ADD ' + row.add);
+  return parts.join(' ');
+}
 // ดึงประวัติสุขภาพ (โรคประจำตัว/โรคตา) และประวัติการใช้แว่น-คอนแทคเลนส์จากผลตรวจครั้งล่าสุดของลูกค้าคนเดิม มาเติมในร่างฟอร์มให้อัตโนมัติตอนเริ่มตรวจใหม่
 // กันพนักงานต้องพิมพ์ซ้ำทุกครั้ง — ไม่แตะค่าที่ต้องวัดใหม่เสมอ (Auto Ref/PD/VA/SUBJECTIVE/กรอบที่ลอง) และไม่ทับช่องที่พิมพ์ไว้แล้วในรอบนี้
+// ข้อยกเว้น: ช่อง "แว่นเดิม R/L" และ "PD เดิม R/L" ดึงมาจากตาราง SUBJECTIVE แถว FINAL OD/OS ของครั้งก่อน (ค่าที่วัด/จ่ายแว่นจริง) ไม่ใช่จากช่อง "แว่นเดิม" ที่เคยพิมพ์ไว้ครั้งก่อน
 function prefillExamHistoryFromLastVisit(custId) {
   if (!custId) return;
   const prev = live('prescriptions').filter(r => r.customer_id === custId).sort((a, b) => (b.exam_date || b.created_at || '').localeCompare(a.exam_date || a.created_at || ''))[0];
@@ -445,6 +456,14 @@ function prefillExamHistoryFromLastVisit(custId) {
     if (pd['med_' + k] != null && dr['med_' + k] == null) dr['med_' + k] = pd['med_' + k];
     if (pd['yr_' + k] != null && dr['yr_' + k] == null) dr['yr_' + k] = pd['yr_' + k];
   });
+  const subFinalOD = (prev.meta.sub || {}).final_od;
+  const subFinalOS = (prev.meta.sub || {}).final_os;
+  const oldTextOD = formatOldGlassesText(subFinalOD);
+  const oldTextOS = formatOldGlassesText(subFinalOS);
+  if (oldTextOD && dr.old_glasses_r == null) dr.old_glasses_r = oldTextOD;
+  if (oldTextOS && dr.old_glasses_l == null) dr.old_glasses_l = oldTextOS;
+  if (subFinalOD && subFinalOD.distpd && dr.lens_pd_r == null) dr.lens_pd_r = subFinalOD.distpd;
+  if (subFinalOS && subFinalOS.distpd && dr.lens_pd_l == null) dr.lens_pd_l = subFinalOS.distpd;
   K.examPrefilledDate = prev.exam_date || prev.created_at || null; // โชว์แจ้งพนักงานว่าดึงมาจากครั้งไหน ให้ตรวจสอบ/แก้ตามจริงอีกที
 }
 // ดึงอาการ (CC) ที่ติ๊กไว้ของบันทึกเดิม — บันทึกใหม่จะมี meta.cc ตรงๆ, บันทึกเก่าให้พยายามอ่านจากหมายเหตุ (notes) แทน
