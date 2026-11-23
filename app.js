@@ -10,7 +10,7 @@ const baht = n => '฿' + Number(n || 0).toLocaleString('th-TH');
 const num = v => (v === '' || v == null || isNaN(+v)) ? null : +v;
 const toast = m => { const t = $('#toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('show'), 2800); };
 const errText = e => { const m = e?.message || String(e); try { return JSON.parse(m).message || m; } catch { return m; } };
-const APP_VERSION = 'v93'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
+const APP_VERSION = 'v95'; // โชว์ไว้ที่แถบสถานะซิงก์ — เช็กง่ายๆ ว่าเครื่องนี้โหลดโค้ดรุ่นล่าสุดจริงหรือยัง (อัปเดตเลขนี้คู่กับ sw.js ทุกครั้งที่ส่งไฟล์ใหม่)
 
 /* ---------- โครงสร้างข้อมูล (ตรงกับ supabase/schema.sql) ---------- */
 const COLS = {
@@ -2986,7 +2986,10 @@ function quoteSheet(id) {
   dialog(`<style>#dlg{width:min(720px,96vw)!important;max-width:96vw!important}@media print{#dlg{width:100%!important;max-width:100%!important;margin:0!important;padding:14px!important}}</style>
   <div class="sheet"><h2>ใบเสนอราคา ${esc(q.quote_number || '')}</h2><div class="meta">${esc(shop?.name || 'Social Eyewear')} · ${day(q.created_at)} · ลูกค้า: ${esc(custName(q.customer_id))}${q.valid_until ? ` · ใช้ได้ถึง ${day(q.valid_until)}` : ''}${(q.meta && q.meta.pickupDate) ? ` · นัดรับ: ${day(q.meta.pickupDate)}` : ''}</div>
   <table><tr><th>รายการ</th><th>จำนวน</th><th>ราคา/หน่วย</th><th style="text-align:right">รวม</th>${mgr() ? '<th class="noprint"></th>' : ''}</tr>${items.map(i => `<tr><td>${esc(i.item_name_snapshot)}</td><td>${i.quantity}</td><td>${baht(i.unit_price_thb)}</td><td style="text-align:right">${baht(i.line_total_thb)}</td>${mgr() ? `<td class="noprint act"><button type="button" class="btn line sm bad" data-act="delqitem" data-id="${i.id}" data-qid="${id}">ลบ</button></td>` : ''}</tr>`).join('')}</table>
-  ${mgr() ? `<div class="noprint" style="margin:8px 0"><button type="button" class="btn line sm" data-act="additem" data-id="${id}">+ เพิ่มรายการที่ตกหล่น (แก้ไขข้อมูลเดิม)</button></div>` : ''}
+  <div class="noprint" style="margin:8px 0;display:flex;gap:8px;flex-wrap:wrap">
+    <button type="button" class="btn line sm" data-act="qeditgate" data-id="${id}">แก้ไขราคา/จำนวนรายการ</button>
+    ${mgr() ? `<button type="button" class="btn line sm" data-act="additem" data-id="${id}">+ เพิ่มรายการที่ตกหล่น (แก้ไขข้อมูลเดิม)</button>` : ''}
+  </div>
   <div class="row"><span>รวม</span><span>${baht(q.subtotal_thb)}</span></div>${q.discount_thb ? `<div class="row"><span>ส่วนลด</span><span>-${baht(q.discount_thb)}</span></div>` : ''}
   <div class="row"><b>รวมสุทธิ</b><span class="total">${baht(q.total_thb)}</span></div>
   <div class="row"><span>ชำระแล้วสะสม</span><span>${baht(paid)}</span></div>
@@ -3008,6 +3011,25 @@ function quoteSheet(id) {
       <button class="btn" type="submit">บันทึก</button>
     </div>
   </form></div>`);
+}
+// แก้ไขราคา/จำนวนของรายการที่ขายไปแล้ว (บิลที่บันทึกแล้ว) — ต้องลอคอินเป็นแอดมิน (เจ้าของ/ผู้จัดการ) ที่หลังบ้านก่อนเท่านั้นถึงจะแก้ไขได้
+// ใครไม่ได้ลอคอินแอดมิน (เช่น พนักงานหน้าร้านที่กดเข้าหน้าบริการลูกค้าด้วยชื่อ+รหัส 4 หลักแบบ kiosk) จะกดแก้ไขไม่ได้ กันแก้ยอดขายที่ปิดบิลไปแล้วโดยไม่ตั้งใจ
+function quoteEditNoAccess(id) {
+  dialog(`<h2>ต้องลอคอินแอดมินก่อน</h2><p class="tag">การแก้ไขราคา/จำนวนของรายการที่ขายไปแล้ว ทำได้เฉพาะตอนลอคอินเป็นแอดมิน (เจ้าของร้าน/ผู้จัดการ) ที่หน้าหลังบ้านเท่านั้น — ออกจากหน้าบริการลูกค้านี้ แล้วไปลอคอินที่หลังบ้านก่อน จึงจะกลับมาแก้ไขรายการนี้ได้</p>
+  <div class="foot"><button type="button" class="btn" data-act="viewq" data-id="${id}">ปิด</button></div>`);
+}
+function quoteItemsEditForm(id) {
+  const q = find('quotes', id); if (!q) return;
+  const items = live('quote_items').filter(i => i.quote_id === id);
+  dialog(`<h2>แก้ไขราคา/จำนวนรายการ — ${esc(q.quote_number || '')}</h2>
+  <p class="tag">แก้ไขแล้วยอดรวมของบิลนี้จะคำนวณใหม่ให้อัตโนมัติ ระบบจะบันทึกไว้ในหมายเหตุของบิลว่าแก้อะไรไปเพื่อตรวจสอบย้อนหลังได้</p>
+  <form data-form="qeditsave" data-id="${id}">
+    ${items.map(i => `<div class="two" style="align-items:end">
+      <label>${esc(i.item_name_snapshot)} — จำนวน<input name="qty_${i.id}" type="text" inputmode="numeric" value="${i.quantity}"></label>
+      <label>ราคา/หน่วย (บาท)<input name="price_${i.id}" type="text" inputmode="decimal" value="${i.unit_price_thb}"></label>
+    </div>`).join('') || '<p class="tag">บิลนี้ไม่มีรายการ</p>'}
+    <div class="foot"><button type="button" class="btn line" data-act="viewq" data-id="${id}">ยกเลิก</button><button class="btn" type="submit">บันทึกการแก้ไข</button></div>
+  </form>`);
 }
 let RCPT = null, RCPT_FOR = null, SIG_CANVAS = null, PAYF = null;
 function sellerReportHTML() {
@@ -3049,7 +3071,7 @@ function receiptData(forQuoteId) {
     customerId: K.custId, saved: false,
     items: S.cart.map(i => ({ name: i.name, type: i.type, qty: i.qty, price: i.price, lineTotal: i.price * i.qty, productId: i.productId || i.id, code: i.code || '', color: i.color || '', frameType: i.frameType || '', tint: i.tint || '', corridor: i.corridor || '', lensType: i.lensType || '', customLens: i.customLens || null, note: i.note || '' })),
     sub: c.sub, discTotal: c.discTotal, total: c.total,
-    defNo: '', defDate: now().slice(0, 10),
+    defNo: nextReceiptNo(), defDate: now().slice(0, 10), // รันเลขที่ใบเสร็จให้เห็นทันทีตอนเปิดตัวอย่าง ไม่ต้องรอถึงตอนกดพิมพ์ (กันเคสพิมพ์รอบแรกเป็นหน้าขาวเพราะต้องรันเลข+สร้างใบเสร็จพร้อมกัน)
     defPay: [], defSig: '', defSeller: S.activeSeller || '',
     pickup: K.pickupDate || '', defPaidFull: !!K.paidFull
   };
@@ -3126,7 +3148,7 @@ function receiptHTML() {
       <b>หมายเหตุ:</b> สินค้าเมื่อสั่งซื้อแล้ว <b>ไม่สามารถยกเลิกหรือคืนเงินได้</b> · รับประกันค่าสายตา 1 เดือน (เฉพาะลูกค้าที่ให้ทางร้านวัดค่าสายตาให้เท่านั้น) · กรณีเลนส์เป็นรอย หรือกรอบแว่นลอก/หัก/ชำรุดจากการใช้งาน ไม่อยู่ในเงื่อนไขการรับประกัน · มีบริการหลังการขายเฉพาะกรอบแว่นของทางร้าน ดัดทรงแว่น/ขันน็อต/เปลี่ยนแป้นจมูก/ทำความสะอาดแว่นตา ฟรีตลอดอายุการใช้งาน
     </div>
     <form data-form="receiptmeta" class="noprint" style="margin-top:14px">
-      <div class="two"><label>เลขที่ใบเสร็จ<input name="receipt_no" value="${esc(RCPT.no)}" placeholder="เว้นว่าง = รันให้อัตโนมัติตอนพิมพ์"></label><label>วันที่ออกใบเสร็จ<input type="date" name="receipt_date" value="${esc(RCPT.date)}"></label></div>
+      <div class="two"><label>เลขที่ใบเสร็จ<input name="receipt_no" value="${esc(RCPT.no)}" placeholder="เว้นว่าง = รันเลขให้ใหม่อัตโนมัติ"></label><label>วันที่ออกใบเสร็จ<input type="date" name="receipt_date" value="${esc(RCPT.date)}"></label></div>
       <label>พนักงานขาย<select name="seller"><option value="">— เลือกพนักงาน —</option>${live('sellers').map(s => `<option value="${esc(s.name)}" ${RCPT.seller === s.name ? 'selected' : ''}>${esc(s.name)}${s.role ? ` (${esc(ROLE_LABEL[s.role] || s.role)})` : ''}</option>`).join('')}</select>${!live('sellers').length ? '<span class="tag">ยังไม่มีรายชื่อ ไปเพิ่มที่ ตั้งค่า &gt; พนักงานขาย</span>' : ''}</label>
       <label><span class="lbl" style="display:block;font-size:13px;color:var(--mute,#69756d);margin-bottom:6px">ช่องทางชำระเงิน (เลือกได้มากกว่า 1)</span></label>
       <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:10px">${Object.entries(PAY_LABELS).map(([k, l]) => `<label class="chk" style="margin:0"><input type="checkbox" name="pay" value="${k}" ${RCPT.pay.includes(k) ? 'checked' : ''}> ${l}</label>`).join('')}<label class="chk" style="margin:0;font-weight:600;color:#1f6f43"><input type="checkbox" name="paidfull" ${(rcptQ && rcptBalance <= 0.004) ? 'checked disabled' : (RCPT.paidFull ? 'checked' : '')}> ชำระครบแล้ว (ไม่มียอดค้าง)</label></div>
@@ -3739,6 +3761,7 @@ document.addEventListener('click', e => {
     save('quotes', { ...q, subtotal_thb: Math.max(0, (q.subtotal_thb || 0) - item.line_total_thb), total_thb: Math.max(0, (q.total_thb || 0) - item.line_total_thb), notes: [q.notes, fixNote].filter(Boolean).join(' · ') });
     commit(); quoteSheet(qid); toast('ลบรายการแล้ว');
   }
+  else if (a === 'qeditgate') { if (mgr()) quoteItemsEditForm(id); else quoteEditNoAccess(id); }
   else if (a === 'delq') { if (confirm('ลบใบเสนอราคานี้?')) softDelete('quotes', id); }
   else if (a === 'csvcust') download('customers.csv', csv([['รหัส', 'ชื่อ', 'โทรศัพท์', 'งบ', 'ไลฟ์สไตล์', 'ยินยอม'], ...live('customer_profiles').map(c => [c.customer_code, c.full_name, c.phone, c.budget_thb, c.lifestyle, c.consent_recorded_at ? 'ใช่' : 'ไม่'])]));
   else if (a === 'csvq') download('quotes.csv', csv([['เลขที่', 'วันที่', 'ลูกค้า', 'รวม', 'ส่วนลด', 'สุทธิ', 'สถานะ'], ...live('quotes').map(q => [q.quote_number, q.created_at.slice(0, 10), custName(q.customer_id), q.subtotal_thb, q.discount_thb, q.total_thb, QST[q.status]])]));
@@ -4215,6 +4238,26 @@ document.addEventListener('submit', async e => {
       const fixNote = `[แก้ไข ${day(now())}: เพิ่มรายการที่ตกหล่น — ${name} × ${qty} = ${baht(lineTotal)}]`;
       save('quotes', { ...q, subtotal_thb: (q.subtotal_thb || 0) + lineTotal, total_thb: (q.total_thb || 0) + lineTotal, notes: [q.notes, fixNote].filter(Boolean).join(' · ') });
       commit(); quoteSheet(id); toast('เพิ่มรายการที่ตกหล่นแล้ว — กรอบนี้จะอยู่ในหน้า "สินค้า" หมวดกรอบด้วย');
+    } else if (k === 'qeditsave') {
+      if (!mgr()) return;
+      const q = find('quotes', id); if (!q) return;
+      const items = live('quote_items').filter(i => i.quote_id === id);
+      let newSub = 0; const changes = [];
+      items.forEach(i => {
+        const qtyNum = Math.max(1, Math.round(+String(d['qty_' + i.id] || '').replace(/[,\s]/g, '')) || i.quantity);
+        const priceNum = Math.max(0, +String(d['price_' + i.id] || '').replace(/[,\s]/g, '') || 0);
+        const lineTotal = qtyNum * priceNum;
+        newSub += lineTotal;
+        if (qtyNum !== i.quantity || priceNum !== i.unit_price_thb) {
+          changes.push(`${i.item_name_snapshot}: ${i.quantity}×${baht(i.unit_price_thb)} → ${qtyNum}×${baht(priceNum)}`);
+          save('quote_items', { ...i, quantity: qtyNum, unit_price_thb: priceNum, line_total_thb: lineTotal });
+        }
+      });
+      if (!changes.length) { quoteSheet(id); return; }
+      const newTotal = Math.max(0, newSub - (q.discount_thb || 0));
+      const fixNote = `[แก้ไข ${day(now())}: ${changes.join(' · ')}]`;
+      save('quotes', { ...q, subtotal_thb: newSub, total_thb: newTotal, notes: [q.notes, fixNote].filter(Boolean).join(' · ') });
+      commit(); quoteSheet(id); toast('บันทึกการแก้ไขแล้ว');
     } else if (k === 'auth') {
       await auth(e.submitter?.value === 'signup' ? 'signup' : 'login', d.email.trim(), d.password); toast('เข้าสู่ระบบแล้ว'); render(); await sync(); if (!shop) S.v = 'settings'; render(); loadStaff();
     } else if (k === 'shop') {
